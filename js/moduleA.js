@@ -33,6 +33,11 @@ const ModuleA = {
   approve(app) { app.status = 'approved'; app.approvedAt = this.approveSeq++; },
   reject(app) { app.status = 'rejected'; app.approvedAt = null; },
 
+  // 接收人確認接受排班（matched → accepted）
+  acceptSchedule(app) { if (app.status === 'matched') { app.status = 'accepted'; app.acceptedAt = Date.now(); } },
+  // 交貨確認（accepted → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
+  confirmDelivery(app, by) { if (app.status === 'accepted') { app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室'; } },
+
   /* 各班次到達某站的時間（示意）：出發時間 + 站序×固定行駛 */
   shiftArrivalAtStation(shift, stationOrder) {
     return hhmmToMin(shift.depart) + stationOrder * 12; // 每站 12 分鐘遞增（示意）

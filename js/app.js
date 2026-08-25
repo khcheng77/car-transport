@@ -30,7 +30,9 @@ function stBadge(s) {
     submitted: '<span class="badge b-gray">待審核</span>',
     approved: '<span class="badge b-navy">已核准待排</span>',
     rejected: '<span class="badge b-red">已駁回</span>',
-    matched: '<span class="badge b-green">已排定</span>',
+    matched: '<span class="badge b-navy">已排班待接受</span>',
+    accepted: '<span class="badge b-amber">已接受待交貨</span>',
+    delivered: '<span class="badge b-green">已交貨</span>',
     loaded: '<span class="badge b-green">已裝載</span>',
     coordinate: '<span class="badge b-amber">待人工協調</span>',
     manual: '<span class="badge b-navy">手動併車</span>',
@@ -97,7 +99,7 @@ function goto(pageId) {
 const RENDER = {};
 RENDER.dashboard = function () {
   const p = $('#page-dashboard');
-  const aMatched = ModuleA.applications.filter(a => a.status === 'matched').length;
+  const aMatched = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status)).length;
   const bLoaded = ModuleB.orders.filter(o => o.status === 'loaded').length;
   const cMatched = ModuleC.applications.filter(a => a.status === 'matched').length;
   const pendReview = ModuleA.applications.filter(a => a.status === 'submitted').length
@@ -344,13 +346,29 @@ function submitAa() {
 function renderAaList() {
   const rows = ModuleA.applications;
   $('#aa-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無申請單</div>` : `
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>模式</th><th>班次</th><th>狀態</th></tr></thead><tbody>
+    <div class="card-desc" style="margin-bottom:10px;">排班後，接收人可在此確認接受排班、並於收到貨後確認交貨。</div>
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>班次/車輛/到站</th><th>狀態</th><th>接收人操作</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
+        const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
+        const schedule = sh ? `${sh.label}｜${veh.name}｜到站 ${a.arrival || '—'}` : '<span class="muted">尚未排班</span>';
+        let action = '<span class="muted">—</span>';
+        if (a.status === 'matched') action = `<button class="btn btn-primary btn-sm" data-accept="${a.id}">確認接受排班</button>`;
+        else if (a.status === 'accepted') action = `<button class="btn btn-accent btn-sm" data-recv="${a.id}">確認已收到貨</button>`;
+        else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
         return `<tr><td>${a.id}</td><td>${st.name}/${a.building}</td>
-          <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
-          <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td></tr>`; }).join('')}
+          <td>${schedule}</td><td>${stBadge(a.status)}</td><td>${action}</td></tr>`; }).join('')}
     </tbody></table></div>`;
+  $$('#aa-list [data-accept]').forEach(b => b.onclick = () => {
+    const a = ModuleA.applications.find(x => x.id === b.dataset.accept);
+    ModuleA.acceptSchedule(a); toast(`${a.id} 接收人已確認接受排班`, 'ok');
+    renderAaList(); if ($('#ar-tab-review')) renderAr_review();
+  });
+  $$('#aa-list [data-recv]').forEach(b => b.onclick = () => {
+    const a = ModuleA.applications.find(x => x.id === b.dataset.recv);
+    ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 接收人已確認收到貨`, 'ok');
+    renderAaList(); if ($('#ar-tab-review')) renderAr_review();
+  });
 }
 
 /* ============================================================
@@ -402,7 +420,8 @@ function renderAr_review() {
             <td><button class="btn btn-accent btn-sm" data-match="${a.id}">執行媒合</button></td></tr>`; }).join('')}
       </tbody></table></div>`}
       <div id="ar-match-result"></div>
-    </div>`;
+    </div>
+    ${renderAr_scheduled()}`;
   const all = $('#ar-approve-all');
   if (all) all.onclick = () => { submitted.forEach(a => ModuleA.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderAr_review(); renderAaList(); };
   $$('#ar-tab-review [data-ap]').forEach(b => b.onclick = () => { ModuleA.approve(ModuleA.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderAr_review(); });
@@ -421,6 +440,39 @@ function renderAr_review() {
     toast(r.ok ? `${app.id} 已排入 ${r.shift.label}` : r.msg, r.ok ? 'ok' : 'err');
     renderAr_review(); renderAaList();
   });
+  // 已排定車次：調度/駕駛端確認交貨
+  $$('#ar-tab-review [data-deliver]').forEach(b => b.onclick = () => {
+    const a = ModuleA.applications.find(x => x.id === b.dataset.deliver);
+    ModuleA.confirmDelivery(a, '調度室'); toast(`${a.id} 已確認交貨`, 'ok');
+    renderAr_review(); renderAaList();
+  });
+}
+// 已排定車次一覽（被安排的車次 + 媒合狀況 + 接受/交貨狀態）
+function renderAr_scheduled() {
+  const rows = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status));
+  const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。核准後執行媒合即會出現在此。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>車輛</th><th>到站</th>
+      <th>接收人接受</th><th>交貨</th><th>操作</th></tr></thead><tbody>
+      ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
+        const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
+        const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
+        const acc = (a.status === 'accepted' || a.status === 'delivered')
+          ? '<span class="badge b-green">已接受</span>' : '<span class="badge b-gray">待接受</span>';
+        const del = a.status === 'delivered'
+          ? `<span class="badge b-green">已交貨</span>` : '<span class="badge b-gray">未交貨</span>';
+        let op = '<span class="muted">—</span>';
+        if (a.status === 'accepted') op = `<button class="btn btn-accent btn-sm" data-deliver="${a.id}">確認交貨</button>`;
+        else if (a.status === 'matched') op = '<span class="muted">待接收人接受</span>';
+        else if (a.status === 'delivered') op = `<span class="muted">${a.deliveredBy || ''} 完成</span>`;
+        return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
+          <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td>
+          <td>${acc}</td><td>${del}</td><td>${op}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  return `<div class="card">
+    <div class="card-title">已排定車次一覽（被安排車次 · 媒合狀況 · 接受/交貨追蹤）</div>
+    <div class="card-desc">顯示每張已排班申請單的班次、車輛、到站時間，以及接收人接受與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
+    ${body}</div>`;
 }
 function renderA_route() {
   $('#ar-tab-route').innerHTML = `
@@ -439,7 +491,7 @@ function renderA_route() {
     </div>`;
 }
 function renderA_incident() {
-  const matched = ModuleA.applications.filter(a => a.status === 'matched');
+  const matched = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status));
   $('#ar-tab-incident').innerHTML = `
     <div class="card">
       <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>
