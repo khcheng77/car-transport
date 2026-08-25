@@ -7,8 +7,10 @@
 const ModuleB = {
   orders: [],  // 幹線申請單
   seq: 1,
+  approveSeq: 1,
 
   // origin/dest 用 site id；direct: true/false；volume 公升；weight kg；handleMin 裝卸分鐘
+  // 申請端只負責建立，狀態為「待審核」
   createOrder(data) {
     const o = {
       id: 'LB' + String(this.seq++).padStart(3, '0'),
@@ -19,12 +21,16 @@ const ModuleB = {
       volume: data.volume,
       weight: data.weight,
       handleMin: data.handleMin,
-      approvedAt: Date.now() + this.seq,
-      status: 'pending',
+      approvedAt: null,
+      status: 'submitted',  // submitted → approved/rejected → loaded
     };
     this.orders.push(o);
     return o;
   },
+
+  // 業務/調度端：核准時填入審核通過時間（G34 排序用）
+  approve(o) { o.status = 'approved'; o.approvedAt = this.approveSeq++; },
+  reject(o) { o.status = 'rejected'; o.approvedAt = null; },
 
   TIME_LIMIT: 8 * 60, // 總計時間上限（分鐘），示意 = 一日行車 8 小時
   siteById(id) { return DB.sites.find(s => s.id === id); },
@@ -41,7 +47,7 @@ const ModuleB = {
     const trace = [];
     const origin = 'D10'; // 示意出發：台北據點
     const pending = this.orders
-      .filter(o => o.status === 'pending')
+      .filter(o => o.status === 'approved')
       .sort((a, b) => a.approvedAt - b.approvedAt); // 核准時間排序（G34）
 
     // ---- 直達分流（G38/G39）----
@@ -86,7 +92,7 @@ const ModuleB = {
       prevOrder = site.order;
 
       // 本站待裝載單（目的地 = 本站，示意收貨）
-      const here = nonDirect.filter(o => o.dest === site.id && o.status === 'pending');
+      const here = nonDirect.filter(o => o.dest === site.id && o.status === 'approved');
       let stopLoaded = 0, stopTime = 0;
       const stopCarried = [];
       for (const o of here) {

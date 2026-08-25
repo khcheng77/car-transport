@@ -9,7 +9,9 @@ const ModuleC = {
   batches: [],
   seq: 1,
   batchSeq: 1,
+  approveSeq: 1,
 
+  // 申請端只負責建立，狀態為「待審核」（G63 員工填單 → 主管准駁）
   createApp(data) {
     const app = {
       id: 'BZ' + String(this.seq++).padStart(3, '0'),
@@ -23,7 +25,8 @@ const ModuleC = {
       earliestPickup: data.earliestPickup, // 去程最早上車 HH:MM
       earliestReturn: data.earliestReturn, // 回程最早（來回單）
       pax: data.pax,
-      status: 'pending',           // pending|matched|manual|coordinate|void
+      approvedAt: null,
+      status: 'submitted',         // submitted|approved|rejected|matched|manual|coordinate|void
       vehicle: null, driver: null,
       groupId: null,
       note: '',
@@ -31,6 +34,10 @@ const ModuleC = {
     this.applications.push(app);
     return app;
   },
+
+  // 業務/調度端：主管准駁；駁回保留紀錄不進排班池（G63）
+  approve(app) { app.status = 'approved'; app.approvedAt = this.approveSeq++; },
+  reject(app) { app.status = 'rejected'; app.approvedAt = null; },
 
   /* 車程表查詢 + 緩衝（G62）*/
   travelMin(origin, dest) {
@@ -80,8 +87,8 @@ const ModuleC = {
       const d = new Date(a.departDate);
       return d >= start && d <= end;
     };
-    // 已成功單不重排（G53）
-    const targets = this.applications.filter(a => a.status === 'pending' && inRange(a));
+    // 只處理已核准單；已成功單不重排（G53）
+    const targets = this.applications.filter(a => a.status === 'approved' && inRange(a));
     trace.push(`批次 ${batch.id}｜範圍 ${fromDate} 起 7 天內、待處理單 ${targets.length} 筆`);
 
     // 分兩型態，不互相混合（G50）
@@ -92,9 +99,9 @@ const ModuleC = {
     trace.push(`\n<span class="hl">【來回單分支】</span> ${rounds.length} 筆`);
     const usedR = new Set();
     for (const a of rounds) {
-      if (usedR.has(a.id) || a.status !== 'pending') continue;
+      if (usedR.has(a.id) || a.status !== 'approved') continue;
       // 找完全相同者合併
-      const group = rounds.filter(b => !usedR.has(b.id) && b.status === 'pending' &&
+      const group = rounds.filter(b => !usedR.has(b.id) && b.status === 'approved' &&
         b.origin === a.origin && b.dest === a.dest &&
         b.earliestPickup === a.earliestPickup);
       const totalPax = group.reduce((s, b) => s + b.pax, 0);
@@ -128,14 +135,14 @@ const ModuleC = {
     trace.push(`\n<span class="hl">【單程單分支】</span> ${oneways.length} 筆`);
     const usedO = new Set();
     for (const a of oneways) {
-      if (usedO.has(a.id) || a.status !== 'pending') continue;
+      if (usedO.has(a.id) || a.status !== 'approved') continue;
       // 目的地須為轉運點（G50）
       if (!DB.transferPoints.includes(a.dest)) {
         this._coordinate(a, batch, trace, '單程單目的地非交通轉運點'); usedO.add(a.id); continue;
       }
       // 找回程：同轉運點出發、回程最早上車在去程送達後 4 小時內（G51）
       const arrMin = hhmmToMin(a.earliestPickup) + (this.travelMin(a.origin, a.dest) || 0);
-      const back = oneways.find(b => !usedO.has(b.id) && b.id !== a.id && b.status === 'pending' &&
+      const back = oneways.find(b => !usedO.has(b.id) && b.id !== a.id && b.status === 'approved' &&
         b.origin === a.dest && DB.transferPoints.includes(b.origin) &&
         hhmmToMin(b.earliestPickup) >= arrMin &&
         hhmmToMin(b.earliestPickup) <= arrMin + 240);

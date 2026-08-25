@@ -1,6 +1,9 @@
 /* ============================================================
    app.js — 前端控制器：導覽、渲染、互動
    純前端記憶體版原型（無資料庫、無後端）
+
+   架構：使用者「申請端」與業務單位「審核/調度端」分離，
+   三模組各拆成兩個軟體單元 → 共 6 個業務單元。
    ============================================================ */
 
 /* ---------- 工具 ---------- */
@@ -21,21 +24,50 @@ function openModal(title, bodyHtml) {
 }
 function closeModal() { $('#modal-mask').classList.remove('show'); }
 
-/* ---------- 導覽 ---------- */
+/* 通用狀態徽章 */
+function stBadge(s) {
+  return ({
+    submitted: '<span class="badge b-gray">待審核</span>',
+    approved: '<span class="badge b-navy">已核准待排</span>',
+    rejected: '<span class="badge b-red">已駁回</span>',
+    matched: '<span class="badge b-green">已排定</span>',
+    loaded: '<span class="badge b-green">已裝載</span>',
+    coordinate: '<span class="badge b-amber">待人工協調</span>',
+    manual: '<span class="badge b-navy">手動併車</span>',
+    void: '<span class="badge b-red">逾期作廢</span>',
+  })[s] || s;
+}
+
+/* ---------- 導覽（2 共用 + 6 業務單元）---------- */
 const NAV = [
   { group: '總覽', items: [{ id: 'dashboard', ico: '▤', label: '系統儀表板' }] },
-  { group: '共用基礎', items: [{ id: 'engine', ico: '⚙', label: '裝載判定引擎' }, { id: 'master', ico: '▦', label: '主檔資料' }] },
-  { group: '模組 A', items: [{ id: 'moduleA', ico: '⇄', label: '區域內物流' }] },
-  { group: '模組 B', items: [{ id: 'moduleB', ico: '⇅', label: '南北幹線物流' }] },
-  { group: '模組 C', items: [{ id: 'moduleC', ico: '⇆', label: '差旅共乘媒合' }] },
+  { group: '共用基礎', items: [
+    { id: 'engine', ico: '⚙', label: '裝載判定引擎' },
+    { id: 'master', ico: '▦', label: '主檔資料' },
+  ] },
+  { group: '模組 A · 區域內物流', items: [
+    { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
+    { id: 'a_review', ico: '🗂', label: 'A｜排班審核（業務）' },
+  ] },
+  { group: '模組 B · 南北幹線', items: [
+    { id: 'b_apply', ico: '📝', label: 'B｜幹線託運申請（使用者）' },
+    { id: 'b_review', ico: '🚚', label: 'B｜派車審核（業務）' },
+  ] },
+  { group: '模組 C · 差旅共乘', items: [
+    { id: 'c_apply', ico: '📝', label: 'C｜出差用車申請（使用者）' },
+    { id: 'c_review', ico: '🔀', label: 'C｜媒合審核（業務）' },
+  ] },
 ];
 const PAGE_META = {
-  dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.1' },
+  dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
-  moduleA: { title: '區域內物流貨運', crumb: '模組 A · Phase 2–3 · G10–G20' },
-  moduleB: { title: '跨據點南北幹線物流', crumb: '模組 B · Phase 4 · G30–G44' },
-  moduleC: { title: '差旅派車自動媒合', crumb: '模組 C · Phase 5 · G50–G63' },
+  a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · G13/G15/G19' },
+  a_review: { title: '區域內物流 · 排班審核（業務單位）', crumb: '模組 A · 審核/調度端 · G10–G20' },
+  b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
+  b_review: { title: '南北幹線 · 派車審核（業務單位）', crumb: '模組 B · 審核/調度端 · G30–G44' },
+  c_apply: { title: '差旅共乘 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55' },
+  c_review: { title: '差旅共乘 · 媒合審核（業務單位）', crumb: '模組 C · 審核/調度端 · G50–G63' },
 };
 
 function buildNav() {
@@ -68,45 +100,61 @@ RENDER.dashboard = function () {
   const aMatched = ModuleA.applications.filter(a => a.status === 'matched').length;
   const bLoaded = ModuleB.orders.filter(o => o.status === 'loaded').length;
   const cMatched = ModuleC.applications.filter(a => a.status === 'matched').length;
-  const cVoid = ModuleC.applications.filter(a => a.status === 'void').length;
+  const pendReview = ModuleA.applications.filter(a => a.status === 'submitted').length
+    + ModuleB.orders.filter(o => o.status === 'submitted').length
+    + ModuleC.applications.filter(a => a.status === 'submitted').length;
   p.innerHTML = `
     <div class="section-h">系統儀表板</div>
-    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版，資料存於記憶體，重新整理即重置。三模組資源池分開，互不搶用。</div>
+    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。使用者「申請端」與業務單位「審核/調度端」分離，三模組各拆兩個單元，共 6 個業務單元。三模組資源池分開，互不搶用。</div>
     <div class="stat-row">
-      <div class="stat"><div class="k">區域內物流 · 已排班</div><div class="v">${aMatched}</div></div>
-      <div class="stat"><div class="k">南北幹線 · 已裝載單</div><div class="v accent">${bLoaded}</div></div>
-      <div class="stat"><div class="k">差旅共乘 · 已媒合</div><div class="v green">${cMatched}</div></div>
-      <div class="stat"><div class="k">共乘 · 逾期作廢</div><div class="v red">${cVoid}</div></div>
+      <div class="stat"><div class="k">待業務審核（三模組）</div><div class="v accent">${pendReview}</div></div>
+      <div class="stat"><div class="k">物流 · 已排班</div><div class="v">${aMatched}</div></div>
+      <div class="stat"><div class="k">幹線 · 已裝載</div><div class="v">${bLoaded}</div></div>
+      <div class="stat"><div class="k">共乘 · 已媒合</div><div class="v green">${cMatched}</div></div>
     </div>
-    <div class="grid-3">
-      ${dashCard('⚙ 裝載判定引擎', 'Level 1 體積 + 地板面積 + Level 2 六方向 + 重量累計。貪婪規則、可解釋、不做 3D 碰撞模擬。', 'engine', 'G01–G05')}
-      ${dashCard('⇄ 模組 A 區域內物流', '10 站固定路線、時間軸最近班次媒合、站內時間額度與順延、駕駛異常回報。', 'moduleA', 'G10–G20')}
-      ${dashCard('⇅ 模組 B 南北幹線', '貪婪終點判斷、直達/非直達分流、動態淨值容量、天數對照表。', 'moduleB', 'G30–G44')}
-      ${dashCard('⇆ 模組 C 差旅共乘', '來回單/單程單、批次媒合按鈕、資源可用性檢核、手動併車、逾期作廢。', 'moduleC', 'G50–G63')}
+
+    <div class="card-title" style="font-size:14px;margin:8px 0 12px;color:var(--ink-soft);">共用基礎層</div>
+    <div class="grid-2">
+      ${dashCard('⚙ 裝載判定引擎', 'Level 1 體積 + 地板面積 + Level 2 六方向 + 重量累計。可解釋、不做 3D 碰撞模擬。', 'engine', 'G01–G05')}
       ${dashCard('▦ 主檔資料', '據點/站點/車輛/司機/浪費係數/保修/請假等示範主檔。', 'master', 'Phase 0')}
     </div>
-    <div class="callout info" style="margin-top:20px;">
-      本原型依 <b>docs/PLAN.md</b> 第一階段雛形建置：以 HTML + JavaScript 展示三模組核心業務邏輯（Guardrails）。
+
+    <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">六個業務單元（申請端 ｜ 審核端）</div>
+    <div class="grid-3">
+      ${unitCard('📝 A｜收貨申請', '使用者填收貨單、查看自己的申請狀態。送出後進入業務審核。', 'a_apply', '申請端')}
+      ${unitCard('🗂 A｜排班審核', '主管准駁、執行時間軸媒合、路線班次、駕駛異常回報。', 'a_review', '審核端')}
+      ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
+      ${unitCard('🚚 B｜派車審核', '主管准駁、貪婪/直達派車決策、調度室模式顯示。', 'b_review', '審核端')}
+      ${unitCard('📝 C｜出差用車申請', '使用者填來回/單程用車申請、查看狀態。', 'c_apply', '申請端')}
+      ${unitCard('🔀 C｜媒合審核', '主管准駁、批次媒合、資源檢核、手動併車、逾期作廢。', 'c_review', '審核端')}
+    </div>
+
+    <div class="callout info" style="margin-top:22px;">
+      本原型依 <b>docs/PLAN.md</b> 建置，並依審批流程（G63）將「使用者申請」與「業務單位審核」分離為獨立單元。
       正式版技術棧為 .NET Framework 4.8 / MVC，本原型僅供互動驗證流程與規則，不含資料庫與後端。
     </div>`;
-  $$('#page-dashboard .dash-card').forEach(c => c.onclick = () => goto(c.dataset.go));
+  $$('#page-dashboard [data-go]').forEach(c => c.onclick = () => goto(c.dataset.go));
 };
 function dashCard(title, desc, go, gtag) {
-  return `<div class="card dash-card" data-go="${go}" style="cursor:pointer;">
+  return `<div class="card" data-go="${go}" style="cursor:pointer;">
     <div class="card-title">${title} <span class="g-tag">${gtag}</span></div>
-    <div class="card-desc" style="margin-bottom:0;">${desc}</div>
-  </div>`;
+    <div class="card-desc" style="margin-bottom:0;">${desc}</div></div>`;
+}
+function unitCard(title, desc, go, side) {
+  const badge = side === '申請端' ? '<span class="badge b-navy">申請端</span>' : '<span class="badge b-amber">審核端</span>';
+  return `<div class="card" data-go="${go}" style="cursor:pointer;">
+    <div class="card-title" style="justify-content:space-between;">${title} ${badge}</div>
+    <div class="card-desc" style="margin-bottom:0;">${desc}</div></div>`;
 }
 
 /* ============================================================
-   裝載判定引擎 Demo
+   裝載判定引擎 Demo（共用）
    ============================================================ */
 let engineItems = [];
 RENDER.engine = function () {
   const p = $('#page-engine');
   const vehOpts = DB.vehicles.filter(v => v.pool === 'LOGI')
     .map(v => `<option value="${v.id}">${v.name}（${v.dims.l}×${v.dims.w}×${v.dims.h}cm｜${v.volume.toFixed(0)}L｜${v.weight}kg）</option>`).join('');
-  const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}">${f.name}（係數 ${f.factor}）</option>`).join('');
   p.innerHTML = `
     <div class="section-h">裝載判定引擎</div>
     <div class="section-sub">輸入貨物與車輛，執行 Level 1 + 地板面積 + Level 2 + 重量累計判定。回傳含失敗原因碼與逐步 trace。</div>
@@ -197,82 +245,11 @@ function runEngine() {
     <div class="trace">${res.trace.join('\n')}</div>`;
 }
 
-/* ============================================================
-   模組 A：區域內物流
-   ============================================================ */
-let aItems = [];
-RENDER.moduleA = function () {
-  const p = $('#page-moduleA');
-  const stOpts = DB.stations.map(s => `<option value="${s.id}">${s.order}. ${s.name}</option>`).join('');
-  p.innerHTML = `
-    <div class="section-h">區域內物流貨運</div>
-    <div class="section-sub">10 站固定路線 · 時間軸最近班次媒合 · 站內時間額度逐張判定 · 裝不下順延下一班 · 當日末班仍不行提醒改期。</div>
-    <div class="pill-tabs">
-      <div class="pill-tab active" data-tab="apply">① 填單 / 媒合</div>
-      <div class="pill-tab" data-tab="route">② 路線與班次</div>
-      <div class="pill-tab" data-tab="list">③ 申請單清單</div>
-      <div class="pill-tab" data-tab="incident">④ 駕駛異常回報</div>
-    </div>
-    <div id="a-tab-apply"></div>
-    <div id="a-tab-route" style="display:none;"></div>
-    <div id="a-tab-list" style="display:none;"></div>
-    <div id="a-tab-incident" style="display:none;"></div>`;
-  $$('#page-moduleA .pill-tab').forEach(t => t.onclick = () => {
-    $$('#page-moduleA .pill-tab').forEach(x => x.classList.toggle('active', x === t));
-    ['apply', 'route', 'list', 'incident'].forEach(k => $('#a-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
-  });
-  renderA_apply(stOpts); renderA_route(); renderA_list(); renderA_incident();
-};
-function renderA_apply(stOpts) {
-  $('#a-tab-apply').innerHTML = `
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
-        <div class="card-desc">一單一目的地、可多筆貨物。收貨時間二選一：指定期望 / 越快越好。</div>
-        <div class="field"><label>申請人</label><input type="text" id="a-applicant" value="業務部-周雅婷"></div>
-        <div class="row">
-          <div class="field"><label>目的地站點</label><select id="a-station">${stOpts}</select></div>
-          <div class="field"><label>建物</label><select id="a-building"></select></div>
-        </div>
-        <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
-          <div class="radio-group">
-            <label class="radio-pill sel" id="a-mode-asap"><input type="radio" name="a-recv" value="asap" checked>越快越好</label>
-            <label class="radio-pill" id="a-mode-exact"><input type="radio" name="a-recv" value="exact">指定期望時間</label>
-          </div>
-        </div>
-        <div class="field" id="a-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="a-expect" value="13:00"></div>
-        <div class="field"><label>上下貨時間（分鐘，自填 G15）</label><input type="number" id="a-handle" value="15"></div>
-        <div class="divider"></div>
-        <div class="card-title">貨物項目</div>
-        <div id="a-items"></div>
-        <button class="btn btn-ghost btn-sm" id="a-add">＋ 新增貨物</button>
-        <div class="divider"></div>
-        <button class="btn btn-primary" id="a-submit">▶ 送出並媒合（同步回傳 G11）</button>
-      </div>
-      <div class="card">
-        <div class="card-title">媒合結果</div>
-        <div id="a-result"><div class="empty"><div class="big">⇄</div>填單後執行媒合</div></div>
-      </div>
-    </div>`;
-  const fillBuildings = () => {
-    const st = DB.stations.find(s => s.id === $('#a-station').value);
-    $('#a-building').innerHTML = st.buildings.map(b => `<option>${b}</option>`).join('');
-  };
-  $('#a-station').onchange = fillBuildings; fillBuildings();
-  $$('#a-tab-apply input[name=a-recv]').forEach(r => r.onchange = () => {
-    $('#a-mode-asap').classList.toggle('sel', $('#a-tab-apply input[value=asap]').checked);
-    $('#a-mode-exact').classList.toggle('sel', $('#a-tab-apply input[value=exact]').checked);
-    $('#a-exact-wrap').style.display = $('#a-tab-apply input[value=exact]').checked ? 'block' : 'none';
-  });
-  if (aItems.length === 0) aItems = [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 5, category: 'BOX', weight: 10 }];
-  renderAItems();
-  $('#a-add').onclick = () => { aItems.push({ name: '貨物', l: 50, w: 40, h: 30, qty: 1, category: 'BOX', weight: 12 }); renderAItems(); };
-  $('#a-submit').onclick = submitA;
-}
-function renderAItems() {
-  const box = $('#a-items');
+/* 共用：貨物項目編輯器（給 A 申請端）*/
+function renderItemEditor(boxSel, arr, onChange) {
+  const box = $(boxSel);
   const catOpts = (sel) => DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === sel ? 'selected' : ''}>${f.name}</option>`).join('');
-  box.innerHTML = aItems.map((it, i) => `
+  box.innerHTML = arr.map((it, i) => `
     <div class="item-row">
       <div><div class="mini-label">品名</div><input type="text" value="${it.name}" data-i="${i}" data-k="name"></div>
       <div><div class="mini-label">長</div><input type="number" value="${it.l}" data-i="${i}" data-k="l"></div>
@@ -282,39 +259,171 @@ function renderAItems() {
       <div><div class="mini-label">數量</div><input type="number" value="${it.qty}" data-i="${i}" data-k="qty"></div>
       <button class="x-btn" data-del="${i}">✕</button>
     </div>`).join('');
-  $$('#a-items input, #a-items select').forEach(inp => inp.oninput = () => {
+  $$(boxSel + ' input, ' + boxSel + ' select').forEach(inp => inp.oninput = () => {
     const i = +inp.dataset.i, k = inp.dataset.k;
-    aItems[i][k] = (k === 'name' || k === 'category') ? inp.value : +inp.value;
+    arr[i][k] = (k === 'name' || k === 'category') ? inp.value : +inp.value;
   });
-  $$('#a-items .x-btn').forEach(b => b.onclick = () => { aItems.splice(+b.dataset.del, 1); renderAItems(); });
+  $$(boxSel + ' .x-btn').forEach(b => b.onclick = () => { arr.splice(+b.dataset.del, 1); onChange(); });
 }
-function submitA() {
-  const mode = $('#a-tab-apply input[name=a-recv]:checked').value;
-  const app = ModuleA.createApp({
-    applicant: $('#a-applicant').value,
-    station: $('#a-station').value,
-    building: $('#a-building').value,
-    items: aItems.map(x => ({ ...x })),
-    recvMode: mode,
-    expectTime: $('#a-expect').value,
-    handleMin: +$('#a-handle').value || 0,
+
+/* ============================================================
+   模組 A · 申請端（使用者）
+   ============================================================ */
+let aaItems = [];
+RENDER.a_apply = function () {
+  const p = $('#page-a_apply');
+  const stOpts = DB.stations.map(s => `<option value="${s.id}">${s.order}. ${s.name}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">收貨申請（使用者）</div>
+    <div class="section-sub">一單一目的地、可多筆貨物。收貨時間二選一：指定期望 / 越快越好。送出後狀態為「待審核」，由業務單位審核與排班。</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
+        <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
+        <div class="row">
+          <div class="field"><label>目的地站點</label><select id="aa-station">${stOpts}</select></div>
+          <div class="field"><label>建物</label><select id="aa-building"></select></div>
+        </div>
+        <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
+          <div class="radio-group">
+            <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好</label>
+            <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
+          </div>
+        </div>
+        <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
+        <div class="field"><label>上下貨時間（分鐘，自填 G15）</label><input type="number" id="aa-handle" value="15"></div>
+        <div class="divider"></div>
+        <div class="card-title">貨物項目</div>
+        <div id="aa-items"></div>
+        <button class="btn btn-ghost btn-sm" id="aa-add">＋ 新增貨物</button>
+        <div class="divider"></div>
+        <button class="btn btn-primary" id="aa-submit">▶ 送出申請（待業務審核）</button>
+        <button class="btn btn-ghost" id="aa-demo">載入範例</button>
+      </div>
+      <div class="card">
+        <div class="card-title">我的申請單</div>
+        <div id="aa-list"></div>
+      </div>
+    </div>`;
+  const fillBuildings = () => {
+    const st = DB.stations.find(s => s.id === $('#aa-station').value);
+    $('#aa-building').innerHTML = st.buildings.map(b => `<option>${b}</option>`).join('');
+  };
+  $('#aa-station').onchange = fillBuildings; fillBuildings();
+  $$('#page-a_apply input[name=aa-recv]').forEach(r => r.onchange = () => {
+    const exact = $('#page-a_apply input[value=exact]').checked;
+    $('#aa-mode-asap').classList.toggle('sel', !exact);
+    $('#aa-mode-exact').classList.toggle('sel', exact);
+    $('#aa-exact-wrap').style.display = exact ? 'block' : 'none';
   });
-  const r = ModuleA.match(app);
-  const cls = r.ok ? 'ok' : (r.reason === 'full' || r.reason === 'quota' ? 'warn' : 'fail');
-  const head = r.ok ? `✓ 已排入 ${r.shift.label}` : '⚠ 無法排入';
-  $('#a-result').innerHTML = `
-    <div class="result ${cls}">
-      <div class="r-head">${head}</div>
-      ${r.ok ? `<div>申請單 <b>${app.id}</b>｜到站約 <b>${r.arrival}</b>｜車輛 ${r.shift.vehicle}</div>`
-             : `<div><b>${r.msg}</b></div>`}
+  if (aaItems.length === 0) aaItems = [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 5, category: 'BOX', weight: 10 }];
+  renderAaItems();
+  $('#aa-add').onclick = () => { aaItems.push({ name: '貨物', l: 50, w: 40, h: 30, qty: 1, category: 'BOX', weight: 12 }); renderAaItems(); };
+  $('#aa-submit').onclick = submitAa;
+  $('#aa-demo').onclick = () => {
+    [['S3', 'asap', 15, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
+     ['S6', 'exact', 20, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
+     ['S3', 'asap', 25, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
+    ].forEach(([st, mode, h, items]) => ModuleA.createApp({
+      applicant: '業務部-周雅婷', station: st, building: DB.stations.find(s => s.id === st).buildings[0],
+      items, recvMode: mode, expectTime: '13:00', handleMin: h }));
+    toast('已載入 3 筆收貨申請（待審核）', 'ok'); renderAaList();
+  };
+  renderAaList();
+};
+function renderAaItems() { renderItemEditor('#aa-items', aaItems, renderAaItems); }
+function submitAa() {
+  const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
+  const app = ModuleA.createApp({
+    applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
+    items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
+    handleMin: +$('#aa-handle').value || 0,
+  });
+  toast(`${app.id} 已送出，等待業務審核`, 'ok'); renderAaList();
+}
+function renderAaList() {
+  const rows = ModuleA.applications;
+  $('#aa-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無申請單</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>模式</th><th>班次</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
+        const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
+        return `<tr><td>${a.id}</td><td>${st.name}/${a.building}</td>
+          <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
+          <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+}
+
+/* ============================================================
+   模組 A · 審核/調度端（業務單位）
+   ============================================================ */
+RENDER.a_review = function () {
+  const p = $('#page-a_review');
+  p.innerHTML = `
+    <div class="section-h">排班審核（業務單位）</div>
+    <div class="section-sub">主管准駁 → 執行時間軸最近班次媒合 → 路線班次維護、駕駛異常回報。兩層審批（G63）。</div>
+    <div class="pill-tabs">
+      <div class="pill-tab active" data-tab="review">① 審核與排班</div>
+      <div class="pill-tab" data-tab="route">② 路線與班次</div>
+      <div class="pill-tab" data-tab="incident">③ 駕駛異常回報</div>
     </div>
-    <div class="trace">${r.trace.join('\n')}</div>`;
-  if (r.ok) toast(`${app.id} 已排入 ${r.shift.label}`, 'ok');
-  else toast(r.msg, 'err');
-  renderA_list();
+    <div id="ar-tab-review"></div>
+    <div id="ar-tab-route" style="display:none;"></div>
+    <div id="ar-tab-incident" style="display:none;"></div>`;
+  $$('#page-a_review .pill-tab').forEach(t => t.onclick = () => {
+    $$('#page-a_review .pill-tab').forEach(x => x.classList.toggle('active', x === t));
+    ['review', 'route', 'incident'].forEach(k => $('#ar-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
+  });
+  renderAr_review(); renderA_route(); renderA_incident();
+};
+function renderAr_review() {
+  const submitted = ModuleA.applications.filter(a => a.status === 'submitted');
+  const approved = ModuleA.applications.filter(a => a.status === 'approved');
+  $('#ar-tab-review').innerHTML = `
+    <div class="card">
+      <div class="card-title">待審核（主管准駁）<span class="g-tag">G63</span></div>
+      ${submitted.length === 0 ? `<div class="empty">目前無待審核申請單。</div>` : `
+      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="ar-approve-all">✓ 全部核准</button></div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>裝卸</th><th>操作</th></tr></thead><tbody>
+        ${submitted.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td>
+            <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td><td>${a.handleMin}分</td>
+            <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
+                <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`; }).join('')}
+      </tbody></table></div>`}
+    </div>
+    <div class="card">
+      <div class="card-title">已核准 · 執行媒合 <span class="g-tag">G10–G12</span></div>
+      <div class="card-desc">時間軸最近班次媒合、裝不下順延、當日末班仍不行提醒改期。同步回傳結果（G11）。</div>
+      ${approved.length === 0 ? `<div class="empty">尚無已核准待排申請單。</div>` : `
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th></th></tr></thead><tbody>
+        ${approved.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
+            <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
+            <td><button class="btn btn-accent btn-sm" data-match="${a.id}">執行媒合</button></td></tr>`; }).join('')}
+      </tbody></table></div>`}
+      <div id="ar-match-result"></div>
+    </div>`;
+  const all = $('#ar-approve-all');
+  if (all) all.onclick = () => { submitted.forEach(a => ModuleA.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderAr_review(); renderAaList(); };
+  $$('#ar-tab-review [data-ap]').forEach(b => b.onclick = () => { ModuleA.approve(ModuleA.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderAr_review(); });
+  $$('#ar-tab-review [data-rj]').forEach(b => b.onclick = () => { ModuleA.reject(ModuleA.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); renderAr_review(); });
+  $$('#ar-tab-review [data-match]').forEach(b => b.onclick = () => {
+    const app = ModuleA.applications.find(a => a.id === b.dataset.match);
+    const r = ModuleA.match(app);
+    const cls = r.ok ? 'ok' : 'warn';
+    const head = r.ok ? `✓ 已排入 ${r.shift.label}` : '⚠ 無法排入';
+    $('#ar-match-result').innerHTML = `
+      <div class="result ${cls}" style="margin-top:14px;">
+        <div class="r-head">${head}（${app.id}）</div>
+        ${r.ok ? `<div>到站約 <b>${r.arrival}</b>｜車輛 ${r.shift.vehicle}</div>` : `<div><b>${r.msg}</b></div>`}
+      </div>
+      <div class="trace">${r.trace.join('\n')}</div>`;
+    toast(r.ok ? `${app.id} 已排入 ${r.shift.label}` : r.msg, r.ok ? 'ok' : 'err');
+    renderAr_review(); renderAaList();
+  });
 }
 function renderA_route() {
-  $('#a-tab-route').innerHTML = `
+  $('#ar-tab-route').innerHTML = `
     <div class="card">
       <div class="card-title">固定 10 站路線 <span class="g-tag">G14</span></div>
       <div class="card-desc">固定地理順序、無貨跳過、不重排。同站先卸後裝、多單時間加總。</div>
@@ -329,26 +438,13 @@ function renderA_route() {
       </tbody></table></div>
     </div>`;
 }
-function renderA_list() {
-  const rows = ModuleA.applications;
-  const body = rows.length === 0 ? `<div class="empty"><div class="big">▦</div>尚無申請單</div>` : `
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>裝卸分</th><th>班次</th><th>狀態</th></tr></thead><tbody>
-      ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
-        const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
-        const badge = a.status === 'matched' ? '<span class="badge b-green">已排班</span>' : '<span class="badge b-amber">未排入</span>';
-        return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
-          <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td><td>${a.handleMin}</td>
-          <td>${sh ? sh.label : '—'}</td><td>${badge}</td></tr>`; }).join('')}
-    </tbody></table></div>`;
-  $('#a-tab-list').innerHTML = `<div class="card"><div class="card-title">申請單清單</div>${body}</div>`;
-}
 function renderA_incident() {
   const matched = ModuleA.applications.filter(a => a.status === 'matched');
-  $('#a-tab-incident').innerHTML = `
+  $('#ar-tab-incident').innerHTML = `
     <div class="card">
       <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>
       <div class="card-desc">跑完整趟回總部後回報，只標異常站點，記錄到申請單層級，存檔＋立即自動寄信給申請人＋直屬主管（沿用審批對應）。一單一信。</div>
-      ${matched.length === 0 ? `<div class="empty">尚無已排班申請單可回報。先到「填單/媒合」建立並排入班次。</div>` : `
+      ${matched.length === 0 ? `<div class="empty">尚無已排班申請單可回報。先於「審核與排班」核准並執行媒合。</div>` : `
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>異常回報</th></tr></thead><tbody>
         ${matched.map(a => { const st = DB.stations.find(s => s.id === a.station);
           const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
@@ -357,7 +453,7 @@ function renderA_incident() {
                 <button class="btn btn-ghost btn-sm" data-inc="${a.id}" data-t="noshow">標記沒出現</button></td></tr>`; }).join('')}
       </tbody></table></div>`}
     </div>`;
-  $$('#a-tab-incident [data-inc]').forEach(b => b.onclick = () => {
+  $$('#ar-tab-incident [data-inc]').forEach(b => b.onclick = () => {
     const a = ModuleA.applications.find(x => x.id === b.dataset.inc);
     const reason = b.dataset.t === 'late' ? '使用者不準時' : '使用者沒出現';
     const mgr = DB.approvalMap[a.applicant] || '（查無對應主管）';
@@ -369,81 +465,117 @@ function renderA_incident() {
         <b>立即自動寄信（一單一信 G20）</b><br>
         收件人：${a.applicant}（申請人）、${mgr}（直屬主管）<br>
         內容：站點 ${DB.stations.find(s=>s.id===a.station).name}／原因 ${reason}／日期 2026-08-25<br>
-        <span class="muted">※ 信件格式為「待後續設計」項，此為簡潔版 TODO。</span>
-      </div>`);
+        <span class="muted">※ 信件格式為「待後續設計」項，此為簡潔版 TODO。</span></div>`);
     toast(`${a.id} 異常已回報並寄信`, 'ok');
   });
 }
 
 /* ============================================================
-   模組 B：南北幹線
+   模組 B · 申請端（使用者）
    ============================================================ */
-RENDER.moduleB = function () {
-  const p = $('#page-moduleB');
+RENDER.b_apply = function () {
+  const p = $('#page-b_apply');
   const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">跨據點南北幹線物流</div>
-    <div class="section-sub">10 據點南北一直線固定順序 · 貪婪終點判斷（容量/時間先觸頂）· 直達獨立派車 · 動態淨值容量 · 天數對照表。</div>
+    <div class="section-h">幹線託運申請（使用者）</div>
+    <div class="section-sub">出發示意為台北據點（D10）南下。勾選直達 → 業務審核後，當天有直達即獨立派車。送出後狀態為「待審核」。</div>
     <div class="grid-2">
       <div class="card">
-        <div class="card-title">建立幹線申請單 <span class="g-tag">G38</span></div>
-        <div class="card-desc">出發示意為台北據點（D10）南下。勾選直達 → 當天有直達即獨立派車。</div>
-        <div class="field"><label>申請人</label><input type="text" id="b-applicant" value="研發部-吳承恩"></div>
-        <div class="field"><label>目的地據點</label><select id="b-dest">${siteOpts}</select></div>
+        <div class="card-title">建立幹線託運單 <span class="g-tag">G38</span></div>
+        <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
+        <div class="field"><label>目的地據點</label><select id="ba-dest">${siteOpts}</select></div>
         <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
           <div class="radio-group">
-            <label class="radio-pill sel" id="b-nd"><input type="radio" name="b-direct" value="0" checked>非直達（沿線收送）</label>
-            <label class="radio-pill" id="b-d"><input type="radio" name="b-direct" value="1">直達</label>
+            <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
+            <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
           </div>
         </div>
         <div class="row">
-          <div class="field"><label>貨量 (L)</label><input type="number" id="b-vol" value="2000"></div>
-          <div class="field"><label>重量 (kg)</label><input type="number" id="b-wt" value="800"></div>
-          <div class="field"><label>裝卸(分)</label><input type="number" id="b-handle" value="30"></div>
+          <div class="field"><label>貨量 (L)</label><input type="number" id="ba-vol" value="2000"></div>
+          <div class="field"><label>重量 (kg)</label><input type="number" id="ba-wt" value="800"></div>
+          <div class="field"><label>裝卸(分)</label><input type="number" id="ba-handle" value="30"></div>
         </div>
-        <button class="btn btn-primary" id="b-submit">＋ 建立申請單</button>
-        <button class="btn btn-ghost" id="b-demo">載入範例批次</button>
+        <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待業務審核）</button>
+        <button class="btn btn-ghost" id="ba-demo">載入範例批次</button>
       </div>
       <div class="card">
-        <div class="card-title">待處理申請單</div>
-        <div id="b-pending"></div>
+        <div class="card-title">我的託運單</div>
+        <div id="ba-list"></div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">派車決策（調度室）<span class="g-tag">G32/G44</span></div>
-      <div class="card-desc">依核准時間排序逐張檢查。系統顯示每台車派遣模式與觸發原因。</div>
-      <button class="btn btn-accent" id="b-dispatch-direct">派直達車</button>
-      <button class="btn btn-primary" id="b-dispatch-greedy">派非直達車（貪婪）</button>
-      <div id="b-dispatch-result"></div>
     </div>`;
   const setDirect = () => {
-    $('#b-nd').classList.toggle('sel', $('#page-moduleB input[value="0"]').checked);
-    $('#b-d').classList.toggle('sel', $('#page-moduleB input[value="1"]').checked);
+    $('#ba-nd').classList.toggle('sel', $('#page-b_apply input[value="0"]').checked);
+    $('#ba-d').classList.toggle('sel', $('#page-b_apply input[value="1"]').checked);
   };
-  $$('#page-moduleB input[name=b-direct]').forEach(r => r.onchange = setDirect);
-  $('#b-submit').onclick = () => {
+  $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
+  $('#ba-submit').onclick = () => {
     ModuleB.createOrder({
-      applicant: $('#b-applicant').value, origin: 'D10', dest: $('#b-dest').value,
-      direct: $('#page-moduleB input[value="1"]').checked,
-      volume: +$('#b-vol').value, weight: +$('#b-wt').value, handleMin: +$('#b-handle').value,
+      applicant: $('#ba-applicant').value, origin: 'D10', dest: $('#ba-dest').value,
+      direct: $('#page-b_apply input[value="1"]').checked,
+      volume: +$('#ba-vol').value, weight: +$('#ba-wt').value, handleMin: +$('#ba-handle').value,
     });
-    toast('已建立幹線申請單', 'ok'); renderB_pending();
+    toast('已送出託運單，等待業務審核', 'ok'); renderBaList();
   };
-  $('#b-demo').onclick = () => {
+  $('#ba-demo').onclick = () => {
     [['D3', false, 1500, 600, 25], ['D2', false, 1800, 700, 30], ['D6', false, 1200, 500, 20],
      ['D1', true, 2500, 900, 40], ['D5', false, 2200, 800, 30]].forEach(([dest, direct, v, w, h]) =>
       ModuleB.createOrder({ applicant: '研發部-吳承恩', origin: 'D10', dest, direct, volume: v, weight: w, handleMin: h }));
-    toast('已載入 5 筆範例（含 1 直達）', 'ok'); renderB_pending();
+    toast('已載入 5 筆範例（含 1 直達，待審核）', 'ok'); renderBaList();
   };
-  $('#b-dispatch-direct').onclick = () => dispatchB('direct');
-  $('#b-dispatch-greedy').onclick = () => dispatchB('greedy');
-  renderB_pending();
+  renderBaList();
 };
-function renderB_pending() {
-  const rows = ModuleB.orders.filter(o => o.status === 'pending');
-  const box = $('#b-pending');
-  if (!box) return;
-  box.innerHTML = rows.length === 0 ? `<div class="empty">尚無待處理單</div>` : `
+function renderBaList() {
+  const rows = ModuleB.orders;
+  $('#ba-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無託運單</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>型態</th><th>貨量</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(o => `<tr><td>${o.id}</td><td>${ModuleB.siteById(o.dest).name}</td>
+        <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
+        <td>${o.volume}L</td><td>${stBadge(o.status)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+/* ============================================================
+   模組 B · 審核/調度端（業務單位）
+   ============================================================ */
+RENDER.b_review = function () {
+  const p = $('#page-b_review');
+  p.innerHTML = `
+    <div class="section-h">派車審核（業務單位）</div>
+    <div class="section-sub">主管准駁 → 依核准時間排序派車。貪婪終點判斷 / 直達獨立派車、調度室顯示派遣模式與觸發原因。</div>
+    <div class="card">
+      <div class="card-title">待審核（主管准駁）<span class="g-tag">G63</span></div>
+      <div id="br-review"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">派車決策（調度室）<span class="g-tag">G32/G44</span></div>
+      <div class="card-desc">僅對已核准託運單派車，依核准時間排序逐張檢查。系統顯示每台車派遣模式與觸發原因。</div>
+      <button class="btn btn-accent" id="br-dispatch-direct">派直達車</button>
+      <button class="btn btn-primary" id="br-dispatch-greedy">派非直達車（貪婪）</button>
+      <div id="br-approved" style="margin-top:14px;"></div>
+      <div id="br-dispatch-result"></div>
+    </div>`;
+  $('#br-dispatch-direct').onclick = () => dispatchB('direct');
+  $('#br-dispatch-greedy').onclick = () => dispatchB('greedy');
+  renderBr_review(); renderBr_approved();
+};
+function renderBr_review() {
+  const submitted = ModuleB.orders.filter(o => o.status === 'submitted');
+  $('#br-review').innerHTML = submitted.length === 0 ? `<div class="empty">目前無待審核託運單。</div>` : `
+    <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="br-approve-all">✓ 全部核准</button></div>
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>型態</th><th>貨量</th><th>操作</th></tr></thead><tbody>
+      ${submitted.map(o => `<tr><td>${o.id}</td><td>${o.applicant}</td><td>${ModuleB.siteById(o.dest).name}</td>
+        <td>${o.direct ? '直達' : '非直達'}</td><td>${o.volume}L</td>
+        <td><button class="btn btn-primary btn-sm" data-ap="${o.id}">核准</button>
+            <button class="btn btn-ghost btn-sm" data-rj="${o.id}">駁回</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+  const all = $('#br-approve-all');
+  if (all) all.onclick = () => { submitted.forEach(o => ModuleB.approve(o)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderBr_review(); renderBr_approved(); renderBaList(); };
+  $$('#br-review [data-ap]').forEach(b => b.onclick = () => { ModuleB.approve(ModuleB.orders.find(o => o.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderBr_review(); renderBr_approved(); });
+  $$('#br-review [data-rj]').forEach(b => b.onclick = () => { ModuleB.reject(ModuleB.orders.find(o => o.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); renderBr_review(); });
+}
+function renderBr_approved() {
+  const rows = ModuleB.orders.filter(o => o.status === 'approved');
+  $('#br-approved').innerHTML = rows.length === 0 ? `<div class="muted">尚無已核准待派車託運單。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>型態</th><th>貨量</th><th>裝卸</th></tr></thead><tbody>
       ${rows.map(o => `<tr><td>${o.id}</td><td>${ModuleB.siteById(o.dest).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
@@ -463,7 +595,7 @@ function dispatchB(mode) {
         <div class="s-name">${s.site.name}</div><div class="s-meta">${s.count ? '裝 ' + s.count + ' 單' : '無貨跳過'}｜${s.cumVol}L</div></div>`).join('')}
     </div>`;
   }
-  $('#b-dispatch-result').innerHTML = `
+  $('#br-dispatch-result').innerHTML = `
     <div class="result ${r.carried && r.carried.length ? 'ok' : 'warn'}" style="margin-top:16px;">
       <div class="r-head">派車模式：${modeBadge}　終點：${endpoint}　出勤天數：${r.days} 天 <span class="g-tag">G37</span></div>
       <div>觸發原因：${r.reason || '—'}｜容量使用 <b>${r.capUsed || 0}L</b> / ${r.capTotal || 0}L${r.timeUsed != null ? `｜時間 <b>${r.timeUsed}分</b> / ${r.timeTotal}分` : ''}</div>
@@ -472,93 +604,74 @@ function dispatchB(mode) {
     </div>
     <div class="trace">${r.trace.join('\n')}</div>`;
   toast(`${r.modeLabel || ''}派車完成`, 'ok');
-  renderB_pending();
+  renderBr_approved(); renderBaList();
 }
 
 /* ============================================================
-   模組 C：差旅共乘
+   模組 C · 申請端（使用者）
    ============================================================ */
-RENDER.moduleC = function () {
-  const p = $('#page-moduleC');
+RENDER.c_apply = function () {
+  const p = $('#page-c_apply');
   const oOpts = DB.bizOrigins.map(o => `<option>${o}</option>`).join('');
   const dOpts = DB.bizDests.map(d => `<option>${d}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">差旅派車自動媒合（共乘）</div>
-    <div class="section-sub">來回單/單程單分兩條分支 · 批次媒合按鈕（未來 7 天）· 資源可用性檢核（保修/請假 API/工時）· 手動併車 · 逾期作廢。</div>
-    <div class="pill-tabs">
-      <div class="pill-tab active" data-tab="apply">① 申請單</div>
-      <div class="pill-tab" data-tab="batch">② 批次媒合</div>
-      <div class="pill-tab" data-tab="manual">③ 手動併車 / 作廢</div>
-    </div>
-    <div id="c-tab-apply"></div>
-    <div id="c-tab-batch" style="display:none;"></div>
-    <div id="c-tab-manual" style="display:none;"></div>`;
-  $$('#page-moduleC .pill-tab').forEach(t => t.onclick = () => {
-    $$('#page-moduleC .pill-tab').forEach(x => x.classList.toggle('active', x === t));
-    ['apply', 'batch', 'manual'].forEach(k => $('#c-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
-    if (t.dataset.tab === 'manual') renderC_manual();
-    if (t.dataset.tab === 'batch') renderC_batch();
-  });
-  renderC_apply(oOpts, dOpts); renderC_batch(); renderC_manual();
-};
-function renderC_apply(oOpts, dOpts) {
-  $('#c-tab-apply').innerHTML = `
+    <div class="section-h">出差用車申請（使用者）</div>
+    <div class="section-sub">來回單：司機車輛全程綁定同批人。單程單：限交通轉運點，出發前配對、4 小時窗。送出後由主管准駁、再進批次媒合。</div>
     <div class="grid-2">
       <div class="card">
         <div class="card-title">出差用車申請 <span class="g-tag">G50/G54</span></div>
-        <div class="card-desc">來回單：司機車輛全程綁定同批人。單程單：限交通轉運點，出發前配對、4 小時窗。</div>
         <div class="row">
-          <div class="field"><label>申請人</label><input type="text" id="c-applicant" value="業務部-周雅婷"></div>
-          <div class="field"><label>部門</label><input type="text" id="c-dept" value="業務部"></div>
-          <div class="field"><label>分機</label><input type="text" id="c-ext" value="2201"></div>
+          <div class="field"><label>申請人</label><input type="text" id="ca-applicant" value="業務部-周雅婷"></div>
+          <div class="field"><label>部門</label><input type="text" id="ca-dept" value="業務部"></div>
+          <div class="field"><label>分機</label><input type="text" id="ca-ext" value="2201"></div>
         </div>
         <div class="field"><label>任務型態</label>
           <div class="radio-group">
-            <label class="radio-pill sel" id="c-round"><input type="radio" name="c-type" value="round" checked>來回單</label>
-            <label class="radio-pill" id="c-oneway"><input type="radio" name="c-type" value="oneway">單程單（轉運點）</label>
+            <label class="radio-pill sel" id="ca-round"><input type="radio" name="ca-type" value="round" checked>來回單</label>
+            <label class="radio-pill" id="ca-oneway"><input type="radio" name="ca-type" value="oneway">單程單（轉運點）</label>
           </div>
         </div>
         <div class="row">
-          <div class="field"><label>出發地</label><select id="c-origin">${oOpts}</select></div>
-          <div class="field"><label>目的地</label><select id="c-dest">${dOpts}</select></div>
+          <div class="field"><label>出發地</label><select id="ca-origin">${oOpts}</select></div>
+          <div class="field"><label>目的地</label><select id="ca-dest">${dOpts}</select></div>
         </div>
         <div class="row">
-          <div class="field"><label>出發日期</label><input type="date" id="c-date" value="2026-08-27"></div>
-          <div class="field"><label>最早上車（去程）</label><input type="time" id="c-pickup" value="09:00"></div>
+          <div class="field"><label>出發日期</label><input type="date" id="ca-date" value="2026-08-27"></div>
+          <div class="field"><label>最早上車（去程）</label><input type="time" id="ca-pickup" value="09:00"></div>
         </div>
         <div class="row">
-          <div class="field" id="c-return-wrap"><label>最早回程時間</label><input type="time" id="c-return" value="16:00"></div>
-          <div class="field"><label>人數</label><input type="number" id="c-pax" value="2"></div>
+          <div class="field" id="ca-return-wrap"><label>最早回程時間</label><input type="time" id="ca-return" value="16:00"></div>
+          <div class="field"><label>人數</label><input type="number" id="ca-pax" value="2"></div>
         </div>
         <div class="callout info">最晚抵達時間為系統查車程表算出的參考值，<b>不參與媒合判斷</b>（G55）。</div>
-        <button class="btn btn-primary" id="c-submit">＋ 送出申請（主管已核准示意）</button>
-        <button class="btn btn-ghost" id="c-demo">載入範例批次</button>
+        <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待主管准駁）</button>
+        <button class="btn btn-ghost" id="ca-demo">載入範例批次</button>
       </div>
       <div class="card">
-        <div class="card-title">申請單清單</div>
-        <div id="c-list"></div>
+        <div class="card-title">我的申請單</div>
+        <div id="ca-list"></div>
       </div>
     </div>`;
   const setType = () => {
-    const round = $('#page-moduleC input[value=round]').checked;
-    $('#c-round').classList.toggle('sel', round);
-    $('#c-oneway').classList.toggle('sel', !round);
-    $('#c-return-wrap').style.display = round ? 'block' : 'none';
+    const round = $('#page-c_apply input[value=round]').checked;
+    $('#ca-round').classList.toggle('sel', round);
+    $('#ca-oneway').classList.toggle('sel', !round);
+    $('#ca-return-wrap').style.display = round ? 'block' : 'none';
   };
-  $$('#page-moduleC input[name=c-type]').forEach(r => r.onchange = setType);
-  $('#c-submit').onclick = () => {
-    const type = $('#page-moduleC input[name=c-type]:checked').value;
+  $$('#page-c_apply input[name=ca-type]').forEach(r => r.onchange = setType);
+  $('#ca-submit').onclick = () => {
+    const type = $('#page-c_apply input[name=ca-type]:checked').value;
     const app = ModuleC.createApp({
-      applicant: $('#c-applicant').value, dept: $('#c-dept').value, ext: $('#c-ext').value,
-      type, origin: $('#c-origin').value, dest: $('#c-dest').value,
-      departDate: $('#c-date').value, earliestPickup: $('#c-pickup').value,
-      earliestReturn: $('#c-return').value, pax: +$('#c-pax').value,
+      applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, ext: $('#ca-ext').value,
+      type, origin: $('#ca-origin').value, dest: $('#ca-dest').value,
+      departDate: $('#ca-date').value, earliestPickup: $('#ca-pickup').value,
+      earliestReturn: $('#ca-return').value, pax: +$('#ca-pax').value,
     });
-    toast(`${app.id} 已送出（待批次媒合）`, 'ok'); renderC_list();
+    toast(`${app.id} 已送出，等待主管准駁`, 'ok'); renderCaList();
   };
-  $('#c-demo').onclick = loadCDemo;
-  renderC_list();
-}
+  $('#ca-demo').onclick = loadCDemo;
+  renderCaList();
+};
 function loadCDemo() {
   const D = '2026-08-27';
   const demos = [
@@ -569,38 +682,74 @@ function loadCDemo() {
     { type: 'round', origin: '台北總部', dest: '新竹分公司', earliestPickup: '07:30', earliestReturn: '19:30', pax: 4, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
   ];
   demos.forEach(d => ModuleC.createApp({ ...d, departDate: D }));
-  toast('已載入 5 筆共乘範例', 'ok'); renderC_list();
+  toast('已載入 5 筆共乘申請（待審核）', 'ok'); renderCaList();
 }
-function statusBadge(s) {
-  return ({ pending: '<span class="badge b-gray">待處理</span>', matched: '<span class="badge b-green">已媒合</span>',
-    coordinate: '<span class="badge b-amber">待人工協調</span>', manual: '<span class="badge b-navy">手動併車</span>',
-    void: '<span class="badge b-red">逾期作廢</span>' })[s] || s;
-}
-function renderC_list() {
+function renderCaList() {
   const rows = ModuleC.applications;
-  $('#c-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">⇆</div>尚無申請單，可「載入範例批次」</div>` : `
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>最晚抵達</th><th>狀態</th></tr></thead><tbody>
-      ${rows.map(a => `<tr><td>${a.id}</td>
-        <td>${a.type === 'round' ? '來回' : '單程'}</td>
-        <td>${a.origin}→${a.dest}</td>
-        <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
-        <td>${a.pax}</td>
-        <td class="muted">${ModuleC.latestArrival(a)}</td>
-        <td>${statusBadge(a.status)}</td></tr>`).join('')}
+  $('#ca-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無申請單，可「載入範例批次」</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(a => `<tr><td>${a.id}</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
+        <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
+        <td>${a.pax}</td><td>${stBadge(a.status)}</td></tr>`).join('')}
     </tbody></table></div>`;
 }
-function renderC_batch() {
-  const pending = ModuleC.applications.filter(a => a.status === 'pending').length;
-  $('#c-tab-batch').innerHTML = `
+
+/* ============================================================
+   模組 C · 審核/調度端（業務單位）
+   ============================================================ */
+RENDER.c_review = function () {
+  const p = $('#page-c_review');
+  p.innerHTML = `
+    <div class="section-h">媒合審核（業務單位）</div>
+    <div class="section-sub">主管准駁 → 批次媒合（未來 7 天）→ 資源檢核、手動併車、逾期作廢。</div>
+    <div class="pill-tabs">
+      <div class="pill-tab active" data-tab="review">① 主管准駁</div>
+      <div class="pill-tab" data-tab="batch">② 批次媒合</div>
+      <div class="pill-tab" data-tab="manual">③ 手動併車 / 作廢</div>
+    </div>
+    <div id="cr-tab-review"></div>
+    <div id="cr-tab-batch" style="display:none;"></div>
+    <div id="cr-tab-manual" style="display:none;"></div>`;
+  $$('#page-c_review .pill-tab').forEach(t => t.onclick = () => {
+    $$('#page-c_review .pill-tab').forEach(x => x.classList.toggle('active', x === t));
+    ['review', 'batch', 'manual'].forEach(k => $('#cr-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
+    if (t.dataset.tab === 'batch') renderCr_batch();
+    if (t.dataset.tab === 'manual') renderCr_manual();
+  });
+  renderCr_review(); renderCr_batch(); renderCr_manual();
+};
+function renderCr_review() {
+  const submitted = ModuleC.applications.filter(a => a.status === 'submitted');
+  $('#cr-tab-review').innerHTML = `
+    <div class="card">
+      <div class="card-title">待審核（主管准駁）<span class="g-tag">G63</span></div>
+      <div class="card-desc">駁回保留紀錄但不進排班池。核准後才進入批次媒合範圍。</div>
+      ${submitted.length === 0 ? `<div class="empty">目前無待審核申請單。</div>` : `
+      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="cr-approve-all">✓ 全部核准</button></div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>日期/上車</th><th>操作</th></tr></thead><tbody>
+        ${submitted.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
+          <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
+          <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
+              <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>`;
+  const all = $('#cr-approve-all');
+  if (all) all.onclick = () => { submitted.forEach(a => ModuleC.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderCr_review(); renderCaList(); };
+  $$('#cr-tab-review [data-ap]').forEach(b => b.onclick = () => { ModuleC.approve(ModuleC.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderCr_review(); });
+  $$('#cr-tab-review [data-rj]').forEach(b => b.onclick = () => { ModuleC.reject(ModuleC.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); renderCr_review(); });
+}
+function renderCr_batch() {
+  const approved = ModuleC.applications.filter(a => a.status === 'approved').length;
+  $('#cr-tab-batch').innerHTML = `
     <div class="card">
       <div class="card-title">批次媒合引擎 <span class="g-tag">G53/G61</span></div>
-      <div class="card-desc">手動觸發，處理未來 7 天內（以出發日期為準）申請單。已成功單不重排。按下當下即時呼叫請假 API（示意）。</div>
+      <div class="card-desc">手動觸發，處理未來 7 天內（以出發日期為準）<b>已核准</b>申請單。已成功單不重排。按下當下即時呼叫請假 API（示意）。</div>
       <div class="row" style="max-width:420px;align-items:end;">
-        <div class="field"><label>批次起算日期</label><input type="date" id="c-batch-date" value="2026-08-25"></div>
-        <div class="field" style="flex:0 0 auto;"><button class="btn btn-accent" id="c-run-batch">▶ 執行批次媒合</button></div>
+        <div class="field"><label>批次起算日期</label><input type="date" id="cr-batch-date" value="2026-08-25"></div>
+        <div class="field" style="flex:0 0 auto;"><button class="btn btn-accent" id="cr-run-batch">▶ 執行批次媒合</button></div>
       </div>
-      <div class="muted">目前待處理：${pending} 筆</div>
-      <div id="c-batch-result"></div>
+      <div class="muted">目前已核准待媒合：${approved} 筆</div>
+      <div id="cr-batch-result"></div>
     </div>
     <div class="card">
       <div class="card-title">資源可用性檢核狀態 <span class="g-tag">G60/G61</span></div>
@@ -616,59 +765,58 @@ function renderC_batch() {
           </tbody></table></div></div>
       </div>
     </div>`;
-  $('#c-run-batch').onclick = () => {
-    const { batch, trace } = ModuleC.runBatch($('#c-batch-date').value);
-    $('#c-batch-result').innerHTML = `
+  $('#cr-run-batch').onclick = () => {
+    const { batch, trace } = ModuleC.runBatch($('#cr-batch-date').value);
+    $('#cr-batch-result').innerHTML = `
       <div class="result ok" style="margin-top:14px;">
         <div class="r-head">✓ 批次 ${batch.id} 完成</div>
         <div>成功 ${batch.items.filter(i => i.result === 'matched').length} 筆｜待人工協調 ${batch.items.filter(i => i.result === 'coordinate').length} 筆</div>
       </div>
       <div class="trace">${trace.join('\n')}</div>`;
-    toast(`批次 ${batch.id} 完成`, 'ok'); renderC_list();
+    toast(`批次 ${batch.id} 完成`, 'ok'); renderCaList();
   };
 }
-function renderC_manual() {
-  const coordinate = ModuleC.applications.filter(a => a.status === 'coordinate');
-  const active = ModuleC.applications.filter(a => ['pending', 'coordinate', 'manual'].includes(a.status));
-  $('#c-tab-manual').innerHTML = `
+function renderCr_manual() {
+  const active = ModuleC.applications.filter(a => ['approved', 'coordinate', 'manual'].includes(a.status));
+  $('#cr-tab-manual').innerHTML = `
     <div class="card">
       <div class="card-title">手動併車 <span class="g-tag">G56</span></div>
       <div class="card-desc">向已確定有車的單搭便車。候選＝出發日期前後 1 天、已派車的單（不篩目的地、不比時間）。按「完成合併」即成立，免調度室確認。</div>
-      ${active.length === 0 ? `<div class="empty">無待併車申請單。先建立申請並執行批次媒合。</div>` : `
+      ${active.length === 0 ? `<div class="empty">無待併車申請單。先核准並執行批次媒合。</div>` : `
       <div class="field" style="max-width:360px;"><label>選擇要搭便車的申請單</label>
-        <select id="c-manual-src">${active.map(a => `<option value="${a.id}">${a.id}｜${a.origin}→${a.dest}｜${statusText(a.status)}</option>`).join('')}</select></div>
-      <button class="btn btn-primary btn-sm" id="c-show-candidates">列出候選車輛</button>
-      <div id="c-candidates"></div>`}
+        <select id="cr-manual-src">${active.map(a => `<option value="${a.id}">${a.id}｜${a.origin}→${a.dest}｜${statusText(a.status)}</option>`).join('')}</select></div>
+      <button class="btn btn-primary btn-sm" id="cr-show-candidates">列出候選車輛</button>
+      <div id="cr-candidates"></div>`}
     </div>
     <div class="card">
       <div class="card-title">逾期自動作廢 <span class="g-tag">G57</span></div>
       <div class="card-desc">到出發時間仍未成功 → 自動作廢、通知申請人、紀錄保留供統計、不轉待人工協調。（此處以按鈕模擬逾期）</div>
       ${active.length === 0 ? `<div class="empty">無可作廢單</div>` : `
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>路線</th><th>狀態</th><th>操作</th></tr></thead><tbody>
-        ${active.map(a => `<tr><td>${a.id}</td><td>${a.origin}→${a.dest}</td><td>${statusBadge(a.status)}</td>
+        ${active.map(a => `<tr><td>${a.id}</td><td>${a.origin}→${a.dest}</td><td>${stBadge(a.status)}</td>
           <td><button class="btn btn-danger btn-sm" data-void="${a.id}">模擬逾期作廢</button></td></tr>`).join('')}
       </tbody></table></div>`}
     </div>`;
-  const showBtn = $('#c-show-candidates');
+  const showBtn = $('#cr-show-candidates');
   if (showBtn) showBtn.onclick = () => {
-    const src = ModuleC.applications.find(a => a.id === $('#c-manual-src').value);
+    const src = ModuleC.applications.find(a => a.id === $('#cr-manual-src').value);
     const cands = ModuleC.manualCandidates(src);
-    if (cands.length === 0) { $('#c-candidates').innerHTML = `<div class="callout">前後 1 天內查無已派車的候選單。</div>`; return; }
-    $('#c-candidates').innerHTML = `
+    if (cands.length === 0) { $('#cr-candidates').innerHTML = `<div class="callout">前後 1 天內查無已派車的候選單。</div>`; return; }
+    $('#cr-candidates').innerHTML = `
       <div class="callout info" style="margin-top:12px;">為 <b>${src.id}</b>（${src.origin}→${src.dest}）尋找便車。不顯示私人手機。</div>
       <div class="table-wrap"><table class="dt"><thead><tr><th>候選單</th><th>目的地</th><th>出發/最晚抵達</th><th>申請人 部門/分機</th><th>已載/剩餘</th><th></th></tr></thead><tbody>
         ${cands.map(c => `<tr><td>${c.app.id}</td><td>${c.dest}</td><td>${c.depart} / ${c.latest}</td>
           <td>${c.applicant}（${c.dept}/${c.ext}）</td><td>${c.loaded} / 剩 ${c.remain}</td>
           <td><button class="btn btn-primary btn-sm" data-merge="${c.app.id}" ${c.remain < src.pax ? 'disabled' : ''}>完成合併</button></td></tr>`).join('')}
       </tbody></table></div>`;
-    $$('#c-candidates [data-merge]').forEach(b => b.onclick = () => {
+    $$('#cr-candidates [data-merge]').forEach(b => b.onclick = () => {
       const target = ModuleC.applications.find(a => a.id === b.dataset.merge);
       ModuleC.doManualMerge(src, target);
       toast(`${src.id} 已搭 ${target.id} 便車，合併成立`, 'ok');
-      renderC_manual(); renderC_list();
+      renderCr_manual(); renderCaList();
     });
   };
-  $$('#c-tab-manual [data-void]').forEach(b => b.onclick = () => {
+  $$('#cr-tab-manual [data-void]').forEach(b => b.onclick = () => {
     const a = ModuleC.applications.find(x => x.id === b.dataset.void);
     const r = ModuleC.voidOverdue(a);
     openModal('逾期自動作廢（示意）', `
@@ -676,15 +824,15 @@ function renderC_manual() {
         <div>系統已通知申請人：<b>${r.notified}</b></div></div>
       <div class="callout" style="margin-top:12px;">紀錄保留供媒合失敗率統計（G57），不轉待人工協調。作廢即最終結局。</div>`);
     toast(`${a.id} 逾期作廢並通知申請人`, 'err');
-    renderC_manual(); renderC_list();
+    renderCr_manual(); renderCaList();
   });
 }
 function statusText(s) {
-  return ({ pending: '待處理', matched: '已媒合', coordinate: '待人工協調', manual: '手動併車', void: '作廢' })[s] || s;
+  return ({ submitted: '待審核', approved: '已核准', rejected: '已駁回', matched: '已媒合', coordinate: '待人工協調', manual: '手動併車', void: '作廢' })[s] || s;
 }
 
 /* ============================================================
-   主檔資料
+   主檔資料（共用）
    ============================================================ */
 RENDER.master = function () {
   const p = $('#page-master');

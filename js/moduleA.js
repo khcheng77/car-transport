@@ -7,8 +7,10 @@
 const ModuleA = {
   applications: [], // 申請單
   seq: 1,
+  approveSeq: 1,    // 審核通過時間序（G16 排序用）
 
   // 收貨時間模式 G19：exact=指定期望時間 / asap=越快越好
+  // 申請端只負責建立，狀態為「待審核」，不觸發媒合
   createApp(data) {
     const app = {
       id: 'LA' + String(this.seq++).padStart(3, '0'),
@@ -19,13 +21,17 @@ const ModuleA = {
       recvMode: data.recvMode,       // 'exact' | 'asap'
       expectTime: data.expectTime,   // exact 模式的期望到站時間
       handleMin: data.handleMin,     // 上下貨自填分鐘（G15）
-      approvedAt: Date.now() + this.seq, // 審核通過時間（排序用 G16）
-      status: 'pending',
+      approvedAt: null,              // 審核通過時間（核准時填入，排序用 G16）
+      status: 'submitted',           // submitted → approved/rejected → matched
       assignedShift: null,
     };
     this.applications.push(app);
     return app;
   },
+
+  // 業務/調度端：主管准駁（G63 兩層審批第一層）
+  approve(app) { app.status = 'approved'; app.approvedAt = this.approveSeq++; },
+  reject(app) { app.status = 'rejected'; app.approvedAt = null; },
 
   /* 各班次到達某站的時間（示意）：出發時間 + 站序×固定行駛 */
   shiftArrivalAtStation(shift, stationOrder) {
