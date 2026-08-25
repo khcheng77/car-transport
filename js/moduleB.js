@@ -32,6 +32,11 @@ const ModuleB = {
   approve(o) { o.status = 'approved'; o.approvedAt = this.approveSeq++; },
   reject(o) { o.status = 'rejected'; o.approvedAt = null; },
 
+  // 接收人確認接受（loaded → accepted）
+  acceptDelivery(o) { if (o.status === 'loaded') { o.status = 'accepted'; o.acceptedAt = Date.now(); } },
+  // 交貨確認（accepted → delivered）：接收人確認收到，或調度/駕駛回報送達
+  confirmDelivery(o, by) { if (o.status === 'accepted') { o.status = 'delivered'; o.deliveredAt = Date.now(); o.deliveredBy = by || '調度室'; } },
+
   TIME_LIMIT: 8 * 60, // 總計時間上限（分鐘），示意 = 一日行車 8 小時
   siteById(id) { return DB.sites.find(s => s.id === id); },
 
@@ -63,6 +68,7 @@ const ModuleB = {
       for (const o of sameDest) {
         if (load + o.volume <= veh.volume && wt + o.weight <= veh.weight) {
           load += o.volume; wt += o.weight; carried.push(o); o.status = 'loaded';
+          o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
           trace.push(`  <span class="ok">✓ 載入 ${o.id}（${o.volume}L）累計 ${load}L</span>`);
         } else {
           trace.push(`  <span class="no">✗ ${o.id} 超出容量 → 留下一班直達車（G39）</span>`);
@@ -102,6 +108,7 @@ const ModuleB = {
           netVol += o.volume; netWt += o.weight; totalTime += o.handleMin;
           stopLoaded += o.volume; stopTime += o.handleMin;
           carried.push(o); stopCarried.push(o); o.status = 'loaded';
+          o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = site.id;
         }
       }
       stops.push({ site, loaded: stopLoaded, count: stopCarried.length,

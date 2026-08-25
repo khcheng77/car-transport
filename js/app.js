@@ -24,20 +24,24 @@ function openModal(title, bodyHtml) {
 }
 function closeModal() { $('#modal-mask').classList.remove('show'); }
 
-/* 通用狀態徽章 */
-function stBadge(s) {
-  return ({
-    submitted: '<span class="badge b-gray">待審核</span>',
-    approved: '<span class="badge b-navy">已核准待排</span>',
-    rejected: '<span class="badge b-red">已駁回</span>',
-    matched: '<span class="badge b-navy">已排班待接受</span>',
-    accepted: '<span class="badge b-amber">已接受待交貨</span>',
-    delivered: '<span class="badge b-green">已交貨</span>',
-    loaded: '<span class="badge b-green">已裝載</span>',
-    coordinate: '<span class="badge b-amber">待人工協調</span>',
-    manual: '<span class="badge b-navy">手動併車</span>',
-    void: '<span class="badge b-red">逾期作廢</span>',
-  })[s] || s;
+/* 通用狀態徽章（mod 用來區分同名狀態 matched 的顯示文字）*/
+function stBadge(s, mod) {
+  const map = {
+    submitted: ['待審核', 'b-gray'],
+    approved: ['已核准待排', 'b-navy'],
+    rejected: ['已駁回', 'b-red'],
+    accepted: ['已接受待交貨', 'b-amber'],
+    delivered: ['已交貨', 'b-green'],
+    loaded: ['已派車待接受', 'b-navy'],
+    coordinate: ['待人工協調', 'b-amber'],
+    manual: ['手動併車', 'b-navy'],
+    void: ['逾期作廢', 'b-red'],
+    boarded: ['已上車', 'b-amber'],
+    completed: ['行程完成', 'b-green'],
+    matched: mod === 'C' ? ['已媒合待上車', 'b-navy'] : ['已排班待接受', 'b-navy'],
+  };
+  const m = map[s];
+  return m ? `<span class="badge ${m[1]}">${m[0]}</span>` : s;
 }
 
 /* ---------- 導覽（2 共用 + 6 業務單元）---------- */
@@ -100,8 +104,8 @@ const RENDER = {};
 RENDER.dashboard = function () {
   const p = $('#page-dashboard');
   const aMatched = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status)).length;
-  const bLoaded = ModuleB.orders.filter(o => o.status === 'loaded').length;
-  const cMatched = ModuleC.applications.filter(a => a.status === 'matched').length;
+  const bLoaded = ModuleB.orders.filter(o => ['loaded', 'accepted', 'delivered'].includes(o.status)).length;
+  const cMatched = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status)).length;
   const pendReview = ModuleA.applications.filter(a => a.status === 'submitted').length
     + ModuleB.orders.filter(o => o.status === 'submitted').length
     + ModuleC.applications.filter(a => a.status === 'submitted').length;
@@ -579,11 +583,29 @@ RENDER.b_apply = function () {
 function renderBaList() {
   const rows = ModuleB.orders;
   $('#ba-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無託運單</div>` : `
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>型態</th><th>貨量</th><th>狀態</th></tr></thead><tbody>
-      ${rows.map(o => `<tr><td>${o.id}</td><td>${ModuleB.siteById(o.dest).name}</td>
-        <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
-        <td>${o.volume}L</td><td>${stBadge(o.status)}</td></tr>`).join('')}
+    <div class="card-desc" style="margin-bottom:10px;">派車後，接收人可在此確認接受、並於收到貨後確認交貨。</div>
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>型態/車輛</th><th>貨量</th><th>狀態</th><th>接收人操作</th></tr></thead><tbody>
+      ${rows.map(o => {
+        const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
+        const typ = o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>';
+        let op = '<span class="muted">—</span>';
+        if (o.status === 'loaded') op = `<button class="btn btn-primary btn-sm" data-baccept="${o.id}">確認接受</button>`;
+        else if (o.status === 'accepted') op = `<button class="btn btn-accent btn-sm" data-brecv="${o.id}">確認已收到貨</button>`;
+        else if (o.status === 'delivered') op = '<span class="badge b-green">✓ 已完成</span>';
+        return `<tr><td>${o.id}</td><td>${ModuleB.siteById(o.dest).name}</td>
+          <td>${typ}${veh ? ' ' + veh.name : ''}</td>
+          <td>${o.volume}L</td><td>${stBadge(o.status)}</td><td>${op}</td></tr>`; }).join('')}
     </tbody></table></div>`;
+  $$('#ba-list [data-baccept]').forEach(b => b.onclick = () => {
+    const o = ModuleB.orders.find(x => x.id === b.dataset.baccept);
+    ModuleB.acceptDelivery(o); toast(`${o.id} 接收人已確認接受`, 'ok');
+    renderBaList(); if ($('#br-tracking')) renderBr_tracking();
+  });
+  $$('#ba-list [data-brecv]').forEach(b => b.onclick = () => {
+    const o = ModuleB.orders.find(x => x.id === b.dataset.brecv);
+    ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 接收人已確認收到貨`, 'ok');
+    renderBaList(); if ($('#br-tracking')) renderBr_tracking();
+  });
 }
 
 /* ============================================================
@@ -605,10 +627,41 @@ RENDER.b_review = function () {
       <button class="btn btn-primary" id="br-dispatch-greedy">派非直達車（貪婪）</button>
       <div id="br-approved" style="margin-top:14px;"></div>
       <div id="br-dispatch-result"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">已派車貨況一覽（被安排車次 · 派遣模式 · 接受/交貨追蹤）</div>
+      <div class="card-desc">顯示每張已派車託運單的車輛、派遣模式、終點，以及接收人接受與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
+      <div id="br-tracking"></div>
     </div>`;
   $('#br-dispatch-direct').onclick = () => dispatchB('direct');
   $('#br-dispatch-greedy').onclick = () => dispatchB('greedy');
-  renderBr_review(); renderBr_approved();
+  renderBr_review(); renderBr_approved(); renderBr_tracking();
+};
+function renderBr_tracking() {
+  const rows = ModuleB.orders.filter(o => ['loaded', 'accepted', 'delivered'].includes(o.status));
+  $('#br-tracking').innerHTML = rows.length === 0 ? `<div class="empty">尚無已派車託運單。核准後派車即會出現在此。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>目的地</th><th>派遣模式</th><th>車輛</th><th>貨量</th>
+      <th>接收人接受</th><th>交貨</th><th>操作</th></tr></thead><tbody>
+      ${rows.map(o => {
+        const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
+        const acc = (o.status === 'accepted' || o.status === 'delivered')
+          ? '<span class="badge b-green">已接受</span>' : '<span class="badge b-gray">待接受</span>';
+        const del = o.status === 'delivered' ? '<span class="badge b-green">已交貨</span>' : '<span class="badge b-gray">未交貨</span>';
+        let op = '<span class="muted">—</span>';
+        if (o.status === 'accepted') op = `<button class="btn btn-accent btn-sm" data-bdeliver="${o.id}">確認交貨</button>`;
+        else if (o.status === 'loaded') op = '<span class="muted">待接收人接受</span>';
+        else if (o.status === 'delivered') op = `<span class="muted">${o.deliveredBy || ''} 完成</span>`;
+        const modeBadge = o.dispatchMode === '直達' ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>';
+        return `<tr><td>${o.id}</td><td>${o.applicant}</td><td>${ModuleB.siteById(o.dest).name}</td>
+          <td>${modeBadge}</td><td>${veh ? veh.name : '—'}</td><td>${o.volume}L</td>
+          <td>${acc}</td><td>${del}</td><td>${op}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  $$('#br-tracking [data-bdeliver]').forEach(b => b.onclick = () => {
+    const o = ModuleB.orders.find(x => x.id === b.dataset.bdeliver);
+    ModuleB.confirmDelivery(o, '調度室'); toast(`${o.id} 已確認交貨`, 'ok');
+    renderBr_tracking(); renderBaList();
+  });
 };
 function renderBr_review() {
   const submitted = ModuleB.orders.filter(o => o.status === 'submitted');
@@ -656,7 +709,7 @@ function dispatchB(mode) {
     </div>
     <div class="trace">${r.trace.join('\n')}</div>`;
   toast(`${r.modeLabel || ''}派車完成`, 'ok');
-  renderBr_approved(); renderBaList();
+  renderBr_approved(); renderBaList(); renderBr_tracking();
 }
 
 /* ============================================================
@@ -736,14 +789,32 @@ function loadCDemo() {
   demos.forEach(d => ModuleC.createApp({ ...d, departDate: D }));
   toast('已載入 5 筆共乘申請（待審核）', 'ok'); renderCaList();
 }
+function cActionCell(a) {
+  let op = '<span class="muted">—</span>';
+  if (a.status === 'matched') op = `<button class="btn btn-primary btn-sm" data-board="${a.id}">確認上車</button>`;
+  else if (a.status === 'boarded') op = `<button class="btn btn-accent btn-sm" data-done="${a.id}">確認行程完成</button>`;
+  else if (a.status === 'completed') op = '<span class="badge b-green">✓ 已完成</span>';
+  return `<td>${op}</td>`;
+}
 function renderCaList() {
   const rows = ModuleC.applications;
   $('#ca-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無申請單，可「載入範例批次」</div>` : `
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>狀態</th></tr></thead><tbody>
+    <div class="card-desc" style="margin-bottom:10px;">媒合成功後，乘客可在此確認上車、抵達後確認行程完成。</div>
+    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>狀態</th><th>乘客操作</th></tr></thead><tbody>
       ${rows.map(a => `<tr><td>${a.id}</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
         <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
-        <td>${a.pax}</td><td>${stBadge(a.status)}</td></tr>`).join('')}
+        <td>${a.pax}</td><td>${stBadge(a.status, 'C')}</td>${cActionCell(a)}</tr>`).join('')}
     </tbody></table></div>`;
+  $$('#ca-list [data-board]').forEach(b => b.onclick = () => {
+    const a = ModuleC.applications.find(x => x.id === b.dataset.board);
+    ModuleC.confirmBoard(a); toast(`${a.id} 乘客已確認上車`, 'ok');
+    renderCaList(); if ($('#cr-tab-track')) renderCr_track();
+  });
+  $$('#ca-list [data-done]').forEach(b => b.onclick = () => {
+    const a = ModuleC.applications.find(x => x.id === b.dataset.done);
+    ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok');
+    renderCaList(); if ($('#cr-tab-track')) renderCr_track();
+  });
 }
 
 /* ============================================================
@@ -758,18 +829,53 @@ RENDER.c_review = function () {
       <div class="pill-tab active" data-tab="review">① 主管准駁</div>
       <div class="pill-tab" data-tab="batch">② 批次媒合</div>
       <div class="pill-tab" data-tab="manual">③ 手動併車 / 作廢</div>
+      <div class="pill-tab" data-tab="track">④ 派車追蹤</div>
     </div>
     <div id="cr-tab-review"></div>
     <div id="cr-tab-batch" style="display:none;"></div>
-    <div id="cr-tab-manual" style="display:none;"></div>`;
+    <div id="cr-tab-manual" style="display:none;"></div>
+    <div id="cr-tab-track" style="display:none;"></div>`;
   $$('#page-c_review .pill-tab').forEach(t => t.onclick = () => {
     $$('#page-c_review .pill-tab').forEach(x => x.classList.toggle('active', x === t));
-    ['review', 'batch', 'manual'].forEach(k => $('#cr-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
+    ['review', 'batch', 'manual', 'track'].forEach(k => $('#cr-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
     if (t.dataset.tab === 'batch') renderCr_batch();
     if (t.dataset.tab === 'manual') renderCr_manual();
+    if (t.dataset.tab === 'track') renderCr_track();
   });
-  renderCr_review(); renderCr_batch(); renderCr_manual();
+  renderCr_review(); renderCr_batch(); renderCr_manual(); renderCr_track();
 };
+// 派車追蹤：被安排的車次 · 司機 · 乘客上車/行程完成
+function renderCr_track() {
+  const rows = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status));
+  $('#cr-tab-track').innerHTML = `
+    <div class="card">
+      <div class="card-title">派車追蹤（被安排車次 · 乘客上車/行程完成）</div>
+      <div class="card-desc">顯示每張已媒合申請的車輛、司機、併車群組，以及乘客上車與行程完成狀態。乘客可於申請端確認上車/完成，或由調度室在此回報完成。</div>
+      ${rows.length === 0 ? `<div class="empty">尚無已媒合車次。核准後執行批次媒合即會出現在此。</div>` : `
+      <div class="table-wrap"><table class="dt"><thead><tr>
+        <th>單號</th><th>申請人</th><th>路線</th><th>人</th><th>車輛</th><th>司機</th><th>群組</th>
+        <th>上車</th><th>行程</th><th>操作</th></tr></thead><tbody>
+        ${rows.map(a => {
+          const veh = a.vehicle ? DB.vehicles.find(v => v.id === a.vehicle) : null;
+          const drv = a.driver ? DB.drivers.find(d => d.id === a.driver) : null;
+          const brd = (a.status === 'boarded' || a.status === 'completed')
+            ? '<span class="badge b-green">已上車</span>' : '<span class="badge b-gray">待上車</span>';
+          const cmp = a.status === 'completed' ? '<span class="badge b-green">已完成</span>' : '<span class="badge b-gray">進行中</span>';
+          let op = '<span class="muted">—</span>';
+          if (a.status === 'boarded') op = `<button class="btn btn-accent btn-sm" data-ccomplete="${a.id}">確認完成</button>`;
+          else if (a.status === 'matched') op = '<span class="muted">待乘客上車</span>';
+          else if (a.status === 'completed') op = `<span class="muted">${a.completedBy || ''} 完成</span>`;
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td><td>${a.pax}</td>
+            <td>${veh ? veh.name : '—'}</td><td>${drv ? drv.name : '—'}</td><td>${a.groupId || '—'}</td>
+            <td>${brd}</td><td>${cmp}</td><td>${op}</td></tr>`; }).join('')}
+      </tbody></table></div>`}
+    </div>`;
+  $$('#cr-tab-track [data-ccomplete]').forEach(b => b.onclick = () => {
+    const a = ModuleC.applications.find(x => x.id === b.dataset.ccomplete);
+    ModuleC.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok');
+    renderCr_track(); renderCaList();
+  });
+}
 function renderCr_review() {
   const submitted = ModuleC.applications.filter(a => a.status === 'submitted');
   $('#cr-tab-review').innerHTML = `
@@ -825,7 +931,7 @@ function renderCr_batch() {
         <div>成功 ${batch.items.filter(i => i.result === 'matched').length} 筆｜待人工協調 ${batch.items.filter(i => i.result === 'coordinate').length} 筆</div>
       </div>
       <div class="trace">${trace.join('\n')}</div>`;
-    toast(`批次 ${batch.id} 完成`, 'ok'); renderCaList();
+    toast(`批次 ${batch.id} 完成`, 'ok'); renderCaList(); renderCr_track();
   };
 }
 function renderCr_manual() {
@@ -880,7 +986,7 @@ function renderCr_manual() {
   });
 }
 function statusText(s) {
-  return ({ submitted: '待審核', approved: '已核准', rejected: '已駁回', matched: '已媒合', coordinate: '待人工協調', manual: '手動併車', void: '作廢' })[s] || s;
+  return ({ submitted: '待審核', approved: '已核准', rejected: '已駁回', matched: '已媒合', boarded: '已上車', completed: '行程完成', coordinate: '待人工協調', manual: '手動併車', void: '作廢' })[s] || s;
 }
 
 /* ============================================================

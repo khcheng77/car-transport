@@ -39,6 +39,11 @@ const ModuleC = {
   approve(app) { app.status = 'approved'; app.approvedAt = this.approveSeq++; },
   reject(app) { app.status = 'rejected'; app.approvedAt = null; },
 
+  // 乘客確認上車（matched → boarded）
+  confirmBoard(app) { if (app.status === 'matched') { app.status = 'boarded'; app.boardedAt = Date.now(); } },
+  // 行程完成確認（boarded → completed）：乘客抵達確認，或調度回報完成
+  completeTrip(app, by) { if (app.status === 'boarded') { app.status = 'completed'; app.completedAt = Date.now(); app.completedBy = by || '調度室'; } },
+
   /* 車程表查詢 + 緩衝（G62）*/
   travelMin(origin, dest) {
     const m = DB.bizTravel[origin + '|' + dest];
