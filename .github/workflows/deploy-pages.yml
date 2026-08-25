@@ -31,6 +31,9 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # 若 repo 尚未啟用 Pages，嘗試自動啟用（免手動進 Settings）
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
