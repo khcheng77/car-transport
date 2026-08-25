@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跨據點南北幹線物流 — 需求討論報告</title>
+<style>
+  :root {
+    --ink: #1c1f26;
+    --ink-soft: #4a5163;
+    --paper: #fbfaf7;
+    --panel: #ffffff;
+    --line: #e2e0d8;
+    --accent: #2f5d50;
+    --accent-soft: #e8efec;
+    --warn: #a15c1f;
+    --warn-soft: #faf1e4;
+    --warn-line: #e8cda3;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.75;
+    padding: 0 0 64px 0;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  header.hero {
+    background: var(--ink);
+    color: #f4f2ec;
+    padding: 56px 24px 40px;
+    margin-bottom: 40px;
+  }
+  header.hero .wrap { padding: 0 24px; }
+  .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #a9c9bd;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 14px 0;
+    line-height: 1.4;
+    font-weight: 700;
+  }
+  .hero-sub {
+    color: #c9c6bb;
+    font-size: 15px;
+    max-width: 640px;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #9a978c;
+  }
+  .hero-meta span b { color: #e7e5dd; font-weight: 600; }
+
+  h2 {
+    font-size: 20px;
+    margin: 48px 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 16px;
+    margin: 28px 0 10px;
+    color: var(--ink);
+  }
+  p { color: var(--ink-soft); margin: 0 0 12px; }
+
+  .lead-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 8px;
+  }
+  .lead-box p:last-child { margin-bottom: 0; }
+
+  .flow {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 24px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--ink);
+    line-height: 2;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .flow .dir { color: var(--accent); font-weight: 700; }
+  .flow .stop { color: var(--warn); }
+
+  .decision-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .decision-card .label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .decision-card .content { color: var(--ink); font-size: 14.5px; }
+  .decision-card .why {
+    margin-top: 8px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .pending-card {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-line);
+    border-left: 4px solid var(--warn);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .pending-card .label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--warn);
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .pending-card .content { color: var(--ink); font-size: 14.5px; }
+  .pending-card .options {
+    margin-top: 10px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .pending-card .options div { margin-bottom: 4px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 24px;
+    font-size: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.02em;
+  }
+  .badge.done { background: var(--accent-soft); color: var(--accent); }
+  .badge.pending { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+
+  .scope-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  @media (max-width: 600px) {
+    .scope-grid { grid-template-columns: 1fr; }
+  }
+  .scope-box {
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 14px;
+  }
+  .scope-box.in {
+    background: var(--accent-soft);
+    border: 1px solid #c7dcd3;
+  }
+  .scope-box.out {
+    background: #f2f1ec;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+  .scope-box .title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .scope-box.in .title { color: var(--accent); }
+  .scope-box.out .title { color: #7a7669; }
+  .scope-box ul { margin: 0; padding-left: 18px; }
+  .scope-box li { margin-bottom: 4px; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: #9a978c;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">物流子系統 · 需求討論記錄</div>
+    <h1>跨據點南北幹線車輛派遣邏輯</h1>
+    <p class="hero-sub">
+      本文件整理「南北幹線跨據點物流」議題的需求釐清過程與已確認決策，
+      並列出尚待業務單位確認的開放問題，供討論與核對。
+    </p>
+    <div class="hero-meta">
+      <span>議題範圍：<b>單一車輛、單趟南北幹線（含直達／非直達分流）</b></span>
+      <span>狀態：<b>核心邏輯已定案，1 項待業務單位確認</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2><span class="num">00</span> 背景與問題</h2>
+  <div class="lead-box">
+    <p>
+      既有物流子系統設計以「單一據點內、10 個固定停靠站」為範圍。本次新議題處理更大尺度的情境：
+      公司在台灣約有 10 個據點（例如桃園龍潭、台中、高雄左營、台南等），車輛需要跑一趟涵蓋多個據點的
+      南北向路線，沿途在多個據點收貨、卸貨，目標是<b>最大化車輛利用率、減少空駛</b>。
+    </p>
+    <p>
+      這 10 個據點在地理上恰好呈南北一直線分佈，因此「固定據點順序」與「南到北 / 北到南」是同一件事，
+      不需要額外的排序判斷邏輯。
+    </p>
+  </div>
+
+  <div class="flow">
+出發據點（例：桃園龍潭）
+  │  <span class="dir">去程 →</span> 依南北固定順序，逐據點檢查是否收送貨
+  ├─ <span class="stop">台中據點</span>：卸部分貨、裝新貨（視當下剩餘容量）
+  ├─ <span class="stop">…</span>
+  └─ 終點（系統自動判斷，例：高雄左營 或 台南）
+       │
+       │  （去程與回程間隔：<span style="color:#a15c1f">待確認</span>）
+       ▼
+終點據點
+  │  <span class="dir">回程 →</span> 依南北固定順序（反向），逐據點檢查是否收送貨
+  ├─ <span class="stop">…</span>
+  └─ 回到原出發據點（固定，不做提前結束判斷）
+  </div>
+
+  <h2><span class="num">01</span> 範疇界定</h2>
+  <div class="scope-grid">
+    <div class="scope-box in">
+      <div class="title">✓ 本次討論範圍內</div>
+      <ul>
+        <li>單一車輛、單趟南北幹線的收送貨與終點判斷邏輯</li>
+        <li>去程 / 回程的容量與時間規則</li>
+        <li>據點層級的路由（不含據點內建物排序）</li>
+      </ul>
+    </div>
+    <div class="scope-box out">
+      <div class="title">✕ 排除於本次討論之外</div>
+      <ul>
+        <li>據點內部建物收送貨順序（交由司機臨場判斷）</li>
+        <li>同一天多台車輛之間的貨物分配 / 加開班次判斷</li>
+        <li>車輛－班次的每日指派（沿用既有：調度室人工設定）</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2><span class="num">02</span> 已確認決策</h2>
+
+  <h3>2.1　據點內部處理方式</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">車輛進入據點後，<b>不做站內建物排序</b>，直接依系統提供的「建物收送貨清單」由司機自行決定拜訪順序。</div>
+    <div class="why">系統的最小排程單位到「據點」為止，據點內部順序對整體效率影響小，避免過度設計。</div>
+  </div>
+
+  <h3>2.2　跨據點路由順序</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">10 個據點依實際地理位置（南北向）排出<b>固定順序表</b>，車次依此順序（南→北 或 北→南）行進，沒貨的據點跳過，不做動態排序最佳化。</div>
+    <div class="why">與既有物流子系統「10 個固定停靠站、固定順序」原則一致，僅將單位從「站」擴大為「據點」。</div>
+  </div>
+
+  <h3>2.3　終點自動判斷</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      這趟車最遠跑到哪個據點，<b>由系統自動決定</b>（非調度室事先人工指定），調度室僅在系統判斷出現例外狀況時人工介入。
+      判斷邏輯採<b>貪婪法</b>：依南北固定順序逐據點檢查，<b>容量</b>或<b>總計時間</b>任一項先觸及上限，即在該站停止延伸、視為終點。
+    </div>
+    <div class="why">
+      沿用共乘子系統「MVP 用貪婪規則引擎，不用 VRP 求解器」的原則，確保邏輯可解釋、調度員可一眼看懂系統為何選了這個範圍，
+      也符合「只在有問題才介入」的期待。
+    </div>
+  </div>
+
+  <h3>2.4　容量判斷基準</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">容量以「<b>目前車上實際載貨量</b>」（動態淨值）為準，卸貨後釋出的空間可立即被後續據點的新貨佔用，不採計歷史最高累積載貨量。</div>
+    <div class="why">若不採計卸貨釋出的空間，「中途卸貨再裝貨」將失去意義，車輛可延伸範圍會被低估，違背最大化利用率的核心目標。</div>
+  </div>
+
+  <h3>2.5　容量不足時的處理（部分裝載）</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      當某站待裝貨量超過剩餘可用空間時，採<b>部分上車</b>：能塞多少算多少；拆分的最小單位是<b>整張申請表單</b>，不拆表單內的貨物線項。
+      同一站有多張表單待裝載時，依<b>核准時間排序</b>，逐張檢查能否完整放入剩餘空間，放得下即裝載，放不下則跳過、留待下一班次。
+    </div>
+    <div class="why">整批打回會嚴重犧牲填載率；但拆表單內線項會讓同一筆申請的貨物分批到貨，增加申請人困惑與異常追蹤複雜度，故以整張表單為最小單位。</div>
+  </div>
+
+  <h3>2.6　時間上限的計算方式</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">總計時間 = <b>累積行駛時間 + 累積各站裝卸貨時間</b>，沿用既有「各站裝卸貨時間自報並加總」機制。</div>
+    <div class="why">僅計算行駛時間會嚴重低估實際耗時，導致終點判斷失準、影響司機工時安排。</div>
+  </div>
+
+  <h3>2.7　回程規則</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      回程<b>終點固定回到原出發據點</b>，不做「回程自動判斷提前結束」；回程沿途的收送貨邏輯與去程完全相同
+      （依南北反向固定順序，逐站檢查容量與時間，貪婪法能塞則塞）。
+    </div>
+    <div class="why">與既有共乘子系統「多天派車最後一天強制回到基地」原則一致，避免車輛／司機停留在無法管理的中途據點。</div>
+  </div>
+
+  <h3>2.8　多車協調（範疇外）</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">本次僅處理單一車輛的邏輯；「同一天多台車如何分配貨物 / 是否加開班次」列為<b>下一階段獨立議題</b>，不在本次範圍內。</div>
+    <div class="why">車輛－班次每日指派本來就是調度室手動設定；多車協調涉及是否加開班次等更高層營運決策，複雜度層級不同，應獨立討論。</div>
+  </div>
+
+  <h2><span class="num">03</span> 新增議題：天數對照表與直達／非直達規則</h2>
+  <div class="lead-box">
+    <p>
+      業務單位提出新規則：某些行程需要跨天（過夜），且天數會因「是否中途停靠收送貨」而不同
+      （例：桃園→屏東直達＝2天；若中途有任何停靠收送貨＝3天）。這牽動了車輛派遣的核心邏輯，
+      新增「直達／非直達」作為貫穿全部車輛的分流規則。
+    </p>
+  </div>
+
+  <h3>3.1　天數對照表的性質</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      天數是「整台車」的屬性（不是單張申請表單各自的屬性），由業務單位提供對照表內容，系統只負責查表，不自行推算。
+      天數指的是「去程＋回程」整個出車週期的總天數：2 天＝去程當天到達目的地並過夜、隔天回程；
+      3 天＝去程本身跨 2 天才到達最遠據點、第 3 天才回程。目前已知最大天數為 3 天。
+      對照表拆成<b>兩張獨立的二維表</b>：「直達」對照表與「有停靠」對照表，依終點據點分別查天數。
+    </div>
+    <div class="why">出勤天數綁定車輛／司機排班，是整趟出車的屬性而非個別申請單屬性；拆成兩張表可乾淨對應「是否中途停靠」這個新增的分流維度。</div>
+  </div>
+
+  <h3>3.2　直達／非直達分流規則</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      申請人填單時勾選該筆申請是「直達」或「非直達」。只要當天有直達申請單，即<b>獨立派一台車</b>，
+      不論貨量多寡，不湊單、不與其他非直達貨物併車。一台直達車<b>只服務單一目的地據點</b>（不會出現同車直達送高雄又送屏東的情況）。
+    </div>
+    <div class="why">直達的定義即是「不中途停靠」，混載不同目的地或非直達貨物即違反直達的本質承諾。</div>
+  </div>
+
+  <h3>3.3　直達車的容量與終點邏輯</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      直達車全程不卸貨，容量只會單向被佔用，不會有中途卸貨釋放空間的動態變化。
+      因此直達車<b>不套用</b>既有的貪婪法終點判斷邏輯，終點即為申請單指定的目的地；
+      系統僅需依核准時間排序，將同終點的直達申請單依序累加貨量，直到容量上限，超過的部分留給下一班直達車。
+    </div>
+    <div class="why">貪婪法「沿線逐站累加＋卸貨釋放空間」的前提是中途有卸貨動作，直達車不存在這個前提，改用單純容量加總檢查即可，邏輯更直接。</div>
+  </div>
+
+  <h3>3.4　回程的全域直達檢查（適用所有車輛）</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      不論去程車種為何，<b>任何一台車的回程</b>都要先檢查：回程實際會經過的路段上，
+      是否存在「有效、待處理、且時間上會撞期（同一天／同一班次內）」的直達申請單。
+      若有，回程該路段須鎖定為直達模式，不能中途停靠收送其他非直達貨物；若無，回程可比照停靠車邏輯正常沿路收送非直達貨物。
+    </div>
+    <div class="why">直達需求優先權須貫穿全部車輛與去回程，才能確保「直達＝不繞路」的承諾不被其他非直達貨物的合併需求打破；同時檢查路線＋時間窗可避免系統過度保守、永久鎖死某條路線。</div>
+  </div>
+
+  <h3>3.5　被排擠的非直達貨物</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">因回程被鎖定為直達模式、而無法搭上這趟車的非直達申請單，系統<b>自動順延安排到下一趟符合條件的車次</b>處理。</div>
+    <div class="why">直接沿用既有物流子系統「班次貨量已滿、自動順延下一班次」的既有機制，不需另立新規則、也不需另外派車。</div>
+  </div>
+
+  <h3>3.6　回程被迫鎖定直達的容量與終點邏輯</h3>
+  <div class="lead-box">
+    <p>
+      3.4 定義了「回程何時要鎖定直達」，但沒有定義「被鎖定的這台車，容量與終點該套哪一套規則」——
+      這台車原本是非直達車、正在用動態淨值容量邏輯運作，回程途中才被撞期的直達需求鎖定，
+      跟一開始就是直達車（3.3）的情況不完全一樣，需要額外釐清。
+    </p>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      回程被迫鎖定直達的車輛，<b>容量計算延續原本的動態淨值邏輯（2.4）</b>，不切換成 3.3 的純容量加總；
+      <b>終點依然是出發據點</b>（回程本來就固定回基地）；鎖定直達的實際效果僅止於「途中不再收新的非直達貨」，
+      沿線據點若剛好沒有撞期的直達貨可收，車輛仍正常依序經過，不影響其回到基地。
+    </div>
+    <div class="why">鎖定直達改變的是「能不能收新貨」，不是這台車從出發以來的容量計算方式；容量邏輯若因鎖定而回頭切換，會造成同一趟行程中途變更計算基準，徒增系統與稽核複雜度。</div>
+  </div>
+
+  <h3>3.7　四模式決策矩陣</h3>
+  <p style="color:var(--ink-soft); margin-bottom:12px;">
+    彙整目前所有已定案情境的容量計算方式與終點判斷邏輯，確認沒有未定義的行為。
+  </p>
+  <table>
+    <tr><th style="width:26%">情境</th><th style="width:24%">容量計算</th><th style="width:24%">終點</th><th style="width:26%">中途停靠</th></tr>
+    <tr><td>去程・非直達</td><td>動態淨值（2.4）</td><td>貪婪法自動判斷（2.3）</td><td>逐站收送非直達貨</td></tr>
+    <tr><td>去程・直達</td><td>純容量加總（3.3）</td><td>申請單目的地</td><td>不停靠</td></tr>
+    <tr><td>回程・非直達且無撞期</td><td>動態淨值</td><td>出發據點（2.7）</td><td>逐站收送非直達貨</td></tr>
+    <tr><td>回程・被迫鎖定直達</td><td>動態淨值（延續原邏輯，3.6）</td><td>出發據點（3.6）</td><td>不收新的非直達貨，但仍依序經過沿線據點</td></tr>
+    <tr><td>回程・原本就是直達車</td><td>純容量加總</td><td>出發據點</td><td>不停靠</td></tr>
+  </table>
+
+  <h3>3.8　調度室介面：顯示車輛派遣模式</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">調度室操作介面需明確顯示每台車<b>目前的派遣模式（直達 / 非直達 / 回程被迫鎖定直達）與觸發原因</b>。</div>
+    <div class="why">疊加直達分流（3.2）與回程動態鎖定（3.4）後，單看貪婪法邏輯已不足以讓調度員一眼判斷車輛狀態；補上模式標示才能維持 2.3 原本「可解釋、易覆核」的設計初衷。</div>
+  </div>
+
+  <h3>3.9　直達車派車的成本前提</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">「有直達申請即獨立派車，不論貨量多寡」是<b>業務既定政策</b>——直達本身即是一種服務承諾（類似專送／急件），成本已內含於服務定義中，不需要工程單位另外覆核合理性。</div>
+    <div class="why">避免將既定的業務服務設計誤判為工程單位字面推導出的邊界案例，維持業務與系統認知一致。</div>
+  </div>
+
+  <h3>3.10　多據點同時派車的優先序</h3>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      回程車行經中途據點時，若該站有貨要送，<b>優先判斷這台回程車是否還有剩餘容量可以承載</b>——能載即由這台回程車順路收送，
+      不需要因為那是「別的據點」而另外從當地派車；只有當回程車容量不足以承載時，才屬於需要多車協調（下一階段議題）處理的情境。
+    </div>
+    <div class="why">此優先序判斷仍是圍繞單一車輛自身容量的決策，不需要跨車輛的即時排程資訊互通，因此可先行定案，不必等待下一階段的多車協調機制。</div>
+  </div>
+
+  <h2><span class="num">04</span> 待業務單位確認 / 待下一階段處理事項</h2>
+
+  <div class="pending-card">
+    <div class="label">待確認 · Q1　天數對照表實際數值內容</div>
+    <div class="content">「直達」與「有停靠」兩張二維表中，各終點據點分別對應幾天，需要業務單位提供完整數值（目前僅知最大值為 3 天，及桃園→屏東的直達 2 天／有停靠 3 天範例）。</div>
+    <div class="options">
+      <div>此題原「Q1：去程是否需為回程保留餘裕」與「Q2：去程回程時間間隔」已由本次天數對照表與直達／非直達規則實質回答，併入本題一併向業務單位確認具體數值。</div>
+    </div>
+  </div>
+
+  <h2><span class="num">05</span> 決策總覽表</h2>
+  <table>
+    <tr><th style="width:8%">項次</th><th style="width:32%">主題</th><th style="width:45%">決策摘要</th><th style="width:15%">狀態</th></tr>
+    <tr><td>2.1</td><td>據點內部處理</td><td>不排序，司機自行決定，系統僅提供清單</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.2</td><td>跨據點路由順序</td><td>固定南北順序表，無貨跳過</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.3</td><td>終點自動判斷（非直達車）</td><td>系統自動判斷，貪婪法，容量或時間先到者為準</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.4</td><td>容量判斷基準</td><td>目前車上實際載貨量（動態淨值）</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.5</td><td>部分裝載</td><td>能塞多少算多少，以整張表單為最小單位</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.6</td><td>時間上限計算</td><td>行駛時間＋各站裝卸貨時間加總</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.7</td><td>回程規則（基本）</td><td>固定回到出發據點，邏輯同去程</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>2.8</td><td>多車協調</td><td>列為下一階段獨立議題</td><td><span class="badge done">已確認（範疇排除）</span></td></tr>
+    <tr><td>3.1</td><td>天數對照表性質</td><td>整台車屬性，業務單位提供，拆成直達／停靠兩張表</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.2</td><td>直達／非直達分流</td><td>申請人勾選，有直達即獨立派車，單一目的地</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.3</td><td>直達車容量邏輯</td><td>不跑貪婪法，純容量加總，終點＝申請單目的地</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.4</td><td>回程全域直達檢查</td><td>路線＋時間窗撞期即鎖定直達，適用所有車輛</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.5</td><td>被排擠的非直達貨物</td><td>自動順延下一趟符合條件車次</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.6</td><td>回程被迫直達的容量／終點</td><td>延續動態淨值、終點仍為出發據點</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.8</td><td>調度室顯示派遣模式</td><td>介面需顯示車輛目前模式與觸發原因</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.9</td><td>直達車派車成本前提</td><td>業務既定政策，成本已內含於服務定義，不需覆核</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>3.10</td><td>多據點同時派車優先序</td><td>優先由順路回程車承載，載不下才需多車協調</td><td><span class="badge done">已確認</span></td></tr>
+    <tr><td>Q1</td><td>天數對照表實際數值</td><td>待業務單位提供完整數值</td><td><span class="badge pending">待確認</span></td></tr>
+  </table>
+
+  <footer>
+    本文件為需求釐清階段的討論記錄，供業務單位核對用；待天數對照表數值確認後將回補至正式系統設計文件。
+  </footer>
+
+</div>
+</body>
+</html>

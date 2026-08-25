@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>區域內物流貨運子系統 — 完整需求討論報告</title>
+<style>
+  :root {
+    --ink: #1c1f26;
+    --ink-soft: #4a5163;
+    --paper: #fbfaf7;
+    --panel: #ffffff;
+    --line: #e2e0d8;
+    --accent: #2f5d50;
+    --accent-soft: #e8efec;
+    --warn: #a15c1f;
+    --warn-soft: #faf1e4;
+    --warn-line: #e8cda3;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.75;
+    padding: 0 0 64px 0;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+  header.hero {
+    background: var(--ink);
+    color: #f4f2ec;
+    padding: 56px 24px 40px;
+    margin-bottom: 40px;
+  }
+  header.hero .wrap { padding: 0 24px; }
+  .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #a9c9bd;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 14px 0;
+    line-height: 1.4;
+    font-weight: 700;
+  }
+  .hero-sub {
+    color: #c9c6bb;
+    font-size: 15px;
+    max-width: 660px;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #9a978c;
+  }
+  .hero-meta span b { color: #e7e5dd; font-weight: 600; }
+
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  nav.toc .toc-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    -webkit-columns: 2;
+    column-gap: 32px;
+  }
+  @media (max-width: 600px) {
+    nav.toc ol { columns: 1; }
+  }
+  nav.toc li { margin-bottom: 6px; font-size: 14px; }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+
+  h2 {
+    font-size: 20px;
+    margin: 48px 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  h1.part {
+    font-size: 22px;
+    margin: 64px 0 4px;
+    padding: 18px 22px;
+    background: var(--ink);
+    color: #f4f2ec;
+    border-radius: 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  h1.part .part-num {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: #a9c9bd;
+    font-weight: 700;
+  }
+  h1.part:first-of-type { margin-top: 8px; }
+  h3 {
+    font-size: 16px;
+    margin: 28px 0 10px;
+    color: var(--ink);
+  }
+  p { color: var(--ink-soft); margin: 0 0 12px; }
+
+  .lead-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 8px;
+  }
+  .lead-box p:last-child { margin-bottom: 0; }
+
+  .flow {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 24px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--ink);
+    line-height: 2;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .flow .dir { color: var(--accent); font-weight: 700; }
+  .flow .stop { color: var(--warn); }
+
+  pre.code {
+    background: #1c1f26;
+    color: #e7e5dd;
+    border-radius: 10px;
+    padding: 20px 22px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 12px 0 24px;
+  }
+  pre.code .cm { color: #8a9a8f; }
+  pre.code .kw { color: #a9c9bd; }
+  pre.code .tp { color: #d8c9a3; }
+
+  .decision-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .decision-card .label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .decision-card .content { color: var(--ink); font-size: 14.5px; }
+  .decision-card .why {
+    margin-top: 8px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+  }
+
+  .pending-card {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-line);
+    border-left: 4px solid var(--warn);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .pending-card .label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--warn);
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .pending-card .content { color: var(--ink); font-size: 14.5px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 24px;
+    font-size: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.02em;
+  }
+  .badge.done { background: var(--accent-soft); color: var(--accent); }
+  .badge.pending { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-line); }
+
+  .scope-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  @media (max-width: 600px) {
+    .scope-grid { grid-template-columns: 1fr; }
+  }
+  .scope-box {
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 14px;
+  }
+  .scope-box.in {
+    background: var(--accent-soft);
+    border: 1px solid #c7dcd3;
+  }
+  .scope-box.out {
+    background: #f2f1ec;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+  .scope-box .title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .scope-box.in .title { color: var(--accent); }
+  .scope-box.out .title { color: #7a7669; }
+  .scope-box ul { margin: 0; padding-left: 18px; }
+  .scope-box li { margin-bottom: 4px; }
+
+  .term-list dt {
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 14.5px;
+    margin-top: 14px;
+  }
+  .term-list dd {
+    margin: 4px 0 0 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+
+  .level-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 16px 0 24px;
+  }
+  @media (max-width: 700px) {
+    .level-grid { grid-template-columns: 1fr; }
+  }
+  .level-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .level-box .lv-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+  .level-box .lv-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .level-box p { font-size: 13.5px; margin-bottom: 0; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: #9a978c;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">區域內物流貨運子系統 · 完整需求討論報告</div>
+    <h1>從貨物裝載判定到收貨排班與異常回報</h1>
+    <p class="hero-sub">
+      本文件彙整區域內物流貨運子系統的完整需求討論歷程，涵蓋貨物裝載判定演算法、
+      端到端排班架構、系統整體架構（資源池、審批、路線設計、容量判定），
+      以及收貨時間指定邏輯與駕駛異常回報機制。跨據點南北幹線模組另立文件，不含於本報告。
+    </p>
+    <div class="hero-meta">
+      <span>範圍：<b>區域內物流（10 站固定路線）</b></span>
+      <span>不含：<b>跨據點南北幹線模組（另文）</b></span>
+      <span>狀態：<b>核心邏輯已定案，部分項目待業務單位確認</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc">
+    <div class="toc-title">目錄</div>
+    <ol>
+      <li><a href="#part1">第一部分：貨物裝載判定演算法</a></li>
+      <li><a href="#part2">第二部分：端到端排班架構</a></li>
+      <li><a href="#part3">第三部分：物流子系統整體架構</a></li>
+      <li><a href="#part4">第四部分：收貨時間與駕駛異常回報</a></li>
+      <li><a href="#part5">第五部分：名詞定義總表</a></li>
+      <li><a href="#part6">第六部分：決策總覽表</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ PART 1 ============ -->
+  <h1 class="part" id="part1"><span class="part-num">01</span> 貨物裝載判定演算法</h1>
+
+  <h2><span class="num">1.1</span> 問題背景</h2>
+  <div class="lead-box">
+    <p>
+      貨物裝載媒合的本質是 <b>3D Bin Packing 問題</b>，屬於 NP-hard 問題，不存在多項式時間的最優解，
+      必須採用啟發式或近似解法。系統需求是「快速媒合」，因此放棄真實的 3D 空間碰撞模擬，
+      改以<b>分層快篩</b>取代：Level 1 體積篩選 + Level 2 單品維度檢查。
+    </p>
+  </div>
+
+  <h2><span class="num">1.2</span> 三層準確度模型</h2>
+  <div class="level-grid">
+    <div class="level-box">
+      <div class="lv-tag">LEVEL 1</div>
+      <div class="lv-title">體積加總</div>
+      <p>最快、最不準。將所有貨物體積加總，與車輛容量比較，僅為必要條件之一，無法反映實際堆疊可行性。</p>
+    </div>
+    <div class="level-box">
+      <div class="lv-tag">LEVEL 2</div>
+      <div class="lv-title">單品維度檢查</div>
+      <p>逐件檢查貨物長寬高（含六方向旋轉）是否能放入車輛可用空間維度，屬於必要條件，仍非充分條件。</p>
+    </div>
+    <div class="level-box">
+      <div class="lv-tag">LEVEL 3</div>
+      <div class="lv-title">真實空間排列模擬</div>
+      <p>唯一準確的方法，需完整碰撞檢測與空間排列演算法，計算成本高，不符合快速媒合需求，本系統不採用。</p>
+    </div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">系統僅採用 <b>Level 1 + Level 2</b>，不做 Level 3 真實碰撞檢測。</div>
+    <div class="why">在「快速媒合」的核心需求下，Level 3 的運算成本不符效益；Level 1+2 已能提供足夠可用的必要條件判斷，且邏輯透明、易於人工覆核。</div>
+  </div>
+
+  <h2><span class="num">1.3</span> 中間強化方案：地板面積瓶頸法</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      在不做碰撞檢測的前提下，為求「最保險」，以<b>地板面積瓶頸法</b>與<b>長寬比形狀懲罰係數</b>取代單純體積加總，
+      降低因形狀不規則造成的誤判風險。
+    </div>
+    <div class="why">純體積加總容易高估可裝載量（例如細長物品實際佔用地板面積遠大於其體積比例），地板面積與形狀懲罰能在不做碰撞模擬的情況下，提供更保守、更貼近實際的估算。</div>
+  </div>
+
+  <h2><span class="num">1.4</span> 浪費係數與貨物類別</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      由於貨物形狀不規則、缺乏精確形狀資料，改以「<b>貨物類別</b>」對應「<b>浪費係數</b>」的方式修正有效體積。
+      使用者填單時透過<b>類別下拉選單</b>額外勾選，對應後端係數表計算有效體積。
+    </div>
+    <div class="why">使用者填單通常只會填長寬高，無法期待其提供精確形狀資訊；以類別粗略估算浪費空間，是精確度與填單便利性之間的合理折衷。</div>
+  </div>
+
+  <h2><span class="num">1.5</span> 係數表設計</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      浪費係數表設計為<b>可動態調整</b>：資料存於資料庫，程式端以記憶體快取讀取，並含<b>保底值機制</b>（查無對應類別時使用預設係數，不中斷流程）。
+      係數 Provider 採 <b>static 單例</b>（不使用依賴注入 DI），內部自行讀取設定檔取得資料庫連線字串。
+    </div>
+    <div class="why">係數需要業務單位隨時可調整，不應寫死在程式碼；static 單例設計符合系統既有 MVC / .NET Framework 4.8 的架構慣例，不需引入額外的 DI 容器。</div>
+  </div>
+
+  <h2><span class="num">1.6</span> 程式碼設計（C#）</h2>
+  <p>報告第一版已包含完整 C# 程式碼章節，涵蓋以下模組：</p>
+  <table>
+    <thead><tr><th>模組</th><th>內容</th></tr></thead>
+    <tbody>
+      <tr><td>資料庫表</td><td>浪費係數表結構（類別代碼、係數值、生效狀態）</td></tr>
+      <tr><td>資料模型</td><td>貨物項目、係數對應的 C# 資料類別</td></tr>
+      <tr><td>係數 Provider</td><td>static 單例，含記憶體快取與保底值機制</td></tr>
+      <tr><td>Level 1 / Level 2</td><td>體積加總法、六方向旋轉維度檢查</td></tr>
+      <tr><td>整合流程</td><td>將 Level 1、Level 2、係數修正串接成完整判定流程</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ============ PART 2 ============ -->
+  <h1 class="part" id="part2"><span class="part-num">02</span> 端到端排班架構</h1>
+
+  <h2><span class="num">2.1</span> 架構範圍</h2>
+  <div class="lead-box">
+    <p>
+      端到端流程為：<b>填單 → 媒合最近一台車 → 裝得下就上車、裝不下 pass 到下一台</b>。
+      本部分確認「最近」的定義、同步/非同步前提，並設計整體端到端架構（非僅後端）。
+    </p>
+  </div>
+
+  <h2><span class="num">2.2</span> 關鍵定義</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">「最近的一台車」定義為<b>時間軸最近的下一班次</b>，不論空間距離。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">媒合結果為<b>同步等待結果</b>，非非同步通知。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">本次設計範圍為<b>整體端到端架構</b>，非僅聚焦後端。</div>
+  </div>
+
+  <h2><span class="num">2.3</span> 併發與技術前提</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      因載運量不高，<b>不需考慮併發扣容量</b>（多人同時搶同一班次容量）問題，Repository 採單純
+      讀取／判斷／寫入即可，不需額外的鎖定或交易隔離機制。
+    </div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      系統為 <b>MVC、.NET Framework 4.8</b>，不需要獨立 API 層。媒合迴圈可找到「當日最後一班」，
+      因此<b>移除固定 maxAttempts 上限</b>，迴圈終止條件改為「當日最後一班仍裝不下」。
+    </div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      若找到當日最後一班仍裝不下，<b>不留候補紀錄</b>，直接提示使用者「請明天請早再試」，
+      不寫候補、不排入隔日。
+    </div>
+    <div class="why">維持系統「不做靜默失敗」的設計原則，同時避免候補佇列帶來的額外狀態管理複雜度。</div>
+  </div>
+
+  <h2><span class="num">2.4</span> 媒合流程圖</h2>
+  <div class="flow">
+申請單提交
+  │
+  ▼
+找時間軸最近的下一班次
+  │
+  ▼
+Level 1 + Level 2 + 係數修正 → 裝得下？
+  │
+  ├─ <span class="dir">是</span> → 排入該班次（同步回傳結果）
+  │
+  └─ <span class="stop">否</span> → pass 到下一班次
+                    │
+                    ▼
+          是否為當日最後一班？
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+        否，繼續找下一班    <span class="stop">是，仍裝不下</span>
+                              │
+                    提示使用者「請明天請早再試」
+                        （不留候補、不排入隔日）
+  </div>
+
+  <!-- ============ PART 3 ============ -->
+  <h1 class="part" id="part3"><span class="part-num">03</span> 物流子系統整體架構</h1>
+
+  <h2><span class="num">3.1</span> 系統定位與資源</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">物流貨運為派遣系統下<b>獨立於商務用車共乘</b>的子區塊，<b>車輛/司機資源池分開</b>，兩邊互不搶用。</div>
+    <div class="why">貨運通常需特定車型（貨車、噸位限制），與商務用車在車輛屬性上差異大，混用會使可用性判斷複雜化。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">沿用原系統<b>兩層審批流程</b>：部門主管核准 → 派車辦公室確認排程（物流走員工申請制，非訂單自動觸發）。</div>
+  </div>
+
+  <h2><span class="num">3.2</span> 申請單結構</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">一張申請單 = <b>一個目的地</b>，可填<b>多筆貨物項目</b>（品項/長寬高/類別/數量）。多站點巡迴由「固定路線」機制處理，不靠單張申請單串多站。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">貨物類別沿用「下拉選單 + 後端浪費係數表」機制，但<b>類別清單內容需依物流實際貨物型態重新盤點</b>，不可直接套用舊有範例類別。</div>
+  </div>
+
+  <h2><span class="num">3.3</span> 目的地與路線設計</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">目的地透過<b>兩層階層選單</b>呈現：先選區塊（站點），再選區塊內具體建築物，最終仍對應單一目的地。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">路線為<b>固定 10 站</b>，站點清單、站點對應的建築物清單皆為<b>人工維護的主檔資料</b>（比照目的地主檔），不做動態路線生成。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">車輛依<b>固定地理順序</b>逐站停靠，沒貨物需求的站點<b>跳過</b>，有貨站點之間<b>不重新排序</b>（無動態最短路徑）。</div>
+  </div>
+
+  <h2><span class="num">3.4</span> 送收貨與站內處理</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">同一趟路線允許<b>送貨與收貨混合</b>，同一站點可能同時發生兩者；站內固定順序為<b>先卸貨（釋放容量）→ 再裝貨（佔用容量）</b>。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">上下貨時間由<b>申請人自行填寫</b>；同站多張申請單的上下貨時間以<b>加總</b>方式計入該站總停留時間。</div>
+  </div>
+
+  <h2><span class="num">3.5</span> 容量判定</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">沿用 <b>Level 1（體積加總）+ Level 2（單品維度）+ 類別浪費係數</b>，新增<b>重量維度</b>：車輛設定「總重量上限」，逐站累計（卸貨扣、收貨加），採加總比較，不做單品層級重量檢查。</div>
+  </div>
+
+  <h2><span class="num">3.6</span> 站內時間額度與跳過規則</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">同站點多張申請單依<b>審核通過時間</b>排序，逐張判斷該站剩餘時間額度是否容納得下，<b>額度用完的較晚申請單被跳過</b>（以申請單為單位，非整站）。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">時間額度不足被跳過的申請單，<b>自動順延到下一個經過同站點的班次</b>，不需人工重新申請；若嘗試到<b>當天最後一班</b>仍排不進去，<b>系統即時跳提醒，請使用者自行修改申請日期</b>。</div>
+    <div class="why">與商務用車共乘子系統不同，此處不進入人工協調候補，因為排擠是系統邏輯判斷的結果，視為「順延下一班」較合理。</div>
+  </div>
+
+  <h2><span class="num">3.7</span> 車輛指派模式</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">路線與車輛為<b>分組對應</b>（例如路線 A 固定由車 1/2/3 等執行）。但「今日哪台車跑哪個班次」為<b>人工每日手動排定</b>，系統僅記錄班次-車輛對應關係，並代入該車的容量/重量上限參數。</div>
+    <div class="why">車輛日常調度常牽涉維修保養、司機請假等現實因素，交由人工決定較有彈性；系統自動排的價值相對有限。</div>
+  </div>
+
+  <h2><span class="num">3.8</span> 區域內物流路線示意</h2>
+  <div class="flow">
+起點站
+  │  <span class="dir">固定地理順序 →</span> 逐站檢查是否有貨物需求
+  ├─ <span class="stop">站點 1</span>：無貨需求 → 跳過
+  ├─ <span class="stop">站點 2</span>：先卸貨（釋放容量）→ 再裝貨（佔用容量）
+  │              時間額度：依審核通過時間逐張申請單判斷
+  ├─ <span class="stop">…</span>
+  └─ <span class="stop">站點 10</span>
+       │
+       ▼
+   容量判定：Level 1 體積 + Level 2 維度 + 類別係數 + 總重量上限
+  </div>
+
+  <!-- ============ PART 4 ============ -->
+  <h1 class="part" id="part4"><span class="part-num">04</span> 收貨時間與駕駛異常回報</h1>
+
+  <h2><span class="num">4.1</span> 收貨時間欄位設計</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">收貨時間欄位為<b>二選一</b>：「指定期望時間」或「越快越好」，不可兩者並存。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      <b>指定期望時間</b>：僅影響「選班次」，系統找當天經過該站點、到站時間與期望時間<b>差最小</b>的班次
+      （提早、延後兩方向都嘗試比較）。<b>越快越好</b>：直接找當天<b>最早排得進去</b>的班次。
+    </div>
+    <div class="why">將「挑選班次」與「班次內搶時間額度」責任分開，避免期望時間與審核時間互相覆蓋。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">不論哪種模式，排入班次後，同站點內申請單處理順序<b>一律仍依審核通過時間排序</b>，兩種模式皆<b>不享插隊優先權</b>。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">若最接近/最早的班次也塞不下，沿用既有機制：<b>自動順延</b>下一班 → 當天排不進去則<b>提醒使用者改期</b>。</div>
+  </div>
+
+  <h2><span class="num">4.2</span> 收貨時間排班流程</h2>
+  <div class="flow">
+申請單提交（收貨時間：指定時間 / 越快越好）
+  │
+  ├─ <span class="dir">指定期望時間</span> → 找到站時間與期望時間差最小的班次
+  │
+  └─ <span class="dir">越快越好</span>     → 找最早排得進去的班次
+                    │
+                    ▼
+        該班次內依「審核通過時間」排序判斷時間額度
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+      額度足夠 → 排入        <span class="stop">額度不足 → 順延下一班</span>
+                                      │
+                          當天最後一班仍不足 → <span class="stop">提醒使用者改期</span>
+  </div>
+
+  <h2><span class="num">4.3</span> 駕駛異常回報機制</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">駕駛<b>跑完整趟路線、回到總部後</b>才回報，且<b>只需標記異常站點</b>（不準時／沒出現），正常站點免確認。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">回報須記錄到<b>申請單層級</b>（而非只到站點層級），因同站點同班次可能有多張不同申請人的申請單。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">異常記錄用途為<b>存檔備查 + 立即自動寄信通知</b>，<b>不做</b>「顯示於申請畫面」的功能設計（此方向已被自動通知取代）。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      駕駛回報異常後<b>立即觸發</b>（非批次彙整）自動寄信，通知對象為該申請單的<b>申請人本人＋其直屬主管</b>，
+      單張申請單對應單封信，收件人沿用審批流程既有的「申請人 → 直屬主管」對應關係，不另建資料表。
+    </div>
+  </div>
+
+  <h2><span class="num">4.4</span> 駕駛異常回報流程</h2>
+  <div class="flow">
+駕駛完成整趟路線 → 回到總部
+  │
+  ▼
+系統列出本趟站點清單
+  │
+  └─ <span class="stop">異常站點</span> → 標記原因（不準時 / 沒出現）
+                    │
+                    ▼
+          列出該站當班次對應申請單清單
+                    │
+                    ▼
+          駕駛勾選是哪張（或哪幾張）申請單出狀況
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+      存檔備查         立即自動寄信（申請人 + 直屬主管）
+  </div>
+
+  <!-- ============ PART 5 ============ -->
+  <h1 class="part" id="part5"><span class="part-num">05</span> 名詞定義總表</h1>
+  <dl class="term-list">
+    <dt>Level 1（體積加總）</dt>
+    <dd>將貨物體積加總與車輛容量比較，判定裝載可行性的最快、最不準方法，僅為必要條件。</dd>
+    <dt>Level 2（單品維度檢查）</dt>
+    <dd>逐件檢查貨物長寬高（含六方向旋轉）能否放入車輛可用空間維度，屬必要條件。</dd>
+    <dt>Level 3（真實空間排列模擬）</dt>
+    <dd>唯一準確的裝載判定方法，需完整碰撞檢測，運算成本高，本系統不採用。</dd>
+    <dt>浪費係數</dt>
+    <dd>依貨物類別修正有效體積的係數，用於彌補缺乏精確形狀資料時的裝載判定誤差。</dd>
+    <dt>係數 Provider</dt>
+    <dd>以 static 單例實作的浪費係數讀取機制，含記憶體快取與保底值，內部自行讀取設定檔連線字串，不使用依賴注入。</dd>
+    <dt>時間軸最近班次</dt>
+    <dd>媒合演算法中「最近的一台車」的定義，指時間軸上最近的下一班次，不考慮空間距離。</dd>
+    <dt>物流貨運子系統</dt>
+    <dd>派遣系統下獨立於商務用車共乘的子區塊，擁有獨立車輛/司機資源池。</dd>
+    <dt>站點/區塊</dt>
+    <dd>固定 10 站路線中的一站，每站對應一個地理區塊，區塊內含多棟可選建築物。</dd>
+    <dt>目的地階層選單</dt>
+    <dd>使用者填單時先選區塊（站點），再選區塊內具體建築物，最終仍對應單一目的地。</dd>
+    <dt>站內處理順序</dt>
+    <dd>同一站點固定「先卸貨（釋放容量）→ 再裝貨（佔用容量）」。</dd>
+    <dt>車輛總重量上限</dt>
+    <dd>車輛容量限制的第二維度，與體積（Level 1+2）並列，逐站累計加總比較。</dd>
+    <dt>期望收貨時間</dt>
+    <dd>申請人在填單時指定的期望收貨時間點，用於影響系統選擇該申請單應排入哪一個班次。</dd>
+    <dt>越快越好模式</dt>
+    <dd>收貨時間欄位的另一種選項（與「指定期望時間」二選一），代表不指定確切時間，系統直接嘗試安排最早可行班次。</dd>
+    <dt>駕駛異常回報</dt>
+    <dd>駕駛完成整趟路線、回到總部後，針對本趟路線中「使用者不準時」或「使用者沒出現」的站點所做的回報，記錄到申請單層級。</dd>
+  </dl>
+
+  <!-- ============ PART 6 ============ -->
+  <h1 class="part" id="part6"><span class="part-num">06</span> 決策總覽表</h1>
+
+  <h3>貨物裝載判定演算法</h3>
+  <table>
+    <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
+    <tbody>
+      <tr><td>判定方法</td><td>Level 1（體積）+ Level 2（單品維度），不做 Level 3 碰撞檢測</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>保險強化方案</td><td>地板面積瓶頸法 + 長寬比形狀懲罰係數</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>浪費係數</td><td>依貨物類別對應係數表，使用者填單時勾選類別</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>係數表儲存</td><td>資料庫存值 + 程式端記憶體快取 + 保底值機制</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>係數 Provider 架構</td><td>static 單例，不使用 DI，自行讀取設定檔連線字串</td><td><span class="badge done">已定案</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>端到端排班架構</h3>
+  <table>
+    <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
+    <tbody>
+      <tr><td>「最近」定義</td><td>時間軸最近的下一班次，非空間距離</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>媒合結果</td><td>同步等待結果</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>併發處理</td><td>載運量不高，不需併發扣容量機制</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>迴圈終止條件</td><td>找到當日最後一班仍裝不下即終止，無固定 maxAttempts</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>當日排不進去</td><td>不留候補，提示「請明天請早再試」</td><td><span class="badge done">已定案</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>物流子系統整體架構</h3>
+  <table>
+    <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
+    <tbody>
+      <tr><td>資源池</td><td>與商務用車共乘分開，各自獨立車輛/司機池</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>審批流程</td><td>沿用兩層審批：主管核准 → 派車辦公室確認</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>申請單結構</td><td>一單一目的地，可填多筆貨物項目</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>目的地選單</td><td>兩層階層：區塊 → 建築物</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>路線設計</td><td>固定 10 站、固定地理順序、無貨跳過、不重排</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>送收貨方向</td><td>同站可能同時送貨與收貨，先卸後裝</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>上下貨時間</td><td>申請人自填，同站多單加總計算</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>容量判定</td><td>Level 1+2 + 係數 + 總重量上限（加總比較）</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>站內時間額度</td><td>依審核通過時間逐張判斷，額度用完的較晚申請單跳過</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>跳過後處理</td><td>自動順延下一班，當天排不進去則提醒改期</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>車輛指派</td><td>路線固定分組車輛，每日由人工手動排班次</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>路線/站點主檔</td><td>人工維護主檔資料，不做動態路線生成</td><td><span class="badge done">已定案</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>收貨時間與駕駛異常回報</h3>
+  <table>
+    <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
+    <tbody>
+      <tr><td>收貨時間欄位</td><td>二選一：指定期望時間 / 越快越好</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>期望時間作用範圍</td><td>僅影響選班次，不影響班次內排序</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>越快越好邏輯</td><td>找當天最早排得進去的班次</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>班次內排序</td><td>一律依審核通過時間，兩種模式皆不享優先權</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>異常回報時機</td><td>駕駛回總部後，僅回報異常站點</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>異常回報精細度</td><td>記錄到申請單層級</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>異常記錄用途</td><td>存檔備查 + 立即自動寄信通知</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>通知收件人</td><td>申請人本人 + 直屬主管（沿用既有審批對應關係）</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>通知信具體格式</td><td>單張申請單對應單封信，內容含站點/原因/日期</td><td><span class="badge pending">待後續設計</span></td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    區域內物流貨運子系統 · 完整需求討論報告 · 內部文件，供業務單位確認用 · 不含跨據點南北幹線模組
+  </footer>
+
+</div>
+</body>
+</html>

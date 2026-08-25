@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>車輛派遣系統整合 — 原型</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="app">
+  <!-- 側邊導覽 -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">車輛派遣系統整合</div>
+      <div class="sub">INTEGRATED DISPATCH · 原型 v0.1</div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidebar-foot">
+      純前端可動版 · 無資料庫<br>依 docs/PLAN.md 建置
+    </div>
+  </aside>
+
+  <!-- 主內容 -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="topbar-title">系統儀表板</h1>
+        <div class="crumb" id="topbar-crumb"></div>
+      </div>
+      <div class="clock" id="clock"></div>
+    </div>
+    <div class="content">
+      <div class="page active" id="page-dashboard"></div>
+      <div class="page" id="page-engine"></div>
+      <div class="page" id="page-master"></div>
+      <div class="page" id="page-moduleA"></div>
+      <div class="page" id="page-moduleB"></div>
+      <div class="page" id="page-moduleC"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast-wrap"></div>
+
+<!-- Modal -->
+<div class="modal-mask" id="modal-mask">
+  <div class="modal">
+    <button class="close-x" id="modal-close">✕</button>
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/loadengine.js"></script>
+<script src="js/moduleA.js"></script>
+<script src="js/moduleB.js"></script>
+<script src="js/moduleC.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>差旅派車自動媒合系統｜討論彙整 v4</title>
+<style>
+  :root {
+    --navy: #1F3864; --navy-deep: #14284A; --accent: #C97A3D; --ink: #22262B;
+    --ink-soft: #565C64; --line: #DCE1E6; --paper: #FBFAF8; --card: #FFFFFF;
+    --amber-bg: #FFF6E8; --amber-line: #E8C78A; --strike-bg: #F3F1EC;
+    --green-bg: #EEF6EF; --green-line: #BFE0C4;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
+    line-height:1.75; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 24px 100px; }
+  header.hero { background:linear-gradient(155deg,var(--navy-deep),var(--navy) 65%); color:#fff;
+    padding:56px 24px 44px; margin-bottom:8px; }
+  header.hero .inner { max-width:860px; margin:0 auto; }
+  .eyebrow { font-size:13px; letter-spacing:.14em; color:#A9C0DE; text-transform:uppercase;
+    margin-bottom:14px; font-weight:600; }
+  h1.title { font-size:30px; margin:0 0 10px; font-weight:700; letter-spacing:.01em; }
+  .subtitle { font-size:15.5px; color:#C7D4E6; max-width:640px; }
+  .meta-row { margin-top:28px; display:flex; gap:28px; flex-wrap:wrap; font-size:13px; color:#9FB4CF;
+    border-top:1px solid rgba(255,255,255,.15); padding-top:18px; }
+  .meta-row b { color:#fff; font-weight:600; }
+  .version-badge { display:inline-block; background:var(--accent); color:#fff; font-size:12px;
+    font-weight:700; padding:3px 10px; border-radius:20px; margin-left:10px; vertical-align:middle; }
+  nav.toc { background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:20px 24px; margin:32px 0 44px; }
+  nav.toc .toc-label { font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-soft); font-weight:700; margin-bottom:12px; }
+  nav.toc ol { margin:0; padding-left:20px; columns:2; column-gap:32px; }
+  nav.toc li { font-size:14px; margin-bottom:7px; break-inside:avoid; }
+  nav.toc a { color:var(--navy); text-decoration:none; }
+  nav.toc a:hover { text-decoration:underline; }
+  section.block { margin-bottom:46px; scroll-margin-top:20px; }
+  h2.sec-title { font-size:20px; color:var(--navy); border-bottom:2px solid var(--navy);
+    padding-bottom:10px; margin:0 0 18px; font-weight:700; display:flex; align-items:baseline; gap:10px; }
+  h2.sec-title .num { font-family:var(--mono); font-size:14px; color:#fff; background:var(--navy);
+    padding:2px 8px; border-radius:4px; }
+  h3.sub { font-size:15.5px; color:var(--ink); font-weight:700; margin:22px 0 8px; }
+  p { margin:0 0 12px; font-size:15px; color:var(--ink); }
+  ul.plain { margin:0 0 12px; padding-left:22px; }
+  ul.plain li { margin-bottom:6px; font-size:15px; }
+  .decision-card { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--navy);
+    border-radius:8px; padding:16px 20px; margin-bottom:14px; }
+  .decision-card .d-label { font-size:12px; font-weight:700; letter-spacing:.06em; color:var(--navy);
+    text-transform:uppercase; margin-bottom:6px; }
+  .decision-card p:last-child { margin-bottom:0; }
+  .final-card { background:var(--green-bg); border:1px solid var(--green-line); border-left:4px solid #2E7D4F;
+    border-radius:8px; padding:16px 20px; margin-bottom:14px; }
+  .final-card .d-label { font-size:12px; font-weight:700; letter-spacing:.06em; color:#2E7D4F;
+    text-transform:uppercase; margin-bottom:6px; }
+  .qa { border:1px solid var(--line); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+  .qa .q { background:#F0F4F8; padding:12px 18px; font-size:14px; font-weight:700; color:var(--navy-deep); }
+  .qa .a { padding:12px 18px; font-size:14.5px; background:var(--card); }
+  .qa .a::before { content:"→ "; color:var(--accent); font-weight:700; }
+  .qa.superseded .q { background:var(--strike-bg); color:#9A9488; }
+  .qa.superseded .a { color:#9A9488; }
+  .flow { display:flex; flex-wrap:wrap; gap:0; margin:18px 0 20px; border:1px solid var(--line);
+    border-radius:8px; overflow:hidden; }
+  .flow-step { flex:1 1 200px; padding:16px 18px; border-right:1px solid var(--line); background:var(--card); }
+  .flow-step:last-child { border-right:none; }
+  .flow-step .fs-num { font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:700; margin-bottom:6px; }
+  .flow-step .fs-role { font-size:13px; color:var(--ink-soft); margin-bottom:4px; }
+  .flow-step .fs-action { font-size:14px; font-weight:600; color:var(--ink); }
+  table.dtable { width:100%; border-collapse:collapse; margin:14px 0 20px; font-size:14px; }
+  table.dtable th { background:var(--navy); color:#fff; text-align:left; padding:10px 14px; font-weight:600; }
+  table.dtable td { padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.dtable tr:nth-child(even) td { background:#F5F7FA; }
+  pre.algo { background:#1B2430; color:#DCE6F1; padding:20px 22px; border-radius:8px;
+    font-family:var(--mono); font-size:12.6px; line-height:1.7; overflow-x:auto; margin:14px 0 20px; }
+  pre.algo .cmt { color:#7A8CA3; }
+  .open-issue { background:var(--amber-bg); border:1px solid var(--amber-line); border-radius:10px;
+    padding:20px 24px; margin-bottom:18px; }
+  .open-issue .oi-tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.06em;
+    color:#8A5A1E; background:#F3DCA9; padding:3px 10px; border-radius:20px; margin-bottom:10px; }
+  .open-issue h4 { margin:0 0 10px; font-size:15.5px; color:#6B4415; }
+  .open-issue .oi-desc { font-size:13.5px; margin-bottom:14px; color:#6B4415; }
+  .resolved-banner { background:var(--green-bg); border:1px solid var(--green-line); border-radius:10px;
+    padding:18px 24px; margin-bottom:20px; text-align:center; }
+  .resolved-banner b { color:#2E7D4F; font-size:15px; }
+  .glossary-grid { display:grid; grid-template-columns:1fr; gap:10px; }
+  .term { display:grid; grid-template-columns:150px 1fr; gap:14px; padding:12px 0;
+    border-bottom:1px solid var(--line); font-size:14px; }
+  .term .t-name { font-weight:700; color:var(--navy); }
+  .term .t-def { color:var(--ink); }
+  .changelog { background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:20px 24px; margin-bottom:20px; }
+  .changelog ul { margin:0; padding-left:20px; }
+  .changelog li { font-size:14px; margin-bottom:8px; }
+  footer { margin-top:60px; padding-top:20px; border-top:1px solid var(--line); font-size:12.5px;
+    color:var(--ink-soft); text-align:center; }
+  @media (max-width:600px) {
+    nav.toc ol { columns:1; } .flow { flex-direction:column; }
+    .flow-step { border-right:none; border-bottom:1px solid var(--line); } .term { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="inner">
+    <div class="eyebrow">Grilling Mode ｜ 需求釐清紀錄<span class="version-badge">v4 更新版</span></div>
+    <h1 class="title">差旅派車自動媒合系統</h1>
+    <div class="subtitle">本版澄清「歸屬據點」與「當前位置」的語意區別，並新增車輛保修排程與司機請假（API串接）兩項資源可用性檢核。</div>
+    <div class="meta-row">
+      <div><b>據點規模</b>　約 8–10 個，南北分布</div>
+      <div><b>演算法</b>　貪婪規則引擎（依任務型態分兩條主流程）</div>
+      <div><b>狀態</b>　核心邏輯、例外機制、資源檢核已全數收斂，待確認事項清零</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc">
+    <div class="toc-label">目錄</div>
+    <ol>
+      <li><a href="#s0">本版更新摘要</a></li>
+      <li><a href="#s1">系統定位</a></li>
+      <li><a href="#s2">任務型態：來回單與單程單</a></li>
+      <li><a href="#s3">司機工時限制</a></li>
+      <li><a href="#s3b">媒合觸發機制</a></li>
+      <li><a href="#s4">申請表單時間欄位</a></li>
+      <li><a href="#s5">自動媒合條件</a></li>
+      <li><a href="#s6">手動併車模式（完整重寫）</a></li>
+      <li><a href="#s7">核心合併邏輯（通用原則）</a></li>
+      <li><a href="#s8">目的地與車程資料</a></li>
+      <li><a href="#s9">車輛與司機資源模型</a></li>
+      <li><a href="#s10">例外情況：三種機制並存</a></li>
+      <li><a href="#s11">申請與審核流程</a></li>
+      <li><a href="#s12">待確認事項狀態</a></li>
+      <li><a href="#s13">問答逐條紀錄</a></li>
+      <li><a href="#s14">名詞對照表</a></li>
+    </ol>
+  </nav>
+
+  <section class="block" id="s0">
+    <h2 class="sec-title"><span class="num">00</span>本版更新摘要</h2>
+    <div class="changelog">
+      <ul>
+        <li><b>語意澄清（非新決策）</b>：「歸屬據點」是車輛/司機固定的行政屬性；「當前位置」才是排班演算法實際判斷可用性的依據。多數時候兩者相同，僅多天任務進行中會暫時不一致。</li>
+        <li><b>新增車輛保修檢核</b>：系統內建保修排程功能，由業務單位維護，排班時自動排除保修期間的車輛。</li>
+        <li><b>新增司機請假檢核（API串接）</b>：即時串接公司既有休請假系統，於媒合觸發當下抓取未來7天內司機請假資料（精確起訖時間），任務時間與請假時段重疊即不可指派。API故障情境不特別處理。</li>
+        <li><b>車次成立條件更新</b>：新增「不在保修期間」「與請假時段無重疊」兩項檢核。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block" id="s1">
+    <h2 class="sec-title"><span class="num">01</span>系統定位</h2>
+    <div class="decision-card">
+      <div class="d-label">核心問題</div>
+      <p>多組獨立提出的出差需求，能否合併共乘同一台車——屬於派工型的延伸版（出差共乘媒合），<b>非叫車／載客平台</b>。公司在全台約 8 個據點，各據點皆有員工與數台車輛。</p>
+    </div>
+  </section>
+
+  <section class="block" id="s2">
+    <h2 class="sec-title"><span class="num">02</span>任務型態：來回單與單程單</h2>
+    <p>系統處理兩種性質不同的任務型態，媒合與資源綁定邏輯各自獨立，不互相混合比對。</p>
+
+    <h3 class="sub">來回單（預設型態）</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>司機／車輛<b>全程綁定同一批人</b>，去程送達後在當地待命，回程載回原班人馬。去程與回程視為同一趟任務的兩端，不各自獨立找其他需求合併。單日或多日任務皆適用此邏輯。</p>
+    </div>
+
+    <h3 class="sub">單程單（新增型態）</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>專指送往／來自港口、機場、高鐵站等<b>交通轉運點</b>的單程需求。系統須在司機<b>出發前</b>就完成配對：搜尋同一轉運點、回程最早上車時間落在去程送達後 <b>4 小時內</b>的回程單程單，配成一趟完整行程一併指派。若 4 小時內無可配對回程單，則排為純去程單程單，司機送達後直接返回出發地或接下個任務。<b>單程單只能跟單程單配對</b>，不會跟來回單混合比對。</p>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft);">此為配對階段（出發前）就決定的結果，非司機出發後臨時在原地等待的即時判斷。</p>
+  </section>
+
+  <section class="block" id="s3">
+    <h2 class="sec-title"><span class="num">03</span>司機工時限制</h2>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>司機表訂工時 <b>08:00–20:30，上限 12.5 小時</b>。此限制同時適用<b>來回單與單程單</b>：</p>
+      <ul class="plain" style="margin-top:8px;">
+        <li>來回單：回程送達出發地時間不得晚於 20:30</li>
+        <li>單程單：無論是否配對到回程，司機最後完成任務（含等待配對）的時間不得晚於 20:30；等待配對的時間計入司機工時佔用，非空閒時間</li>
+      </ul>
+      <p style="margin-top:8px;">排班演算法新增檢查項：預估完成時間（含車程＋等待＋緩衝）是否超過 20:30。超過即判定該指派不可行，<b>標記「待人工協調」</b>，不強行派車讓司機超時。</p>
+    </div>
+  </section>
+
+  <section class="block" id="s3b">
+    <h2 class="sec-title"><span class="num">03B</span>媒合觸發機制</h2>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>自動媒合<b>不是即時觸發</b>，而是由業務單位<b>手動按下按鈕</b>才會執行一次批次媒合。</p>
+      <ul class="plain" style="margin-top:8px;">
+        <li>每次觸發，處理範圍是<b>按下當下起算未來 7 天內、以出發日期為準</b>的申請單</li>
+        <li><b>已經媒合成功的單不會被重新異動</b>（不會被下一次觸發打散重排）</li>
+        <li><b>媒合失敗的單，才會進入手動併車模式</b></li>
+        <li><b>觸發頻率不固定</b>：業務單位想到就按，沒有排程週期</li>
+        <li><b>系統不做保底偵測</b>：若長時間未按導致某張單的出發日期從未落入任何一次的 7 天範圍內，該單即不會被自動媒合處理到——此為業務單位操作責任，系統不主動補救</li>
+      </ul>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft);">技術影響：資料庫需記錄每次媒合批次的觸發時間戳記，以及每筆申請單「是否已被某次批次處理過、結果為何」；演算法主流程起點由「需求送入即時處理」改為「業務單位觸發時，批次撈取範圍內待處理單一次跑完」。</p>
+  </section>
+
+  <section class="block" id="s4">
+    <h2 class="sec-title"><span class="num">04</span>申請表單時間欄位</h2>
+    <table class="dtable">
+      <tr><th>欄位</th><th>說明</th><th>性質</th></tr>
+      <tr><td>最早上車時間</td><td>使用者最早可被載走的時間（去程）</td><td>使用者填寫，媒合判斷依據</td></tr>
+      <tr><td>最早回程時間</td><td>使用者最早可上車回程的時間</td><td>使用者填寫，媒合判斷依據</td></tr>
+      <tr><td>最晚抵達時間</td><td>系統依車程表算出的預計抵達時間</td><td>系統算出的參考資訊，不參與媒合判斷</td></tr>
+    </table>
+  </section>
+
+  <section class="block" id="s5">
+    <h2 class="sec-title"><span class="num">05</span>自動媒合條件</h2>
+    <ul class="plain">
+      <li>出發地完全相同</li>
+      <li>目的地完全相同</li>
+      <li><b>最早上車時間完全相同</b>（去程）／<b>最早回程時間完全相同</b>（回程）</li>
+      <li>合併後總人數未超過車輛容量</li>
+      <li>指派後預估完成時間未超過司機工時上限（20:30）</li>
+    </ul>
+    <p>不存在「時間窗重疊、系統挑折衷值」的邏輯——時間欄位必須完全一致才能自動合併。</p>
+  </section>
+
+  <section class="block" id="s6">
+    <h2 class="sec-title"><span class="num">06</span>手動併車模式（完整重寫）</h2>
+    <p>當自動媒合完全失敗（找不到任何可合併對象）時，該申請單進入手動併車模式。本輪對此機制做了根本性修正——從「同樣待配對者互相配對」改為「向已確定有車者搭便車」。</p>
+
+    <h3 class="sub">候選清單範圍與顯示欄位</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p><b>候選對象</b>：出發日期在申請日<b>前後1天</b>內、<b>已確定有派車</b>的其他申請單（不篩選目的地——不論候選單去哪裡，只要日期範圍符合、已有車，都列入清單，由使用者自行判斷是否順路）。</p>
+      <p style="margin-top:8px;"><b>顯示欄位</b>：目的地、出發時間／最晚抵達時間、申請人姓名與部門/分機（不顯示私人手機）、該車輛已載人數/剩餘容量。</p>
+    </div>
+
+    <h3 class="sub">操作與完成機制</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>使用者自行從候選清單聯繫對象：</p>
+      <ul class="plain" style="margin-top:8px;">
+        <li><b>對方同意</b> → 使用者按下「完成合併」，即視為已媒合成功，<b>不需調度室額外確認</b></li>
+        <li><b>對方拒絕</b> → 回到候選清單，可繼續嘗試聯繫其他候選對象</li>
+      </ul>
+    </div>
+
+    <h3 class="sub">逾期自動作廢機制</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>若一直等到申請的<b>出發時間點</b>仍未媒合成功，該筆申請單<b>自動作廢</b>：</p>
+      <ul class="plain" style="margin-top:8px;">
+        <li>系統通知申請人：用車未能媒合成功、已自動作廢</li>
+        <li>作廢紀錄<b>保留</b>（供後續統計媒合失敗率，作為檢討演算法或評估資源是否足夠的依據）</li>
+        <li><b>不轉「待人工協調」</b>——作廢即為最終結局，後續由申請人自行決定（改搭其他交通方式或另行聯繫調度室）</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block" id="s7">
+    <h2 class="sec-title"><span class="num">07</span>核心合併邏輯（通用原則）</h2>
+    <h3 class="sub">終點判斷的通用性</h3>
+    <p>「終點相同即可合併」是來回單媒合的通用邏輯，不分去程回程、不分是否為多天任務的最後一天。多天任務最後一天的回程終點會被鎖定為歸屬據點，但同樣正常參與合併比對。</p>
+    <h3 class="sub">優化目標優先順序</h3>
+    <p>管理階層明確要求「盡量不要有空車移動」，此為<b>最優先目標</b>，其次才是減少車次總數。</p>
+    <h3 class="sub">排班模式與演算法選型</h3>
+    <p>目前朝<b>全自動生成</b>研討，但保留必要時人工介入的空間。MVP 採用<b>貪婪規則引擎</b>，主流程依任務型態（來回單／單程單）分兩條分支處理。</p>
+  </section>
+
+  <section class="block" id="s8">
+    <h2 class="sec-title"><span class="num">08</span>目的地與車程資料</h2>
+    <div class="decision-card">
+      <div class="d-label">目的地資料</div>
+      <p>沒有地址，只有目的地名稱；系統開發網頁表單，目的地採<b>選單制</b>（非自由文字輸入）。</p>
+    </div>
+    <div class="decision-card">
+      <div class="d-label">車程時間表</div>
+      <p><b>公司自行建置</b>常用目的地清單與「據點→目的地」車程時間對照表，不串接外部地圖 API。數值為<b>固定分鐘數</b>，不分尖峰離峰；系統另外內建緩衝時間。</p>
+    </div>
+  </section>
+
+  <section class="block" id="s9">
+    <h2 class="sec-title"><span class="num">09</span>車輛與司機資源模型</h2>
+    <h3 class="sub">歸屬據點 vs 當前位置（語意澄清）</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p><b>歸屬據點</b>：車輛/司機在行政與資產管理上固定隸屬的據點（保養、常駐、鑰匙管理皆在此），這個屬性不會因單次出差而改變。</p>
+      <p style="margin-top:8px;"><b>當前位置</b>：車輛/司機在某個時間點實際所在的地理位置，<b>排班演算法判斷「今天這台車/這位司機能不能被指派」時，看的是當前位置，不是歸屬據點</b>。</p>
+      <p style="margin-top:8px;">兩者關係：沒有進行中的多天任務時，當前位置＝歸屬據點。多天任務進行中，當前位置會暫時偏離歸屬據點；任務最後一天的回程被強制設定回歸屬據點，結束後兩者重新一致。</p>
+    </div>
+
+    <h3 class="sub">多天任務（來回單）</h3>
+    <p><b>任務最後一天的回程終點強制鎖定為歸屬據點</b>；該回程仍正常參與合併比對，只要合併對象終點同樣是這個歸屬據點即可。</p>
+
+    <h3 class="sub">司機：獨立資源</h3>
+    <p>司機為<b>獨立管理的資源類型</b>，與車輛分開建模。</p>
+
+    <h3 class="sub">車輛保修檢核（新增）</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>系統內建<b>保修排程功能</b>，由業務單位手動維護——登記某台車在某個日期區間（或單日）進廠保修、不可派車。排班時直接將保修期間的車輛排除於可用清單之外。</p>
+    </div>
+
+    <h3 class="sub">司機請假檢核（新增，API 串接）</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <p>司機休請假資料透過 <b>API 即時串接</b>公司既有的休請假系統，於「媒合觸發按鈕」按下當下，即時呼叫 API 抓取該次範圍（未來7天）內所有司機的請假資料。</p>
+      <p style="margin-top:8px;">請假資料為<b>精確起訖時間</b>（例如09:00–13:00），非簡單的上午/下午分類。排班判斷邏輯：任務的預估時間範圍只要與請假時段<b>有重疊</b>，該司機當天此任務即不可指派；若任務完全落在請假時段外，仍可正常指派。</p>
+      <p style="margin-top:8px;"><b>API 故障情境不列入考量</b>，不特別設計失敗處理機制。</p>
+    </div>
+
+    <h3 class="sub">車次成立條件（更新版）</h3>
+    <p>一個車次要成立，需同時滿足：</p>
+    <ul class="plain">
+      <li>車輛可用（當前位置對、時段無衝突、<b>不在保修期間</b>）</li>
+      <li>司機可用（當前位置對、時段無衝突、<b>與請假時段無重疊</b>）</li>
+      <li>目的地車程資料存在</li>
+      <li>預估完成時間未超過司機工時上限（20:30）</li>
+    </ul>
+  </section>
+
+  <section class="block" id="s10">
+    <h2 class="sec-title"><span class="num">10</span>例外情況：三種機制並存</h2>
+    <table class="dtable">
+      <tr><th>機制</th><th>觸發原因</th><th>處理方式</th></tr>
+      <tr><td>待人工協調</td><td>資源面問題：無可用車／司機／查無車程資料／預估超過工時上限</td><td>調度室手動指派或調整</td></tr>
+      <tr><td>手動併車模式</td><td>需求面問題：自動媒合找不到對象</td><td>使用者向已有車的申請單搭便車，逾期未成則自動作廢</td></tr>
+      <tr><td>逾期自動作廢</td><td>手動併車模式到出發時間仍未成功</td><td>系統自動作廢並通知申請人，紀錄保留，不轉人工</td></tr>
+    </table>
+  </section>
+
+  <section class="block" id="s11">
+    <h2 class="sec-title"><span class="num">11</span>申請與審核流程</h2>
+    <div class="flow">
+      <div class="flow-step"><div class="fs-num">STEP 1</div><div class="fs-role">出差員工</div><div class="fs-action">填寫網頁申請表單</div></div>
+      <div class="flow-step"><div class="fs-num">STEP 2</div><div class="fs-role">直屬主管</div><div class="fs-action">審核出差本身准駁</div></div>
+      <div class="flow-step"><div class="fs-num">STEP 3</div><div class="fs-role">系統（規則引擎）</div><div class="fs-action">自動媒合、產生建議排班</div></div>
+      <div class="flow-step"><div class="fs-num">STEP 4</div><div class="fs-role">調度室</div><div class="fs-action">確認結果／可直接手動調整</div></div>
+    </div>
+    <ul class="plain">
+      <li><b>主管駁回</b>：狀態改為「已駁回」，保留紀錄但不進入排班池</li>
+      <li><b>調度室發現排班有問題</b>：直接手動調整，不退回員工重新申請</li>
+      <li><b>通知</b>：確認後由調度室人工告知司機與員工，系統本期不做自動通知（惟手動併車模式逾期作廢時例外，系統會主動通知申請人）</li>
+    </ul>
+  </section>
+
+  <section class="block" id="s12">
+    <h2 class="sec-title"><span class="num">12</span>待確認事項狀態</h2>
+    <div class="resolved-banner">
+      <b>✓ 原 Q29–Q33 共 5 項待業務單位確認事項，本輪已全數由使用者明確答覆並收斂定案，目前無待確認事項。</b>
+    </div>
+    <table class="dtable">
+      <tr><th>原題號</th><th>問題</th><th>解決方式</th></tr>
+      <tr><td>Q29</td><td>合併結果如何寫回系統</td><td>使用者按下「完成合併」即成立，不需調度室確認</td></tr>
+      <tr><td>Q30</td><td>候選清單時間範圍上限</td><td>前後1天</td></tr>
+      <tr><td>Q31</td><td>候選對象拒絕後如何處理</td><td>回候選清單繼續嘗試其他對象</td></tr>
+      <tr><td>Q32</td><td>是否有時間期限／保底機制</td><td>等到出發時間仍未成功則自動作廢，通知申請人並保留紀錄</td></tr>
+      <tr><td>Q33</td><td>候選比對邏輯（兩兩比對vs群組）</td><td>因時間窗機制已取消（改為前後1天、不比對時間），此題不再適用</td></tr>
+    </table>
+  </section>
+
+  <section class="block" id="s13">
+    <h2 class="sec-title"><span class="num">13</span>問答逐條紀錄</h2>
+
+    <div class="qa"><div class="q">Q1　這個系統要解決的核心問題是什麼？</div><div class="a">多組獨立提出的出差需求能否合併共乘同一台車——屬於派工型延伸（出差共乘媒合），非叫車平台。</div></div>
+    <div class="qa"><div class="q">Q2　判斷「兩組出差需求可以合併」的規則是什麼？</div><div class="a">先做「同起點、同終點、時間窗重疊」的簡單合併邏輯（後於Q21/Q22/Q26修正為完全相同）。</div></div>
+    <div class="qa"><div class="q">Q3　時間不同的兩組如何處理回程？</div><div class="a">去程和回程視為兩筆獨立的派車需求（此規則後於Q34限定為僅適用單程單，來回單去回程綁定同一資源）。</div></div>
+    <div class="qa"><div class="q">Q4　「合併省車次」與「減少空車移動」目標衝突時如何取捨？</div><div class="a">長官需求是「盡量不要有空車移動」，這是最優先目標。</div></div>
+    <div class="qa"><div class="q">Q5　系統預期是「輔助建議工具」還是「全自動生成」？</div><div class="a">目前朝自動生成研討，但必要時可讓人工介入。</div></div>
+    <div class="qa"><div class="q">Q6　自動生成要用什麼等級的演算法邏輯？</div><div class="a">先用簡單規則引擎（貪婪法）看看。</div></div>
+    <div class="qa"><div class="q">Q7　出差需求資料從哪裡來、包含哪些欄位？</div><div class="a">沒有目的地地址，只有目的地名稱；要開發網頁表單。</div></div>
+    <div class="qa"><div class="q">Q8　目的地要怎麼變成系統可比對、可算車程的資料？</div><div class="a">常用目的地清單與據點到目的地車程時間，公司自建，不串 Google Maps API。</div></div>
+    <div class="qa"><div class="q">Q9　車程時間表怎麼建、精細度到多少？</div><div class="a">採用建議預設值：固定數字、不分尖峰離峰、系統內建緩衝時間。</div></div>
+    <div class="qa"><div class="q">Q10　車輛是否只能給該據點使用，還是可跨據點調度？</div><div class="a">車輛屬於某據點，但可能因出差到新地點，隔天從該地當出發地。</div></div>
+    <div class="qa"><div class="q">Q11　車輛當前位置怎麼更新、在外地的車能否被下一需求使用？</div><div class="a">司機出發前已被告知單日或多天任務；不論天數，任務最後一天一定要回到所屬地。</div></div>
+    <div class="qa"><div class="q">Q12　司機是否為獨立於出差人員的專職角色？</div><div class="a">司機是獨立資源，同意。</div></div>
+    <div class="qa"><div class="q">Q13　需求排不進去時系統要如何呈現、誰處理？</div><div class="a">標記「待人工協調」，顯示原因，提供人工手動指派工具。</div></div>
+    <div class="qa"><div class="q">Q14　申請流程是否需要主管簽核？</div><div class="a">員工申請時直屬主管審一次，調度室只是做確認。</div></div>
+    <div class="qa"><div class="q">Q15　主管駁回的申請如何處理？調度室發現排錯要退回還是手動改？</div><div class="a">保留紀錄但不進排班池；調度室直接手動調整，不退回員工。</div></div>
+    <div class="qa"><div class="q">Q16　系統要不要自動通知司機/員工排班結果？</div><div class="a">由調度室告知就可以了，系統不做自動通知（後於本輪新增：逾期作廢例外會系統通知）。</div></div>
+    <div class="qa"><div class="q">Q17　表單時間欄位如何設計？</div><div class="a">使用者要填「預期出發時間」，加上「最晚抵達時間」「回程時間」（後於Q25/Q26整個改寫）。</div></div>
+    <div class="qa superseded"><div class="q">Q18　預期出發時間效力（已作廢）</div><div class="a">因時間欄位模型重新定義，此題不再適用。</div></div>
+    <div class="qa"><div class="q">Q19　多天任務最後一天的回程，是否完全不能合併？</div><div class="a">可以合併載其他人，只是回程目的地必須是同一個歸屬據點。</div></div>
+    <div class="qa"><div class="q">Q20　非最後一天的回程，終點判斷邏輯是否不同？</div><div class="a">邏輯完全一致，都用「終點相同」的通用規則判斷合併。</div></div>
+    <div class="qa"><div class="q">Q21　自動媒合的時間比對，是「完全相同」還是「容許誤差」？</div><div class="a">完全相同。</div></div>
+    <div class="qa superseded"><div class="q">Q22　自動媒合完整條件重新定義（已由Q26取代）</div><div class="a">初版誤將比對基準定為「最晚抵達時間」，後修正為「最早上車時間／最早回程時間」。</div></div>
+    <div class="qa superseded"><div class="q">Q23　手動併車模式候選比對基準（已由Q39/Q40取代）</div><div class="a">初版採「同樣待配對者互相配對＋時間窗」，後整個改為「向已有車者搭便車＋前後1天不比對時間」。</div></div>
+    <div class="qa superseded"><div class="q">Q24　手動併車模式完整候選條件（已由Q39/Q40取代）</div><div class="a">同Q23，機制已整個重寫。</div></div>
+    <div class="qa"><div class="q">Q25　表單時間欄位重新定義為「最早上車時間」「最早回程時間」，如何對應原本概念？</div><div class="a">最早上車時間＝預期出發時間；最早回程時間＝結束時間；最晚抵達時間變成系統查表算出的參考數字。</div></div>
+    <div class="qa"><div class="q">Q26　自動媒合比對基準是否改回「最早上車時間完全相同」？</div><div class="a">同意修正：媒合條件為出發地／目的地／最早上車時間（或最早回程時間）完全相同，人數未超容量。</div></div>
+    <div class="qa"><div class="q">Q27　手動併車模式由誰聯繫？</div><div class="a">由使用者自行聯繫。</div></div>
+    <div class="qa"><div class="q">Q28　手動併車候選清單要顯示哪些資訊？</div><div class="a">顯示姓名、部門/分機、目的地、時間、人數，不顯示私人手機。</div></div>
+    <div class="qa superseded"><div class="q">Q29　合併結果如何寫回系統（已由本輪定案取代）</div><div class="a">原列為待業務確認，本輪定案：使用者按下「完成合併」即成立，不需調度室確認。</div></div>
+    <div class="qa superseded"><div class="q">Q30　候選清單時間範圍上限（已由Q40取代）</div><div class="a">原列為待業務確認，本輪定案：前後1天。</div></div>
+    <div class="qa"><div class="q">Q31　搭便車對象拒絕後如何處理？</div><div class="a">回候選清單，可繼續嘗試聯繫其他候選對象。</div></div>
+    <div class="qa"><div class="q">Q32　手動併車模式有沒有時間期限／保底機制？</div><div class="a">等到出發時間仍未媒合成功則自動作廢，通知申請人並保留紀錄，不轉待人工協調。</div></div>
+    <div class="qa superseded"><div class="q">Q33　候選比對邏輯：兩兩比對vs群組比對（已作廢）</div><div class="a">因時間窗機制已取消（改為前後1天、不比對時間），此題不再適用。</div></div>
+    <div class="qa"><div class="q">Q34　司機/車輛與出差人員的綁定關係為何？</div><div class="a">來回單：司機全程陪同同一批人，載出跟載回；單天當天回到出發地，多天全程陪同。</div></div>
+    <div class="qa"><div class="q">Q35　單程單的等待與返程機制？</div><div class="a">送達交通轉運點後，預設可等待4小時，若有其他單程單從該轉運點回司機出發地，即可配對成立；單程單只能加單程單。</div></div>
+    <div class="qa"><div class="q">Q36　配對是即時發生還是出發前決定？</div><div class="a">司機出發前就要知道今天的任務是否要等待，配對必須在出發前完成，非即時動態判斷。</div></div>
+    <div class="qa"><div class="q">Q37　司機工時上限如何套用在演算法判斷？</div><div class="a">12.5小時（08:00–20:30），適用來回單與單程單，等待時間計入工時，超時即判定不可行、轉待人工協調。</div></div>
+    <div class="qa"><div class="q">Q38　是否還有第三種任務型態？</div><div class="a">目前沒有收到新的需求，只有來回單與單程單兩種。</div></div>
+    <div class="qa"><div class="q">Q39　手動併車候選對象是「同樣沒車的人」還是「已有車的人」？</div><div class="a">修改為一定要搭上已確定有車的單。</div></div>
+    <div class="qa"><div class="q">Q40　候選清單要不要篩選目的地？</div><div class="a">不篩選目的地，前後一日所有已確定有派車的單都列出來。</div></div>
+    <div class="qa"><div class="q">Q41　候選清單要顯示哪些欄位？</div><div class="a">目的地、出發時間/最晚抵達時間、申請人姓名與部門/分機、車輛已載人數/剩餘容量。</div></div>
+    <div class="qa"><div class="q">Q42　申請單逾期作廢後，系統要不要通知或保留紀錄？</div><div class="a">作廢時要通知申請人，也保留紀錄，不需要轉人工協調。</div></div>
+    <div class="qa"><div class="q">Q43　媒合觸發的範圍與規則？</div><div class="a">按下按鈕後7天內的單參與媒合；已媒合成功的單不會再異動；媒合失敗才進入手動二次媒合。</div></div>
+    <div class="qa"><div class="q">Q44　按鈕預期多久按一次？</div><div class="a">業務單位想到就來一次，非固定排程。</div></div>
+    <div class="qa"><div class="q">Q45　若業務單位長時間未按導致單過期未被處理，系統要不要保底偵測？</div><div class="a">業務單位漏了就漏了，那是業務單位要負責的事，系統不做保底防範。</div></div>
+    <div class="qa"><div class="q">Q46　車輛的「歸屬據點」與「當前位置」是否矛盾？</div><div class="a">不矛盾：歸屬據點是固定行政屬性，當前位置才是排班判斷依據，多數時候兩者相同，僅多天任務進行中會暫時不一致。</div></div>
+    <div class="qa"><div class="q">Q47　車輛保修與司機請假這兩種不可用狀態，資料怎麼來？</div><div class="a">車輛保修在本系統內建功能供業務單位維護；司機休請假用API方式串聯既有休請假系統。</div></div>
+    <div class="qa"><div class="q">Q48　司機請假API同步頻率與故障處理？</div><div class="a">司機請假的顆粒度本來就可以排到半天；休請假系統若故障不列入考量。</div></div>
+    <div class="qa"><div class="q">Q49　半天請假如何定義比對？</div><div class="a">休請假系統會回傳精確的起訖時間（如09:00-13:00），排班用時間重疊比對即可，不需另定義半天切分點。</div></div>
+  </section>
+
+  <section class="block" id="s14">
+    <h2 class="sec-title"><span class="num">14</span>名詞對照表</h2>
+    <div class="glossary-grid">
+      <div class="term"><div class="t-name">來回單</div><div class="t-def">司機/車輛全程綁定同一批人，去程送達後待命，回程載回原班人馬，去回視為同一趟任務</div></div>
+      <div class="term"><div class="t-name">單程單</div><div class="t-def">送往/來自交通轉運點的單程需求，出發前完成配對，4小時時間窗內可配對回程單程單，只能單程配單程</div></div>
+      <div class="term"><div class="t-name">司機工時上限</div><div class="t-def">08:00–20:30，共12.5小時，適用兩種任務型態，超時判定指派不可行</div></div>
+      <div class="term"><div class="t-name">最早上車時間</div><div class="t-def">去程使用者最早可被載走的時間，是自動媒合的判斷依據之一</div></div>
+      <div class="term"><div class="t-name">最早回程時間</div><div class="t-def">回程使用者最早可上車的時間，是自動媒合的判斷依據之一</div></div>
+      <div class="term"><div class="t-name">最晚抵達時間</div><div class="t-def">系統依車程表算出的預計抵達時間，僅供參考顯示，不參與媒合判斷</div></div>
+      <div class="term"><div class="t-name">自動媒合</div><div class="t-def">出發地、目的地、最早上車/回程時間皆完全相同，人數未超容量，且不超工時上限時，系統自動合併為同一車次</div></div>
+      <div class="term"><div class="t-name">手動併車模式</div><div class="t-def">自動媒合失敗後，系統列出前後1天已確定有車的候選單，由申請人自行聯繫搭便車</div></div>
+      <div class="term"><div class="t-name">逾期自動作廢</div><div class="t-def">手動併車模式到出發時間仍未媒合成功，系統自動作廢申請單，通知申請人並保留紀錄</div></div>
+      <div class="term"><div class="t-name">待人工協調</div><div class="t-def">因資源面問題（無可用車/司機/車程資料/超工時）無法自動排班的狀態，交由調度室處理</div></div>
+      <div class="term"><div class="t-name">歸屬據點</div><div class="t-def">車輛/司機行政與資產管理上固定隸屬的據點，不因單次出差改變</div></div>
+      <div class="term"><div class="t-name">當前位置</div><div class="t-def">車輛/司機實際所在地理位置，是排班演算法判斷可用性的依據，非歸屬據點</div></div>
+      <div class="term"><div class="t-name">保修排程</div><div class="t-def">系統內建功能，業務單位登記車輛保修期間，排班時自動排除</div></div>
+      <div class="term"><div class="t-name">請假檢核</div><div class="t-def">API即時串接休請假系統，抓取司機精確請假起訖時間，與任務時間重疊即不可指派</div></div>
+      <div class="term"><div class="t-name">車輛當前位置</div><div class="t-def">車輛動態追蹤的實際所在地，非固定的歸屬據點</div></div>
+      <div class="term"><div class="t-name">多天任務</div><div class="t-def">來回單任務標記天數，最後一天回程終點強制設為歸屬據點，但仍可正常參與合併</div></div>
+      <div class="term"><div class="t-name">人工覆寫</div><div class="t-def">調度室手動指派、修改系統自動排班結果的紀錄標記</div></div>
+    </div>
+  </section>
+
+  <footer>
+    差旅派車自動媒合系統｜Grilling Mode 討論彙整 v4　·　核心邏輯與例外機制已全數收斂，待確認事項清零
+  </footer>
+</div>
+</body>
+</html>
