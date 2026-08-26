@@ -39,6 +39,30 @@ function fitsSixOrient(item, cap) {
   );
 }
 
+/* ---- 單品有效值（共用：checkLoad 與逐站累計 effectiveLoad 一致口徑）---- */
+function itemEffective(it) {
+  const qty = it.qty || 1;
+  const vol = (it.l * it.w * it.h) / 1000;              // 公升
+  const wf = WasteFactorProvider.get(it.category);      // 類別浪費係數（G03）
+  const sorted = [it.l, it.w, it.h].sort((a, b) => b - a);
+  const aspect = sorted[0] / sorted[2];
+  const shapePenalty = aspect > 3 ? 1.10 : (aspect > 2 ? 1.05 : 1.0); // 長寬比形狀懲罰（G02）
+  return {
+    qty, vol, wf, shapePenalty,
+    eff: vol * wf * shapePenalty * qty,
+    floor: sorted[1] * sorted[2] * qty,
+    weight: (it.weight || 0) * qty,
+  };
+}
+
+/* ---- 一批貨物的有效體積／重量（供逐站累計使用 G05）---- */
+function effectiveLoad(items) {
+  return (items || []).reduce((a, it) => {
+    const e = itemEffective(it);
+    return { volume: a.volume + e.eff, weight: a.weight + e.weight };
+  }, { volume: 0, weight: 0 });
+}
+
 /* ---- 主入口：LoadFeasibilityService.Check（T1-6）----
    items: [{name, l, w, h, qty, category, weight}]  單位 cm / kg
    vehicle: {dims:{l,w,h}, volume(公升), weight(kg)}
@@ -58,20 +82,13 @@ function checkLoad(items, vehicle, startLoad) {
   let floorArea = 0;                  // 地板面積瓶頸法累計（cm²）
   const capFloor = cap.l * cap.w;     // 車廂地板面積
   for (const it of items) {
-    const qty = it.qty || 1;
-    const vol = (it.l * it.w * it.h) / 1000; // 公升
-    const wf = WasteFactorProvider.get(it.category);
-    // 長寬比形狀懲罰：長寬比越大額外加成（G02）
-    const sorted = [it.l, it.w, it.h].sort((a,b) => b-a);
-    const aspect = sorted[0] / sorted[2];
-    const shapePenalty = aspect > 3 ? 1.10 : (aspect > 2 ? 1.05 : 1.0);
-    const itemEff = vol * wf * shapePenalty * qty;
-    effVol += itemEff;
-    rawVol += vol * qty;
-    addWeight += (it.weight || 0) * qty;
+    const e = itemEffective(it);
+    effVol += e.eff;
+    rawVol += e.vol * e.qty;
+    addWeight += e.weight;
     // 地板面積：物件貼地最小面（長×寬中較小的水平投影）
-    floorArea += (sorted[1] * sorted[2]) * qty;
-    trace.push(`  · ${it.name}｜體積 ${vol.toFixed(0)}L × 係數 ${wf}${WasteFactorProvider.isDefault(it.category)?'(保底)':''} × 形狀 ${shapePenalty} × ${qty} = <span class="hl">${itemEff.toFixed(0)}L</span>`);
+    floorArea += e.floor;
+    trace.push(`  · ${it.name}｜體積 ${e.vol.toFixed(0)}L × 係數 ${e.wf}${WasteFactorProvider.isDefault(it.category)?'(保底)':''} × 形狀 ${e.shapePenalty} × ${e.qty} = <span class="hl">${e.eff.toFixed(0)}L</span>`);
   }
 
   const usedVol = startLoad.volume + effVol;

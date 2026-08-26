@@ -97,8 +97,14 @@ const ModuleA = {
       }
 
       // --- 裝載判定（LoadFeasibilityService）---
-      // 既有負載：同班次同站已排入單體積加總（示意起始負載）
-      const startLoad = { volume: 0, weight: 0 };
+      // 既有負載：該班次車上已排入的所有申請單，逐張累計有效體積與重量（G01/G05）
+      const onBoard = this.applications.filter(a =>
+        a.assignedShift === sh.id && ['matched', 'accepted', 'delivered'].includes(a.status));
+      const startLoad = onBoard.reduce((acc, a) => {
+        const e = effectiveLoad(a.items);
+        return { volume: acc.volume + e.volume, weight: acc.weight + e.weight };
+      }, { volume: 0, weight: 0 });
+      trace.push(`  <span class="dim">本班次已排入 ${onBoard.length} 單，車上既有 ${startLoad.volume.toFixed(0)}L / ${startLoad.weight.toFixed(0)}kg</span>`);
       const res = checkLoad(app.items, veh, startLoad);
       res.trace.forEach(t => trace.push('  ' + t));
 

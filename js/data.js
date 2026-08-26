@@ -70,18 +70,22 @@ const DB = {
     { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', home: 'D10',
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
     // 商務共乘池（模組 C）— 完全分開（資源池原則）
-    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', home: 'D10', seats: 7 },
-    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', home: 'D10', seats: 4 },
-    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', home: 'D6',  seats: 9 },
+    // home＝歸屬據點（固定行政屬性）；currentSite＝當前位置（排班可用性判斷依據 G59）
+    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', home: 'D10', currentSite: 'D10', seats: 7 },
+    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', home: 'D10', currentSite: 'D10', seats: 4 },
+    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', home: 'D6',  currentSite: 'D6',  seats: 9 },
+    { id: 'V-B04', name: '商務廂車 04', pool: 'BIZ', home: 'D10', currentSite: 'D10', seats: 5 },
   ],
 
   /* ---- 司機主檔（獨立資源 G61）---- */
+  // home＝歸屬據點；currentSite＝當前位置（G59）
   drivers: [
-    { id: 'DR1', name: '陳大文', pool: 'LOGI', home: 'S1' },
-    { id: 'DR2', name: '林志明', pool: 'LOGI', home: 'D10' },
-    { id: 'DR3', name: '王建國', pool: 'BIZ',  home: 'D10' },
-    { id: 'DR4', name: '張美華', pool: 'BIZ',  home: 'D10' },
-    { id: 'DR5', name: '李俊宏', pool: 'BIZ',  home: 'D6' },
+    { id: 'DR1', name: '陳大文', pool: 'LOGI', home: 'S1',  currentSite: 'S1' },
+    { id: 'DR2', name: '林志明', pool: 'LOGI', home: 'D10', currentSite: 'D10' },
+    { id: 'DR3', name: '王建國', pool: 'BIZ',  home: 'D10', currentSite: 'D10' },
+    { id: 'DR4', name: '張美華', pool: 'BIZ',  home: 'D10', currentSite: 'D10' },
+    { id: 'DR5', name: '李俊宏', pool: 'BIZ',  home: 'D6',  currentSite: 'D6' },
+    { id: 'DR6', name: '許雅雯', pool: 'BIZ',  home: 'D10', currentSite: 'D10' },
   ],
 
   /* ---- 車輛保修排程（G60）示意 ---- */
@@ -105,6 +109,9 @@ const DB = {
     '台北總部|新竹分公司': 75,
   },
   bizBuffer: 15, // 系統內建緩衝分鐘
+
+  /* ---- 共乘出發地對應據點（供當前位置比對 G59）---- */
+  bizOriginSite: { '台北總部': 'D10', '台中辦公室': 'D6' },
 
   /* ---- 共乘出發地 / 目的地選單（無地址 G62）---- */
   bizOrigins: ['台北總部', '台中辦公室'],

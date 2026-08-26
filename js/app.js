@@ -569,11 +569,13 @@ RENDER.a_review = function () {
   renderAr_review(); renderA_route(); renderA_incident();
 };
 function renderAr_review() {
-  const approved = ModuleA.applications.filter(a => a.status === 'approved');
+  // G16：同站多單一律依「審核通過時間」排序逐張判定時間額度
+  const approved = ModuleA.applications.filter(a => a.status === 'approved')
+    .sort((a, b) => a.approvedAt - b.approvedAt);
   $('#ar-tab-review').innerHTML = `
     <div class="card">
-      <div class="card-title">已核准 · 執行媒合 <span class="g-tag">G10–G12</span></div>
-      <div class="card-desc">時間軸最近班次媒合、裝不下順延、當日末班仍不行提醒改期。同步回傳結果（G11）。</div>
+      <div class="card-title">已核准 · 執行媒合 <span class="g-tag">G10–G12/G16</span></div>
+      <div class="card-desc">時間軸最近班次媒合、裝不下順延、當日末班仍不行提醒改期。同步回傳結果（G11）。清單依<b>審核通過時間</b>排序，請由上而下逐張執行（G16）。</div>
       ${approved.length === 0 ? `<div class="empty">尚無已核准待排申請單。</div>` : `
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th></th></tr></thead><tbody>
         ${approved.map(a => { const st = DB.stations.find(s => s.id === a.station);
@@ -735,14 +737,14 @@ function renderBApplyList(p) {
   $('#bq-search').onclick = () => runBQuery();
   $('#bq-new').onclick = () => { bApply.view = 'new'; RENDER.b_apply(); };
   $('#bq-demo').onclick = () => {
-    [['D3', false, 1500, 600, 25], ['D2', false, 1800, 700, 30], ['D6', false, 1200, 500, 20],
-     ['D1', true, 2500, 900, 40], ['D5', false, 2200, 800, 30]].forEach(([site, direct, v, w, h]) =>
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, volume: v, weight: w, handleMin: h }));
+    [['D3', false, 1500, 600, 25, 'BOX'], ['D2', false, 1800, 700, 30, 'PALLET'], ['D6', false, 1200, 500, 20, 'BOX'],
+     ['D1', true, 2500, 900, 40, 'DRUM'], ['D5', false, 2200, 800, 30, 'LONG']].forEach(([site, direct, v, w, h, c]) =>
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, volume: v, weight: w, handleMin: h, category: c }));
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
-    [['D2', true, 2000, 700, 30], ['D3', false, 1200, 500, 20], ['D5', false, 900, 400, 15]].forEach(([site, direct, v, w, h]) =>
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, volume: v, weight: w, handleMin: h }));
+    [['D2', true, 2000, 700, 30, 'BOX'], ['D3', false, 1200, 500, 20, 'FRAG'], ['D5', false, 900, 400, 15, 'BOX']].forEach(([site, direct, v, w, h, c]) =>
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, volume: v, weight: w, handleMin: h, category: c }));
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -807,6 +809,8 @@ function renderBApplyDetail(p, id) {
         <div class="field"><label>路線</label><div>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
+        <div class="field"><label>貨物類別（浪費係數 G03）</label><div>${(DB.wasteFactors.find(f => f.code === o.category) || {}).name || o.category}　係數 ${WasteFactorProvider.get(o.category)}</div></div>
+        <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
         <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
       </div>
@@ -855,6 +859,8 @@ function renderBApplyNew(p) {
         <div class="field"><label>重量 (kg)</label><input type="number" id="ba-wt" value="800"></div>
         <div class="field"><label>裝卸(分)</label><input type="number" id="ba-handle" value="30"></div>
       </div>
+      <div class="field" style="max-width:280px;"><label>貨物類別 <span class="hint">供浪費係數查表 G03</span></label>
+        <select id="ba-cat">${DB.wasteFactors.map(f => `<option value="${f.code}">${f.name}（係數 ${f.factor}）</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待業務審核）</button>
       <button class="btn btn-ghost" id="ba-cancel">取消</button>
     </div>`;
@@ -878,6 +884,7 @@ function renderBApplyNew(p) {
       site: $('#ba-site').value,
       direct: $('#page-b_apply input[value="1"]').checked,
       volume: +$('#ba-vol').value, weight: +$('#ba-wt').value, handleMin: +$('#ba-handle').value,
+      category: $('#ba-cat').value,
     });
     toast(`${o.id} 已送出，等待業務審核`, 'ok');
     bApply.resultIds = null; bApply.view = 'detail'; bApply.detailId = o.id;

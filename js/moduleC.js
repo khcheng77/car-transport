@@ -82,11 +82,17 @@ const ModuleC = {
      occupied：{ veh:Set, drv:Set }，元素為 "id|yyyy-mm-dd"，避免同一車/司機同日重複指派 */
   findResource(app, estStart, estEnd, occupied) {
     const dates = this.tripDates(app);
+    // G59：以「當前位置」而非「歸屬據點」判斷可用性；出發地須對應到車輛/司機目前所在據點
+    const originSite = DB.bizOriginSite[app.origin] || null;
+    const atOrigin = r => !originSite || r.currentSite === originSite;
+
     const bizV = DB.vehicles.filter(v => v.pool === 'BIZ' && v.seats >= app.pax);
     for (const v of bizV) {
+      if (!atOrigin(v)) continue;                                                          // G59 當前位置不符
       if (dates.some(dt => this.isVehicleUnderMaintenance(v.id, dt))) continue;            // G60
       if (occupied && dates.some(dt => occupied.veh.has(v.id + '|' + dt))) continue;        // 已被本批/既有任務佔用
       for (const d of DB.drivers.filter(x => x.pool === 'BIZ')) {
+        if (!atOrigin(d)) continue;                                                        // G59
         if (dates.some(dt => this.driverLeaveOverlap(d.id, dt, estStart, estEnd))) continue; // G61
         if (occupied && dates.some(dt => occupied.drv.has(d.id + '|' + dt))) continue;
         return { vehicle: v, driver: d };
