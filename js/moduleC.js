@@ -69,17 +69,35 @@ const ModuleC = {
     return DB.driverLeaves.some(l => l.driver === dId && l.date === date &&
       startMin < hhmmToMin(l.to) && endMin > hhmmToMin(l.from)); // 時段重疊即不可（G61）
   },
-  /* 找一台可用車 + 司機（商務池）*/
-  findResource(app, estStart, estEnd) {
+  /* 任務佔用的日期範圍（來回單 = 出發日～回程日；單程單 = 出發日）*/
+  tripDates(app) {
+    const out = [];
+    const a = new Date(app.departDate);
+    const b = new Date(app.type === 'round' ? (app.returnDate || app.departDate) : app.departDate);
+    for (let t = new Date(a); t <= b; t.setDate(t.getDate() + 1)) out.push(t.toISOString().slice(0, 10));
+    return out.length ? out : [app.departDate];
+  },
+
+  /* 找一台可用車 + 司機（商務池）
+     occupied：{ veh:Set, drv:Set }，元素為 "id|yyyy-mm-dd"，避免同一車/司機同日重複指派 */
+  findResource(app, estStart, estEnd, occupied) {
+    const dates = this.tripDates(app);
     const bizV = DB.vehicles.filter(v => v.pool === 'BIZ' && v.seats >= app.pax);
     for (const v of bizV) {
-      if (this.isVehicleUnderMaintenance(v.id, app.departDate)) continue; // G60
+      if (dates.some(dt => this.isVehicleUnderMaintenance(v.id, dt))) continue;            // G60
+      if (occupied && dates.some(dt => occupied.veh.has(v.id + '|' + dt))) continue;        // 已被本批/既有任務佔用
       for (const d of DB.drivers.filter(x => x.pool === 'BIZ')) {
-        if (this.driverLeaveOverlap(d.id, app.departDate, estStart, estEnd)) continue; // G61
+        if (dates.some(dt => this.driverLeaveOverlap(d.id, dt, estStart, estEnd))) continue; // G61
+        if (occupied && dates.some(dt => occupied.drv.has(d.id + '|' + dt))) continue;
         return { vehicle: v, driver: d };
       }
     }
     return null;
+  },
+
+  /* 將指派結果登記進 occupied（整趟日期範圍都佔用）*/
+  occupy(occupied, app, vId, dId) {
+    this.tripDates(app).forEach(dt => { occupied.veh.add(vId + '|' + dt); occupied.drv.add(dId + '|' + dt); });
   },
 
   /* ---- 批次媒合引擎（按鈕觸發 G53/G54）---- */
@@ -97,6 +115,12 @@ const ModuleC = {
     // 只處理已核准單；已成功單不重排（G53）
     const targets = this.applications.filter(a => a.status === 'approved' && inRange(a));
     trace.push(`批次 ${batch.id}｜範圍 ${fromDate} 起 7 天內、待處理單 ${targets.length} 筆`);
+
+    // 資源佔用表：先納入既有已媒合任務（含前次批次），避免跨批次/跨群組重複指派同一車/司機
+    const occupied = { veh: new Set(), drv: new Set() };
+    this.applications
+      .filter(a => ['matched', 'boarded', 'completed'].includes(a.status) && a.vehicle && a.driver)
+      .forEach(a => this.occupy(occupied, a, a.vehicle, a.driver));
 
     // 分兩型態，不互相混合（G50）
     const rounds = targets.filter(a => a.type === 'round');
@@ -125,12 +149,13 @@ const ModuleC = {
         group.forEach(b => { this._coordinate(b, batch, trace, '去程或回程預估完成超過工時 20:30'); usedR.add(b.id); });
         continue;
       }
-      // 資源可用性以去程當天時段檢核（示意）
-      const res = this.findResource({ ...a, pax: totalPax }, hhmmToMin(a.earliestPickup), outEnd);
+      // 資源可用性以去程當天時段檢核（示意），並排除已佔用車/司機
+      const res = this.findResource({ ...a, pax: totalPax }, hhmmToMin(a.earliestPickup), outEnd, occupied);
       if (!res) {
-        group.forEach(b => { this._coordinate(b, batch, trace, '無可用車輛/司機（保修或請假）'); usedR.add(b.id); });
+        group.forEach(b => { this._coordinate(b, batch, trace, '無可用車輛/司機（保修/請假/已被指派）'); usedR.add(b.id); });
         continue;
       }
+      this.occupy(occupied, a, res.vehicle.id, res.driver.id); // 登記佔用，後續群組不得重用
       const gid = 'G' + a.id;
       group.forEach(b => {
         b.status = 'matched'; b.vehicle = res.vehicle.id; b.driver = res.driver.id; b.groupId = gid;
@@ -163,8 +188,10 @@ const ModuleC = {
       if (estEnd > this.WORK_END) {
         this._coordinate(a, batch, trace, '含等待後超過工時 20:30'); usedO.add(a.id); continue;
       }
-      const res = this.findResource(a, estStart, estEnd);
-      if (!res) { this._coordinate(a, batch, trace, '無可用車輛/司機'); usedO.add(a.id); continue; }
+      const res = this.findResource(a, estStart, estEnd, occupied);
+      if (!res) { this._coordinate(a, batch, trace, '無可用車輛/司機（已被指派）'); usedO.add(a.id); continue; }
+      this.occupy(occupied, a, res.vehicle.id, res.driver.id);
+      if (back) this.occupy(occupied, back, res.vehicle.id, res.driver.id);
       const gid = 'O' + a.id;
       a.status = 'matched'; a.vehicle = res.vehicle.id; a.driver = res.driver.id; a.groupId = gid;
       usedO.add(a.id); batch.items.push({ app: a.id, result: 'matched', group: gid });
