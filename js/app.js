@@ -53,11 +53,13 @@ const NAV = [
   ] },
   { group: '模組 A · 區域內物流', items: [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
-    { id: 'a_review', ico: '🗂', label: 'A｜排班審核（業務）' },
+    { id: 'a_approve', ico: '✅', label: 'A｜主管准駁（主管）' },
+    { id: 'a_review', ico: '🗂', label: 'A｜排班調度（業務）' },
   ] },
   { group: '模組 B · 南北幹線', items: [
     { id: 'b_apply', ico: '📝', label: 'B｜幹線託運申請（使用者）' },
-    { id: 'b_review', ico: '🚚', label: 'B｜派車審核（業務）' },
+    { id: 'b_approve', ico: '✅', label: 'B｜主管准駁（主管）' },
+    { id: 'b_review', ico: '🚚', label: 'B｜派車調度（業務）' },
   ] },
   { group: '模組 C · 差旅共乘', items: [
     { id: 'c_apply', ico: '📝', label: 'C｜出差用車申請（使用者）' },
@@ -70,9 +72,11 @@ const PAGE_META = {
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · G13/G15/G19' },
-  a_review: { title: '區域內物流 · 排班審核（業務單位）', crumb: '模組 A · 審核/調度端 · G10–G20' },
+  a_approve: { title: '區域內物流 · 主管准駁（直屬主管）', crumb: '模組 A · 主管端 · G63' },
+  a_review: { title: '區域內物流 · 排班調度（業務單位）', crumb: '模組 A · 調度端 · G10–G20' },
   b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
-  b_review: { title: '南北幹線 · 派車審核（業務單位）', crumb: '模組 B · 審核/調度端 · G30–G44' },
+  b_approve: { title: '南北幹線 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
+  b_review: { title: '南北幹線 · 派車調度（業務單位）', crumb: '模組 B · 調度端 · G30–G44' },
   c_apply: { title: '差旅共乘 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55/G56' },
   c_approve: { title: '差旅共乘 · 主管准駁（直屬主管）', crumb: '模組 C · 主管端 · G63' },
   c_review: { title: '差旅共乘 · 媒合調度（業務單位）', crumb: '模組 C · 調度端 · G50–G63' },
@@ -113,9 +117,9 @@ RENDER.dashboard = function () {
     + ModuleC.applications.filter(a => a.status === 'submitted').length;
   p.innerHTML = `
     <div class="section-h">系統儀表板</div>
-    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。使用者「申請端」與業務單位「審核/調度端」分離，三模組各拆兩個單元，共 6 個業務單元。三模組資源池分開，互不搶用。</div>
+    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。依審批流程（G63）將「使用者申請」「主管准駁」「業務審核/調度」三種角色各自獨立，三模組各拆三個單元，共 9 個業務單元。三模組資源池分開，互不搶用。</div>
     <div class="stat-row">
-      <div class="stat"><div class="k">待業務審核（三模組）</div><div class="v accent">${pendReview}</div></div>
+      <div class="stat"><div class="k">待主管准駁（三模組）</div><div class="v accent">${pendReview}</div></div>
       <div class="stat"><div class="k">物流 · 已排班</div><div class="v">${aMatched}</div></div>
       <div class="stat"><div class="k">幹線 · 已裝載</div><div class="v">${bLoaded}</div></div>
       <div class="stat"><div class="k">共乘 · 已媒合</div><div class="v green">${cMatched}</div></div>
@@ -129,10 +133,12 @@ RENDER.dashboard = function () {
 
     <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">業務單元（申請端 ｜ 主管 ｜ 審核/調度端）</div>
     <div class="grid-3">
-      ${unitCard('📝 A｜收貨申請', '使用者填收貨單、查看自己的申請狀態。送出後進入業務審核。', 'a_apply', '申請端')}
-      ${unitCard('🗂 A｜排班審核', '主管准駁、執行時間軸媒合、路線班次、駕駛異常回報。', 'a_review', '審核端')}
+      ${unitCard('📝 A｜收貨申請', '使用者填收貨單、查看自己的申請狀態，接受排班與交貨確認。', 'a_apply', '申請端')}
+      ${unitCard('✅ A｜主管准駁', '直屬主管准駁收貨申請，駁回保留紀錄不進排班池。', 'a_approve', '主管')}
+      ${unitCard('🗂 A｜排班調度', '執行時間軸媒合、已排定車次、路線班次、駕駛異常回報。', 'a_review', '審核端')}
       ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
-      ${unitCard('🚚 B｜派車審核', '主管准駁、貪婪/直達派車決策、調度室模式顯示。', 'b_review', '審核端')}
+      ${unitCard('✅ B｜主管准駁', '直屬主管准駁幹線託運單，駁回保留紀錄不進派車池。', 'b_approve', '主管')}
+      ${unitCard('🚚 B｜派車調度', '貪婪/直達派車決策、回程直達鎖定、決策矩陣、貨況追蹤。', 'b_review', '審核端')}
       ${unitCard('📝 C｜出差用車申請', '使用者填來回/單程用車申請、查看狀態、手動併車找便車。', 'c_apply', '申請端')}
       ${unitCard('✅ C｜主管准駁', '直屬主管准駁出差用車申請，駁回保留紀錄不進排班池。', 'c_approve', '主管')}
       ${unitCard('🔀 C｜媒合調度', '批次媒合、資源檢核、逾期作廢、派車追蹤。', 'c_review', '審核端')}
@@ -505,15 +511,51 @@ function renderAaItems() { renderItemEditor('#aa-items', aaItems, renderAaItems)
 function renderAaList() { if ($('#aq-grid')) renderAGrid(); }
 
 /* ============================================================
-   模組 A · 審核/調度端（業務單位）
+   模組 A · 主管准駁（直屬主管）— 獨立單元
+   ============================================================ */
+RENDER.a_approve = function () {
+  const p = $('#page-a_approve');
+  const submitted = ModuleA.applications.filter(a => a.status === 'submitted');
+  const decided = ModuleA.applications.filter(a => ['approved', 'rejected'].includes(a.status));
+  p.innerHTML = `
+    <div class="section-h">主管准駁（直屬主管）</div>
+    <div class="section-sub">員工填收貨申請後由直屬主管准駁。駁回保留紀錄但不進排班池；核准後才進入業務單位排班媒合。（G63）</div>
+    <div class="card">
+      <div class="card-title">待准駁申請 <span class="g-tag">G63</span></div>
+      ${submitted.length === 0 ? `<div class="empty">目前無待准駁申請單。</div>` : `
+      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="aap-approve-all">✓ 全部核准</button></div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>裝卸</th><th>操作</th></tr></thead><tbody>
+        ${submitted.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
+            <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td><td>${a.handleMin}分</td>
+            <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
+                <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`; }).join('')}
+      </tbody></table></div>`}
+    </div>
+    <div class="card">
+      <div class="card-title">已處理紀錄</div>
+      ${decided.length === 0 ? `<div class="muted">尚無已准駁紀錄。</div>` : `
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>准駁結果</th></tr></thead><tbody>
+        ${decided.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td><td>${stBadge(a.status)}</td></tr>`; }).join('')}
+      </tbody></table></div>`}
+    </div>`;
+  const all = $('#aap-approve-all');
+  if (all) all.onclick = () => { submitted.forEach(a => ModuleA.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.a_approve(); renderAaList(); };
+  $$('#page-a_approve [data-ap]').forEach(b => b.onclick = () => { ModuleA.approve(ModuleA.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.a_approve(); renderAaList(); });
+  $$('#page-a_approve [data-rj]').forEach(b => b.onclick = () => { ModuleA.reject(ModuleA.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.a_approve(); renderAaList(); });
+};
+
+/* ============================================================
+   模組 A · 排班調度（業務單位）— 執行媒合 / 路線班次 / 異常回報
    ============================================================ */
 RENDER.a_review = function () {
   const p = $('#page-a_review');
   p.innerHTML = `
-    <div class="section-h">排班審核（業務單位）</div>
-    <div class="section-sub">主管准駁 → 執行時間軸最近班次媒合 → 路線班次維護、駕駛異常回報。兩層審批（G63）。</div>
+    <div class="section-h">排班調度（業務單位）</div>
+    <div class="section-sub">對已核准申請執行時間軸最近班次媒合、路線班次維護、駕駛異常回報。主管准駁為獨立單元。</div>
     <div class="pill-tabs">
-      <div class="pill-tab active" data-tab="review">① 審核與排班</div>
+      <div class="pill-tab active" data-tab="review">① 排班媒合</div>
       <div class="pill-tab" data-tab="route">② 路線與班次</div>
       <div class="pill-tab" data-tab="incident">③ 駕駛異常回報</div>
     </div>
@@ -527,21 +569,8 @@ RENDER.a_review = function () {
   renderAr_review(); renderA_route(); renderA_incident();
 };
 function renderAr_review() {
-  const submitted = ModuleA.applications.filter(a => a.status === 'submitted');
   const approved = ModuleA.applications.filter(a => a.status === 'approved');
   $('#ar-tab-review').innerHTML = `
-    <div class="card">
-      <div class="card-title">待審核（主管准駁）<span class="g-tag">G63</span></div>
-      ${submitted.length === 0 ? `<div class="empty">目前無待審核申請單。</div>` : `
-      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="ar-approve-all">✓ 全部核准</button></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>裝卸</th><th>操作</th></tr></thead><tbody>
-        ${submitted.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td>
-            <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td><td>${a.handleMin}分</td>
-            <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
-                <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`; }).join('')}
-      </tbody></table></div>`}
-    </div>
     <div class="card">
       <div class="card-title">已核准 · 執行媒合 <span class="g-tag">G10–G12</span></div>
       <div class="card-desc">時間軸最近班次媒合、裝不下順延、當日末班仍不行提醒改期。同步回傳結果（G11）。</div>
@@ -555,10 +584,6 @@ function renderAr_review() {
       <div id="ar-match-result"></div>
     </div>
     ${renderAr_scheduled()}`;
-  const all = $('#ar-approve-all');
-  if (all) all.onclick = () => { submitted.forEach(a => ModuleA.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderAr_review(); renderAaList(); };
-  $$('#ar-tab-review [data-ap]').forEach(b => b.onclick = () => { ModuleA.approve(ModuleA.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderAr_review(); });
-  $$('#ar-tab-review [data-rj]').forEach(b => b.onclick = () => { ModuleA.reject(ModuleA.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); renderAr_review(); });
   $$('#ar-tab-review [data-match]').forEach(b => b.onclick = () => {
     const app = ModuleA.applications.find(a => a.id === b.dataset.match);
     const r = ModuleA.match(app);
@@ -863,17 +888,50 @@ function renderBApplyNew(p) {
 function renderBaList() { if ($('#bq-grid')) renderBGrid(); }
 
 /* ============================================================
-   模組 B · 審核/調度端（業務單位）
+   模組 B · 主管准駁（直屬主管）— 獨立單元
+   ============================================================ */
+RENDER.b_approve = function () {
+  const p = $('#page-b_approve');
+  const submitted = ModuleB.orders.filter(o => o.status === 'submitted');
+  const decided = ModuleB.orders.filter(o => ['approved', 'rejected'].includes(o.status));
+  p.innerHTML = `
+    <div class="section-h">主管准駁（直屬主管）</div>
+    <div class="section-sub">員工建立幹線託運單後由直屬主管准駁。駁回保留紀錄但不進派車池；核准後才進入業務單位派車調度。（G63）</div>
+    <div class="card">
+      <div class="card-title">待准駁託運單 <span class="g-tag">G63</span></div>
+      ${submitted.length === 0 ? `<div class="empty">目前無待准駁託運單。</div>` : `
+      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="bap-approve-all">✓ 全部核准</button></div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>操作</th></tr></thead><tbody>
+        ${submitted.map(o => `<tr><td>${o.id}</td><td>${o.applicant}</td>
+          <td>${o.leg === 'return' ? '回程' : '去程'}</td>
+          <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
+          <td>${o.direct ? '直達' : '非直達'}</td><td>${o.volume}L</td>
+          <td><button class="btn btn-primary btn-sm" data-ap="${o.id}">核准</button>
+              <button class="btn btn-ghost btn-sm" data-rj="${o.id}">駁回</button></td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>
+    <div class="card">
+      <div class="card-title">已處理紀錄</div>
+      ${decided.length === 0 ? `<div class="muted">尚無已准駁紀錄。</div>` : `
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>准駁結果</th></tr></thead><tbody>
+        ${decided.map(o => `<tr><td>${o.id}</td><td>${o.applicant}</td>
+          <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td><td>${stBadge(o.status)}</td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>`;
+  const all = $('#bap-approve-all');
+  if (all) all.onclick = () => { submitted.forEach(o => ModuleB.approve(o)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); };
+  $$('#page-b_approve [data-ap]').forEach(b => b.onclick = () => { ModuleB.approve(ModuleB.orders.find(o => o.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); });
+  $$('#page-b_approve [data-rj]').forEach(b => b.onclick = () => { ModuleB.reject(ModuleB.orders.find(o => o.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.b_approve(); renderBaList(); });
+};
+
+/* ============================================================
+   模組 B · 派車調度（業務單位）— 派車決策 / 決策矩陣 / 貨況追蹤
    ============================================================ */
 RENDER.b_review = function () {
   const p = $('#page-b_review');
   p.innerHTML = `
-    <div class="section-h">派車審核（業務單位）</div>
-    <div class="section-sub">主管准駁 → 依核准時間排序派車。貪婪終點判斷 / 直達獨立派車、調度室顯示派遣模式與觸發原因。</div>
-    <div class="card">
-      <div class="card-title">待審核（主管准駁）<span class="g-tag">G63</span></div>
-      <div id="br-review"></div>
-    </div>
+    <div class="section-h">派車調度（業務單位）</div>
+    <div class="section-sub">對已核准託運單依核准時間排序派車：貪婪終點判斷 / 直達獨立派車 / 回程全域直達鎖定，並顯示派遣模式與觸發原因。主管准駁為獨立單元。</div>
     <div class="card">
       <div class="card-title">派車決策（調度室）<span class="g-tag">G32/G40/G44</span></div>
       <div class="card-desc">僅對已核准託運單派車，依核准時間排序逐張檢查。系統顯示每台車派遣模式與觸發原因。</div>
@@ -896,7 +954,7 @@ RENDER.b_review = function () {
   $('#br-dispatch-greedy').onclick = () => dispatchB('greedy');
   $('#br-dispatch-return').onclick = () => dispatchBReturn(false);
   $('#br-dispatch-return-direct').onclick = () => dispatchBReturn(true);
-  renderBr_review(); renderBr_approved(); renderBr_tracking();
+  renderBr_approved(); renderBr_tracking();
 };
 // 3.7 四／五模式決策矩陣（G44 顯示，供調度員覆核）
 function renderB_matrix(activeRow) {
@@ -944,23 +1002,6 @@ function renderBr_tracking() {
     renderBr_tracking(); renderBaList();
   });
 };
-function renderBr_review() {
-  const submitted = ModuleB.orders.filter(o => o.status === 'submitted');
-  $('#br-review').innerHTML = submitted.length === 0 ? `<div class="empty">目前無待審核託運單。</div>` : `
-    <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="br-approve-all">✓ 全部核准</button></div>
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>操作</th></tr></thead><tbody>
-      ${submitted.map(o => `<tr><td>${o.id}</td><td>${o.applicant}</td>
-        <td>${o.leg === 'return' ? '回程' : '去程'}</td>
-        <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
-        <td>${o.direct ? '直達' : '非直達'}</td><td>${o.volume}L</td>
-        <td><button class="btn btn-primary btn-sm" data-ap="${o.id}">核准</button>
-            <button class="btn btn-ghost btn-sm" data-rj="${o.id}">駁回</button></td></tr>`).join('')}
-    </tbody></table></div>`;
-  const all = $('#br-approve-all');
-  if (all) all.onclick = () => { submitted.forEach(o => ModuleB.approve(o)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderBr_review(); renderBr_approved(); renderBaList(); };
-  $$('#br-review [data-ap]').forEach(b => b.onclick = () => { ModuleB.approve(ModuleB.orders.find(o => o.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderBr_review(); renderBr_approved(); });
-  $$('#br-review [data-rj]').forEach(b => b.onclick = () => { ModuleB.reject(ModuleB.orders.find(o => o.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); renderBr_review(); });
-}
 function renderBr_approved() {
   if (!$('#br-approved')) return;
   const rows = ModuleB.orders.filter(o => o.status === 'approved');
