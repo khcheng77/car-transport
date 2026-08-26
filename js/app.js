@@ -61,7 +61,8 @@ const NAV = [
   ] },
   { group: '模組 C · 差旅共乘', items: [
     { id: 'c_apply', ico: '📝', label: 'C｜出差用車申請（使用者）' },
-    { id: 'c_review', ico: '🔀', label: 'C｜媒合審核（業務）' },
+    { id: 'c_approve', ico: '✅', label: 'C｜主管准駁（主管）' },
+    { id: 'c_review', ico: '🔀', label: 'C｜媒合調度（業務）' },
   ] },
 ];
 const PAGE_META = {
@@ -72,8 +73,9 @@ const PAGE_META = {
   a_review: { title: '區域內物流 · 排班審核（業務單位）', crumb: '模組 A · 審核/調度端 · G10–G20' },
   b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
   b_review: { title: '南北幹線 · 派車審核（業務單位）', crumb: '模組 B · 審核/調度端 · G30–G44' },
-  c_apply: { title: '差旅共乘 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55' },
-  c_review: { title: '差旅共乘 · 媒合審核（業務單位）', crumb: '模組 C · 審核/調度端 · G50–G63' },
+  c_apply: { title: '差旅共乘 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55/G56' },
+  c_approve: { title: '差旅共乘 · 主管准駁（直屬主管）', crumb: '模組 C · 主管端 · G63' },
+  c_review: { title: '差旅共乘 · 媒合調度（業務單位）', crumb: '模組 C · 調度端 · G50–G63' },
 };
 
 function buildNav() {
@@ -125,14 +127,15 @@ RENDER.dashboard = function () {
       ${dashCard('▦ 主檔資料', '據點/站點/車輛/司機/浪費係數/保修/請假等示範主檔。', 'master', 'Phase 0')}
     </div>
 
-    <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">六個業務單元（申請端 ｜ 審核端）</div>
+    <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">業務單元（申請端 ｜ 主管 ｜ 審核/調度端）</div>
     <div class="grid-3">
       ${unitCard('📝 A｜收貨申請', '使用者填收貨單、查看自己的申請狀態。送出後進入業務審核。', 'a_apply', '申請端')}
       ${unitCard('🗂 A｜排班審核', '主管准駁、執行時間軸媒合、路線班次、駕駛異常回報。', 'a_review', '審核端')}
       ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
       ${unitCard('🚚 B｜派車審核', '主管准駁、貪婪/直達派車決策、調度室模式顯示。', 'b_review', '審核端')}
-      ${unitCard('📝 C｜出差用車申請', '使用者填來回/單程用車申請、查看狀態。', 'c_apply', '申請端')}
-      ${unitCard('🔀 C｜媒合審核', '主管准駁、批次媒合、資源檢核、手動併車、逾期作廢。', 'c_review', '審核端')}
+      ${unitCard('📝 C｜出差用車申請', '使用者填來回/單程用車申請、查看狀態、手動併車找便車。', 'c_apply', '申請端')}
+      ${unitCard('✅ C｜主管准駁', '直屬主管准駁出差用車申請，駁回保留紀錄不進排班池。', 'c_approve', '主管')}
+      ${unitCard('🔀 C｜媒合調度', '批次媒合、資源檢核、逾期作廢、派車追蹤。', 'c_review', '審核端')}
     </div>
 
     <div class="callout info" style="margin-top:22px;">
@@ -147,7 +150,9 @@ function dashCard(title, desc, go, gtag) {
     <div class="card-desc" style="margin-bottom:0;">${desc}</div></div>`;
 }
 function unitCard(title, desc, go, side) {
-  const badge = side === '申請端' ? '<span class="badge b-navy">申請端</span>' : '<span class="badge b-amber">審核端</span>';
+  const badge = side === '申請端' ? '<span class="badge b-navy">申請端</span>'
+    : side === '主管' ? '<span class="badge b-green">主管</span>'
+    : '<span class="badge b-amber">審核端</span>';
   return `<div class="card" data-go="${go}" style="cursor:pointer;">
     <div class="card-title" style="justify-content:space-between;">${title} ${badge}</div>
     <div class="card-desc" style="margin-bottom:0;">${desc}</div></div>`;
@@ -1150,12 +1155,37 @@ function renderCApplyDetail(p, id) {
         <div class="field"><label>備註</label><div>${a.note || '—'}</div></div>
       </div>
       ${action ? `<div class="divider"></div><div><b>乘客操作：</b> ${action}</div>` : ''}
-    </div>`;
+    </div>
+    ${['approved', 'coordinate', 'manual'].includes(a.status) ? `
+    <div class="card">
+      <div class="card-title">手動併車（找便車）<span class="g-tag">G56</span></div>
+      <div class="card-desc">自動媒合未成時，您可自行向「已確定有車」的單搭便車。候選＝出發日期前後 1 天、已派車的單（不篩目的地、不比時間）。聯繫對方後按「完成合併」即成立，免調度室確認。</div>
+      <button class="btn btn-primary btn-sm" id="cd-find">🔍 列出候選便車</button>
+      <div id="cd-candidates"></div>
+    </div>` : ''}`;
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   const brd = $('#page-c_apply [data-board]');
   if (brd) brd.onclick = () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); };
   const dn = $('#page-c_apply [data-done]');
   if (dn) dn.onclick = () => { ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); };
+  const find = $('#cd-find');
+  if (find) find.onclick = () => {
+    const cands = ModuleC.manualCandidates(a);
+    if (cands.length === 0) { $('#cd-candidates').innerHTML = `<div class="callout" style="margin-top:12px;">出發日期前後 1 天內查無已派車的候選單。</div>`; return; }
+    $('#cd-candidates').innerHTML = `
+      <div class="callout info" style="margin-top:12px;">為 <b>${a.id}</b>（${a.origin}→${a.dest}）尋找便車，需要 ${a.pax} 個空位。不顯示私人手機。</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>候選單</th><th>目的地</th><th>出發/最晚抵達</th><th>申請人 部門/分機</th><th>已載/剩餘</th><th></th></tr></thead><tbody>
+        ${cands.map(c => `<tr><td>${c.app.id}</td><td>${c.dest}</td><td>${c.depart} / ${c.latest}</td>
+          <td>${c.applicant}（${c.dept}/${c.ext}）</td><td>${c.loaded} / 剩 ${c.remain}</td>
+          <td><button class="btn btn-primary btn-sm" data-merge="${c.app.id}" ${c.remain < a.pax ? 'disabled' : ''}>完成合併</button></td></tr>`).join('')}
+      </tbody></table></div>`;
+    $$('#cd-candidates [data-merge]').forEach(b => b.onclick = () => {
+      const target = ModuleC.applications.find(x => x.id === b.dataset.merge);
+      ModuleC.doManualMerge(a, target);
+      toast(`${a.id} 已搭 ${target.id} 便車，合併成立`, 'ok');
+      RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track();
+    });
+  };
 }
 
 /* ---------- 新增畫面 ---------- */
@@ -1242,31 +1272,64 @@ function loadCDemo() {
 function renderCaList() { if ($('#cq-grid')) renderCGrid(); }
 
 /* ============================================================
-   模組 C · 審核/調度端（業務單位）
+   模組 C · 主管准駁（直屬主管）— 獨立單元
+   ============================================================ */
+RENDER.c_approve = function () {
+  const p = $('#page-c_approve');
+  const submitted = ModuleC.applications.filter(a => a.status === 'submitted');
+  const decided = ModuleC.applications.filter(a => ['approved', 'rejected'].includes(a.status));
+  p.innerHTML = `
+    <div class="section-h">主管准駁（直屬主管）</div>
+    <div class="section-sub">員工填單後由直屬主管審核出差用車本身的准駁。駁回保留紀錄但不進排班池；核准後才進入業務單位的批次媒合。（G63）</div>
+    <div class="card">
+      <div class="card-title">待准駁申請 <span class="g-tag">G63</span></div>
+      ${submitted.length === 0 ? `<div class="empty">目前無待准駁申請單。</div>` : `
+      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="cap-approve-all">✓ 全部核准</button></div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>操作</th></tr></thead><tbody>
+        ${submitted.map(a => `<tr><td>${a.id}</td><td>${a.applicant}（${a.dept}）</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
+          <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
+          <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '—'}</td><td>${a.pax}</td>
+          <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
+              <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>
+    <div class="card">
+      <div class="card-title">已處理紀錄</div>
+      ${decided.length === 0 ? `<div class="muted">尚無已准駁紀錄。</div>` : `
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>准駁結果</th></tr></thead><tbody>
+        ${decided.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td><td>${stBadge(a.status, 'C')}</td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>`;
+  const all = $('#cap-approve-all');
+  if (all) all.onclick = () => { submitted.forEach(a => ModuleC.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.c_approve(); renderCaList(); };
+  $$('#page-c_approve [data-ap]').forEach(b => b.onclick = () => { ModuleC.approve(ModuleC.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.c_approve(); renderCaList(); });
+  $$('#page-c_approve [data-rj]').forEach(b => b.onclick = () => { ModuleC.reject(ModuleC.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.c_approve(); renderCaList(); });
+};
+
+/* ============================================================
+   模組 C · 媒合調度（業務單位）— 批次媒合 / 逾期作廢 / 派車追蹤
    ============================================================ */
 RENDER.c_review = function () {
   const p = $('#page-c_review');
   p.innerHTML = `
-    <div class="section-h">媒合審核（業務單位）</div>
-    <div class="section-sub">主管准駁 → 批次媒合（未來 7 天）→ 資源檢核、手動併車、逾期作廢。</div>
+    <div class="section-h">媒合調度（業務單位）</div>
+    <div class="section-sub">對已核准申請執行批次媒合（未來 7 天）、資源檢核、逾期作廢與派車追蹤。手動併車由申請人於申請端自行處理、主管准駁為獨立單元。</div>
     <div class="pill-tabs">
-      <div class="pill-tab active" data-tab="review">① 主管准駁</div>
-      <div class="pill-tab" data-tab="batch">② 批次媒合</div>
-      <div class="pill-tab" data-tab="manual">③ 手動併車 / 作廢</div>
-      <div class="pill-tab" data-tab="track">④ 派車追蹤</div>
+      <div class="pill-tab active" data-tab="batch">① 批次媒合</div>
+      <div class="pill-tab" data-tab="void">② 逾期作廢</div>
+      <div class="pill-tab" data-tab="track">③ 派車追蹤</div>
     </div>
-    <div id="cr-tab-review"></div>
-    <div id="cr-tab-batch" style="display:none;"></div>
-    <div id="cr-tab-manual" style="display:none;"></div>
+    <div id="cr-tab-batch"></div>
+    <div id="cr-tab-void" style="display:none;"></div>
     <div id="cr-tab-track" style="display:none;"></div>`;
   $$('#page-c_review .pill-tab').forEach(t => t.onclick = () => {
     $$('#page-c_review .pill-tab').forEach(x => x.classList.toggle('active', x === t));
-    ['review', 'batch', 'manual', 'track'].forEach(k => $('#cr-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
+    ['batch', 'void', 'track'].forEach(k => $('#cr-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
     if (t.dataset.tab === 'batch') renderCr_batch();
-    if (t.dataset.tab === 'manual') renderCr_manual();
+    if (t.dataset.tab === 'void') renderCr_void();
     if (t.dataset.tab === 'track') renderCr_track();
   });
-  renderCr_review(); renderCr_batch(); renderCr_manual(); renderCr_track();
+  renderCr_batch(); renderCr_void(); renderCr_track();
 };
 // 派車追蹤：被安排的車次 · 司機 · 乘客上車/行程完成
 function renderCr_track() {
@@ -1300,26 +1363,6 @@ function renderCr_track() {
     ModuleC.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok');
     renderCr_track(); renderCaList();
   });
-}
-function renderCr_review() {
-  const submitted = ModuleC.applications.filter(a => a.status === 'submitted');
-  $('#cr-tab-review').innerHTML = `
-    <div class="card">
-      <div class="card-title">待審核（主管准駁）<span class="g-tag">G63</span></div>
-      <div class="card-desc">駁回保留紀錄但不進排班池。核准後才進入批次媒合範圍。</div>
-      ${submitted.length === 0 ? `<div class="empty">目前無待審核申請單。</div>` : `
-      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="cr-approve-all">✓ 全部核准</button></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>日期/上車</th><th>操作</th></tr></thead><tbody>
-        ${submitted.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
-          <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
-          <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
-              <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`).join('')}
-      </tbody></table></div>`}
-    </div>`;
-  const all = $('#cr-approve-all');
-  if (all) all.onclick = () => { submitted.forEach(a => ModuleC.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); renderCr_review(); renderCaList(); };
-  $$('#cr-tab-review [data-ap]').forEach(b => b.onclick = () => { ModuleC.approve(ModuleC.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); renderCr_review(); });
-  $$('#cr-tab-review [data-rj]').forEach(b => b.onclick = () => { ModuleC.reject(ModuleC.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); renderCr_review(); });
 }
 function renderCr_batch() {
   const approved = ModuleC.applications.filter(a => a.status === 'approved').length;
@@ -1359,47 +1402,23 @@ function renderCr_batch() {
     toast(`批次 ${batch.id} 完成`, 'ok'); renderCaList(); renderCr_track();
   };
 }
-function renderCr_manual() {
-  const active = ModuleC.applications.filter(a => ['approved', 'coordinate', 'manual'].includes(a.status));
-  $('#cr-tab-manual').innerHTML = `
-    <div class="card">
-      <div class="card-title">手動併車 <span class="g-tag">G56</span></div>
-      <div class="card-desc">向已確定有車的單搭便車。候選＝出發日期前後 1 天、已派車的單（不篩目的地、不比時間）。按「完成合併」即成立，免調度室確認。</div>
-      ${active.length === 0 ? `<div class="empty">無待併車申請單。先核准並執行批次媒合。</div>` : `
-      <div class="field" style="max-width:360px;"><label>選擇要搭便車的申請單</label>
-        <select id="cr-manual-src">${active.map(a => `<option value="${a.id}">${a.id}｜${a.origin}→${a.dest}｜${statusText(a.status)}</option>`).join('')}</select></div>
-      <button class="btn btn-primary btn-sm" id="cr-show-candidates">列出候選車輛</button>
-      <div id="cr-candidates"></div>`}
-    </div>
+// 逾期自動作廢（調度端監控；手動併車已移至申請端）
+function renderCr_void() {
+  if (!$('#cr-tab-void')) return;
+  // 尚未上車成局、可能逾期的單：已核准未媒合 / 待人工協調 / 已媒合待上車
+  const active = ModuleC.applications.filter(a => ['approved', 'coordinate', 'matched'].includes(a.status));
+  $('#cr-tab-void').innerHTML = `
     <div class="card">
       <div class="card-title">逾期自動作廢 <span class="g-tag">G57</span></div>
-      <div class="card-desc">到出發時間仍未成功 → 自動作廢、通知申請人、紀錄保留供統計、不轉待人工協調。（此處以按鈕模擬逾期）</div>
+      <div class="card-desc">到出發時間仍未成功 → 自動作廢、通知申請人、紀錄保留供統計、不轉待人工協調。（此處以按鈕模擬逾期）手動併車由申請人於申請端自行處理。</div>
       ${active.length === 0 ? `<div class="empty">無可作廢單</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>路線</th><th>狀態</th><th>操作</th></tr></thead><tbody>
-        ${active.map(a => `<tr><td>${a.id}</td><td>${a.origin}→${a.dest}</td><td>${stBadge(a.status)}</td>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>去程</th><th>狀態</th><th>操作</th></tr></thead><tbody>
+        ${active.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td>
+          <td>${a.departDate.slice(5)} ${a.earliestPickup}</td><td>${stBadge(a.status, 'C')}</td>
           <td><button class="btn btn-danger btn-sm" data-void="${a.id}">模擬逾期作廢</button></td></tr>`).join('')}
       </tbody></table></div>`}
     </div>`;
-  const showBtn = $('#cr-show-candidates');
-  if (showBtn) showBtn.onclick = () => {
-    const src = ModuleC.applications.find(a => a.id === $('#cr-manual-src').value);
-    const cands = ModuleC.manualCandidates(src);
-    if (cands.length === 0) { $('#cr-candidates').innerHTML = `<div class="callout">前後 1 天內查無已派車的候選單。</div>`; return; }
-    $('#cr-candidates').innerHTML = `
-      <div class="callout info" style="margin-top:12px;">為 <b>${src.id}</b>（${src.origin}→${src.dest}）尋找便車。不顯示私人手機。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>候選單</th><th>目的地</th><th>出發/最晚抵達</th><th>申請人 部門/分機</th><th>已載/剩餘</th><th></th></tr></thead><tbody>
-        ${cands.map(c => `<tr><td>${c.app.id}</td><td>${c.dest}</td><td>${c.depart} / ${c.latest}</td>
-          <td>${c.applicant}（${c.dept}/${c.ext}）</td><td>${c.loaded} / 剩 ${c.remain}</td>
-          <td><button class="btn btn-primary btn-sm" data-merge="${c.app.id}" ${c.remain < src.pax ? 'disabled' : ''}>完成合併</button></td></tr>`).join('')}
-      </tbody></table></div>`;
-    $$('#cr-candidates [data-merge]').forEach(b => b.onclick = () => {
-      const target = ModuleC.applications.find(a => a.id === b.dataset.merge);
-      ModuleC.doManualMerge(src, target);
-      toast(`${src.id} 已搭 ${target.id} 便車，合併成立`, 'ok');
-      renderCr_manual(); renderCaList();
-    });
-  };
-  $$('#cr-tab-manual [data-void]').forEach(b => b.onclick = () => {
+  $$('#cr-tab-void [data-void]').forEach(b => b.onclick = () => {
     const a = ModuleC.applications.find(x => x.id === b.dataset.void);
     const r = ModuleC.voidOverdue(a);
     openModal('逾期自動作廢（示意）', `
@@ -1407,7 +1426,7 @@ function renderCr_manual() {
         <div>系統已通知申請人：<b>${r.notified}</b></div></div>
       <div class="callout" style="margin-top:12px;">紀錄保留供媒合失敗率統計（G57），不轉待人工協調。作廢即最終結局。</div>`);
     toast(`${a.id} 逾期作廢並通知申請人`, 'err');
-    renderCr_manual(); renderCaList();
+    renderCr_void(); renderCaList();
   });
 }
 function statusText(s) {
