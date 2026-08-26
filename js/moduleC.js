@@ -30,6 +30,7 @@ const ModuleC = {
       vehicle: null, driver: null,
       groupId: null,
       note: '',
+      createdAt: new Date(),
     };
     this.applications.push(app);
     return app;

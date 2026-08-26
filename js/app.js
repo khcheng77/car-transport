@@ -653,42 +653,180 @@ function renderA_incident() {
 /* ============================================================
    模組 B · 申請端（使用者）
    ============================================================ */
+let bApply = { view: 'list', detailId: null, query: { applicant: '', leg: '', site: '', status: '', direct: '' }, resultIds: null };
+
 RENDER.b_apply = function () {
   const p = $('#page-b_apply');
-  const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if (bApply.view === 'new') return renderBApplyNew(p);
+  if (bApply.view === 'detail') return renderBApplyDetail(p, bApply.detailId);
+  return renderBApplyList(p);
+};
+
+/* ---------- 查詢畫面 ---------- */
+function renderBApplyList(p) {
+  const q = bApply.query;
+  const siteOpts = ['<option value="">全部據點</option>'].concat(
+    DB.sites.map(s => `<option value="${s.id}" ${q.site === s.id ? 'selected' : ''}>${s.name}</option>`)).join('');
+  const legOpts = [['', '全部方向'], ['outbound', '去程'], ['return', '回程']]
+    .map(([v, t]) => `<option value="${v}" ${q.leg === v ? 'selected' : ''}>${t}</option>`).join('');
+  const dirOpts = [['', '全部型態'], ['1', '直達'], ['0', '非直達']]
+    .map(([v, t]) => `<option value="${v}" ${q.direct === v ? 'selected' : ''}>${t}</option>`).join('');
+  const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准待排'], ['loaded', '已派車待接受'],
+    ['accepted', '已接受待交貨'], ['delivered', '已交貨'], ['rejected', '已駁回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">幹線託運申請（使用者）</div>
-    <div class="section-sub">去程＝台北據點（D10）南下；回程＝南部據點北上回 D10。勾選直達 → 業務審核後，當天有直達即獨立派車。送出後狀態為「待審核」。</div>
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
-        <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
-        <div class="field"><label>行程方向</label>
-          <div class="radio-group">
-            <label class="radio-pill sel" id="ba-out"><input type="radio" name="ba-leg" value="outbound" checked>去程（南下）</label>
-            <label class="radio-pill" id="ba-ret"><input type="radio" name="ba-leg" value="return">回程（北上回 D10）</label>
-          </div>
-        </div>
-        <div class="field"><label id="ba-site-label">目的地據點</label><select id="ba-site">${siteOpts}</select></div>
-        <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
-          <div class="radio-group">
-            <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
-            <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
-          </div>
-        </div>
-        <div class="row">
-          <div class="field"><label>貨量 (L)</label><input type="number" id="ba-vol" value="2000"></div>
-          <div class="field"><label>重量 (kg)</label><input type="number" id="ba-wt" value="800"></div>
-          <div class="field"><label>裝卸(分)</label><input type="number" id="ba-handle" value="30"></div>
-        </div>
-        <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待業務審核）</button>
-        <button class="btn btn-ghost" id="ba-demo">載入去程範例</button>
-        <button class="btn btn-ghost" id="ba-demo-ret">載入回程範例</button>
+    <div class="section-sub">先查詢歷史託運紀錄，點擊任一筆可檢視明細；或按「新增」建立新的幹線託運單。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <span>
+          <button class="btn btn-primary btn-sm" id="bq-search">🔍 查詢</button>
+          <button class="btn btn-accent btn-sm" id="bq-new">＋ 新增</button>
+        </span>
       </div>
-      <div class="card">
-        <div class="card-title">我的託運單</div>
-        <div id="ba-list"></div>
+      <div class="grid-2">
+        <div class="field"><label>申請人（模糊）</label><input type="text" id="bq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
+        <div class="field"><label>行程方向</label><select id="bq-leg">${legOpts}</select></div>
+        <div class="field"><label>據點</label><select id="bq-site">${siteOpts}</select></div>
+        <div class="field"><label>派送型態</label><select id="bq-direct">${dirOpts}</select></div>
+        <div class="field"><label>狀態</label><select id="bq-status">${statusOpts}</select></div>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史託運紀錄</span>
+        <span><span class="muted" id="bq-count"></span>
+          <button class="btn btn-ghost btn-sm" id="bq-demo" style="margin-left:10px;">載入去程範例</button>
+          <button class="btn btn-ghost btn-sm" id="bq-demo-ret">載入回程範例</button></span>
+      </div>
+      <div id="bq-grid"></div>
+    </div>`;
+  $('#bq-search').onclick = () => runBQuery();
+  $('#bq-new').onclick = () => { bApply.view = 'new'; RENDER.b_apply(); };
+  $('#bq-demo').onclick = () => {
+    [['D3', false, 1500, 600, 25], ['D2', false, 1800, 700, 30], ['D6', false, 1200, 500, 20],
+     ['D1', true, 2500, 900, 40], ['D5', false, 2200, 800, 30]].forEach(([site, direct, v, w, h]) =>
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, volume: v, weight: w, handleMin: h }));
+    bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
+  };
+  $('#bq-demo-ret').onclick = () => {
+    [['D2', true, 2000, 700, 30], ['D3', false, 1200, 500, 20], ['D5', false, 900, 400, 15]].forEach(([site, direct, v, w, h]) =>
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, volume: v, weight: w, handleMin: h }));
+    bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
+  };
+  renderBGrid();
+}
+function runBQuery() {
+  bApply.query = {
+    applicant: $('#bq-applicant').value.trim(), leg: $('#bq-leg').value,
+    site: $('#bq-site').value, direct: $('#bq-direct').value, status: $('#bq-status').value,
+  };
+  const q = bApply.query;
+  const res = ModuleB.orders.filter(o =>
+    (!q.applicant || o.applicant.includes(q.applicant)) &&
+    (!q.leg || o.leg === q.leg) &&
+    (!q.site || o.origin === q.site || o.dest === q.site) &&
+    (!q.direct || String(o.direct ? 1 : 0) === q.direct) &&
+    (!q.status || o.status === q.status));
+  bApply.resultIds = res.map(o => o.id);
+  renderBGrid();
+  toast(`查詢完成，共 ${res.length} 筆`, 'ok');
+}
+function renderBGrid() {
+  if (!$('#bq-grid')) return;
+  const rows = bApply.resultIds == null ? ModuleB.orders
+    : bApply.resultIds.map(id => ModuleB.orders.find(o => o.id === id)).filter(Boolean);
+  $('#bq-count').textContent = `${rows.length} 筆`;
+  $('#bq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的託運紀錄</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      ${rows.map(o => `<tr data-detail="${o.id}" style="cursor:pointer;">
+        <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
+        <td>${o.leg === 'return' ? '<span class="badge b-gray">回程</span>' : '<span class="badge b-navy">去程</span>'}</td>
+        <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
+        <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
+        <td>${o.volume}L</td><td>${stBadge(o.status)}</td><td class="muted">${fmtTime(o.createdAt)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至託運單明細。</div>`;
+  $$('#bq-grid [data-detail]').forEach(tr => tr.onclick = () => {
+    bApply.detailId = tr.dataset.detail; bApply.view = 'detail'; RENDER.b_apply();
+  });
+}
+
+/* ---------- 明細畫面 ---------- */
+function renderBApplyDetail(p, id) {
+  const o = ModuleB.orders.find(x => x.id === id);
+  if (!o) { bApply.view = 'list'; return RENDER.b_apply(); }
+  const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
+  let action = '';
+  if (o.status === 'loaded') action = `<button class="btn btn-primary" data-baccept="${o.id}">確認接受</button>`;
+  else if (o.status === 'accepted') action = `<button class="btn btn-accent" data-brecv="${o.id}">確認已收到貨</button>`;
+  else if (o.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
+  p.innerHTML = `
+    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="bd-back">← 返回查詢</button>
+      幹線託運單明細 · ${o.id}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
+      <div class="grid-2">
+        <div class="field"><label>單號</label><div>${o.id}</div></div>
+        <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
+        <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
+        <div class="field"><label>路線</label><div>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</div></div>
+        <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
+        <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
+        <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
+        <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">派車與交貨狀態</div>
+      <div class="grid-2">
+        <div class="field"><label>派遣模式</label><div>${o.dispatchMode ? (o.dispatchMode === '直達' ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>') : '<span class="muted">尚未派車</span>'}</div></div>
+        <div class="field"><label>指派車輛</label><div>${veh ? veh.name : '—'}</div></div>
+      </div>
+      ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
+    </div>`;
+  $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
+  const acc = $('#page-b_apply [data-baccept]');
+  if (acc) acc.onclick = () => { ModuleB.acceptDelivery(o); toast(`${o.id} 已確認接受`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); };
+  const rcv = $('#page-b_apply [data-brecv]');
+  if (rcv) rcv.onclick = () => { ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); };
+}
+
+/* ---------- 新增畫面 ---------- */
+function renderBApplyNew(p) {
+  const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="bn-back">← 返回查詢</button>
+      新增幹線託運單
+    </div>
+    <div class="card">
+      <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
+      <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
+      <div class="field"><label>行程方向</label>
+        <div class="radio-group">
+          <label class="radio-pill sel" id="ba-out"><input type="radio" name="ba-leg" value="outbound" checked>去程（南下）</label>
+          <label class="radio-pill" id="ba-ret"><input type="radio" name="ba-leg" value="return">回程（北上回 D10）</label>
+        </div>
+      </div>
+      <div class="field"><label id="ba-site-label">目的地據點</label><select id="ba-site">${siteOpts}</select></div>
+      <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
+        <div class="radio-group">
+          <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
+          <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>貨量 (L)</label><input type="number" id="ba-vol" value="2000"></div>
+        <div class="field"><label>重量 (kg)</label><input type="number" id="ba-wt" value="800"></div>
+        <div class="field"><label>裝卸(分)</label><input type="number" id="ba-handle" value="30"></div>
+      </div>
+      <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待業務審核）</button>
+      <button class="btn btn-ghost" id="ba-cancel">取消</button>
     </div>`;
   const setDirect = () => {
     $('#ba-nd').classList.toggle('sel', $('#page-b_apply input[value="0"]').checked);
@@ -702,60 +840,22 @@ RENDER.b_apply = function () {
     $('#ba-site-label').textContent = ret ? '收貨（上車）據點' : '目的地據點';
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
+  $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   $('#ba-submit').onclick = () => {
-    ModuleB.createOrder({
+    const o = ModuleB.createOrder({
       applicant: $('#ba-applicant').value,
       leg: $('#page-b_apply input[name=ba-leg]:checked').value,
       site: $('#ba-site').value,
       direct: $('#page-b_apply input[value="1"]').checked,
       volume: +$('#ba-vol').value, weight: +$('#ba-wt').value, handleMin: +$('#ba-handle').value,
     });
-    toast('已送出託運單，等待業務審核', 'ok'); renderBaList();
+    toast(`${o.id} 已送出，等待業務審核`, 'ok');
+    bApply.resultIds = null; bApply.view = 'detail'; bApply.detailId = o.id;
+    RENDER.b_apply();
   };
-  $('#ba-demo').onclick = () => {
-    [['D3', false, 1500, 600, 25], ['D2', false, 1800, 700, 30], ['D6', false, 1200, 500, 20],
-     ['D1', true, 2500, 900, 40], ['D5', false, 2200, 800, 30]].forEach(([site, direct, v, w, h]) =>
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, volume: v, weight: w, handleMin: h }));
-    toast('已載入 5 筆去程範例（含 1 直達，待審核）', 'ok'); renderBaList();
-  };
-  $('#ba-demo-ret').onclick = () => {
-    // 回程範例：D2 有一張直達回程單（會觸發全域直達鎖定），另兩張非直達會被排擠順延
-    [['D2', true, 2000, 700, 30], ['D3', false, 1200, 500, 20], ['D5', false, 900, 400, 15]].forEach(([site, direct, v, w, h]) =>
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, volume: v, weight: w, handleMin: h }));
-    toast('已載入 3 筆回程範例（含 1 直達，待審核）', 'ok'); renderBaList();
-  };
-  renderBaList();
-};
-function renderBaList() {
-  if (!$('#ba-list')) return;
-  const rows = ModuleB.orders;
-  $('#ba-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無託運單</div>` : `
-    <div class="card-desc" style="margin-bottom:10px;">派車後，接收人可在此確認接受、並於收到貨後確認交貨。</div>
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>方向</th><th>路線</th><th>型態/車輛</th><th>貨量</th><th>狀態</th><th>接收人操作</th></tr></thead><tbody>
-      ${rows.map(o => {
-        const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
-        const typ = o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>';
-        const leg = o.leg === 'return' ? '<span class="badge b-gray">回程</span>' : '<span class="badge b-navy">去程</span>';
-        const route = `${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}`;
-        let op = '<span class="muted">—</span>';
-        if (o.status === 'loaded') op = `<button class="btn btn-primary btn-sm" data-baccept="${o.id}">確認接受</button>`;
-        else if (o.status === 'accepted') op = `<button class="btn btn-accent btn-sm" data-brecv="${o.id}">確認已收到貨</button>`;
-        else if (o.status === 'delivered') op = '<span class="badge b-green">✓ 已完成</span>';
-        return `<tr><td>${o.id}</td><td>${leg}</td><td>${route}</td>
-          <td>${typ}${veh ? ' ' + veh.name : ''}</td>
-          <td>${o.volume}L</td><td>${stBadge(o.status)}</td><td>${op}</td></tr>`; }).join('')}
-    </tbody></table></div>`;
-  $$('#ba-list [data-baccept]').forEach(b => b.onclick = () => {
-    const o = ModuleB.orders.find(x => x.id === b.dataset.baccept);
-    ModuleB.acceptDelivery(o); toast(`${o.id} 接收人已確認接受`, 'ok');
-    renderBaList(); if ($('#br-tracking')) renderBr_tracking();
-  });
-  $$('#ba-list [data-brecv]').forEach(b => b.onclick = () => {
-    const o = ModuleB.orders.find(x => x.id === b.dataset.brecv);
-    ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 接收人已確認收到貨`, 'ok');
-    renderBaList(); if ($('#br-tracking')) renderBr_tracking();
-  });
 }
+// 相容：審核端動作呼叫此函式刷新申請端 grid
+function renderBaList() { if ($('#bq-grid')) renderBGrid(); }
 
 /* ============================================================
    模組 B · 審核/調度端（業務單位）
@@ -919,47 +1019,179 @@ function dispatchBReturn(originallyDirect) {
 /* ============================================================
    模組 C · 申請端（使用者）
    ============================================================ */
+let cApply = { view: 'list', detailId: null, query: { applicant: '', type: '', origin: '', dest: '', status: '' }, resultIds: null };
+
 RENDER.c_apply = function () {
   const p = $('#page-c_apply');
+  if (cApply.view === 'new') return renderCApplyNew(p);
+  if (cApply.view === 'detail') return renderCApplyDetail(p, cApply.detailId);
+  return renderCApplyList(p);
+};
+
+/* ---------- 查詢畫面 ---------- */
+function renderCApplyList(p) {
+  const q = cApply.query;
+  const oOpts = ['<option value="">全部出發地</option>'].concat(
+    DB.bizOrigins.map(o => `<option ${q.origin === o ? 'selected' : ''}>${o}</option>`)).join('');
+  const dOpts = ['<option value="">全部目的地</option>'].concat(
+    DB.bizDests.map(d => `<option ${q.dest === d ? 'selected' : ''}>${d}</option>`)).join('');
+  const typeOpts = [['', '全部型態'], ['round', '來回單'], ['oneway', '單程單']]
+    .map(([v, t]) => `<option value="${v}" ${q.type === v ? 'selected' : ''}>${t}</option>`).join('');
+  const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准'], ['matched', '已媒合待上車'],
+    ['boarded', '已上車'], ['completed', '行程完成'], ['coordinate', '待人工協調'], ['void', '逾期作廢'], ['rejected', '已駁回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">出差用車申請（使用者）</div>
+    <div class="section-sub">先查詢歷史用車申請，點擊任一筆可檢視明細；或按「新增」建立新的出差用車申請單。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <span>
+          <button class="btn btn-primary btn-sm" id="cq-search">🔍 查詢</button>
+          <button class="btn btn-accent btn-sm" id="cq-new">＋ 新增</button>
+        </span>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>申請人（模糊）</label><input type="text" id="cq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
+        <div class="field"><label>任務型態</label><select id="cq-type">${typeOpts}</select></div>
+        <div class="field"><label>出發地</label><select id="cq-origin">${oOpts}</select></div>
+        <div class="field"><label>目的地</label><select id="cq-dest">${dOpts}</select></div>
+        <div class="field"><label>狀態</label><select id="cq-status">${statusOpts}</select></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史用車申請</span>
+        <span><span class="muted" id="cq-count"></span>
+          <button class="btn btn-ghost btn-sm" id="cq-demo" style="margin-left:10px;">載入範例批次</button></span>
+      </div>
+      <div id="cq-grid"></div>
+    </div>`;
+  $('#cq-search').onclick = () => runCQuery();
+  $('#cq-new').onclick = () => { cApply.view = 'new'; RENDER.c_apply(); };
+  $('#cq-demo').onclick = () => { loadCDemo(); cApply.resultIds = null; renderCGrid(); };
+  renderCGrid();
+}
+function runCQuery() {
+  cApply.query = {
+    applicant: $('#cq-applicant').value.trim(), type: $('#cq-type').value,
+    origin: $('#cq-origin').value, dest: $('#cq-dest').value, status: $('#cq-status').value,
+  };
+  const q = cApply.query;
+  const res = ModuleC.applications.filter(a =>
+    (!q.applicant || a.applicant.includes(q.applicant)) &&
+    (!q.type || a.type === q.type) &&
+    (!q.origin || a.origin === q.origin) &&
+    (!q.dest || a.dest === q.dest) &&
+    (!q.status || a.status === q.status));
+  cApply.resultIds = res.map(a => a.id);
+  renderCGrid();
+  toast(`查詢完成，共 ${res.length} 筆`, 'ok');
+}
+function renderCGrid() {
+  if (!$('#cq-grid')) return;
+  const rows = cApply.resultIds == null ? ModuleC.applications
+    : cApply.resultIds.map(id => ModuleC.applications.find(a => a.id === id)).filter(Boolean);
+  $('#cq-count').textContent = `${rows.length} 筆`;
+  $('#cq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      ${rows.map(a => `<tr data-detail="${a.id}" style="cursor:pointer;">
+        <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
+        <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin} → ${a.dest}</td>
+        <td>${a.departDate.slice(5)} ${a.earliestPickup}</td><td>${a.pax}</td>
+        <td>${stBadge(a.status, 'C')}</td><td class="muted">${fmtTime(a.createdAt)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至申請單明細。</div>`;
+  $$('#cq-grid [data-detail]').forEach(tr => tr.onclick = () => {
+    cApply.detailId = tr.dataset.detail; cApply.view = 'detail'; RENDER.c_apply();
+  });
+}
+
+/* ---------- 明細畫面 ---------- */
+function renderCApplyDetail(p, id) {
+  const a = ModuleC.applications.find(x => x.id === id);
+  if (!a) { cApply.view = 'list'; return RENDER.c_apply(); }
+  const veh = a.vehicle ? DB.vehicles.find(v => v.id === a.vehicle) : null;
+  const drv = a.driver ? DB.drivers.find(d => d.id === a.driver) : null;
+  let action = '';
+  if (a.status === 'matched') action = `<button class="btn btn-primary" data-board="${a.id}">確認上車</button>`;
+  else if (a.status === 'boarded') action = `<button class="btn btn-accent" data-done="${a.id}">確認行程完成</button>`;
+  else if (a.status === 'completed') action = '<span class="badge b-green">✓ 已完成</span>';
+  p.innerHTML = `
+    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="cd-back">← 返回查詢</button>
+      出差用車申請明細 · ${a.id}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
+      <div class="grid-2">
+        <div class="field"><label>單號</label><div>${a.id}</div></div>
+        <div class="field"><label>申請人</label><div>${a.applicant}（${a.dept}/${a.ext}）</div></div>
+        <div class="field"><label>任務型態</label><div>${a.type === 'round' ? '來回單' : '單程單（交通轉運點）'}</div></div>
+        <div class="field"><label>路線</label><div>${a.origin} → ${a.dest}</div></div>
+        <div class="field"><label>出發日期</label><div>${a.departDate}</div></div>
+        <div class="field"><label>最早上車（去程）</label><div>${a.earliestPickup}</div></div>
+        ${a.type === 'round' ? `<div class="field"><label>最早回程時間</label><div>${a.earliestReturn || '—'}</div></div>` : ''}
+        <div class="field"><label>最晚抵達（參考 G55）</label><div class="muted">${ModuleC.latestArrival(a)}</div></div>
+        <div class="field"><label>人數</label><div>${a.pax}</div></div>
+        <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">媒合與行程狀態</div>
+      <div class="grid-2">
+        <div class="field"><label>指派車輛</label><div>${veh ? veh.name : '<span class="muted">尚未媒合</span>'}</div></div>
+        <div class="field"><label>司機</label><div>${drv ? drv.name : '—'}</div></div>
+        <div class="field"><label>併車群組</label><div>${a.groupId || '—'}</div></div>
+        <div class="field"><label>備註</label><div>${a.note || '—'}</div></div>
+      </div>
+      ${action ? `<div class="divider"></div><div><b>乘客操作：</b> ${action}</div>` : ''}
+    </div>`;
+  $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
+  const brd = $('#page-c_apply [data-board]');
+  if (brd) brd.onclick = () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); };
+  const dn = $('#page-c_apply [data-done]');
+  if (dn) dn.onclick = () => { ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); };
+}
+
+/* ---------- 新增畫面 ---------- */
+function renderCApplyNew(p) {
   const oOpts = DB.bizOrigins.map(o => `<option>${o}</option>`).join('');
   const dOpts = DB.bizDests.map(d => `<option>${d}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">出差用車申請（使用者）</div>
-    <div class="section-sub">來回單：司機車輛全程綁定同批人。單程單：限交通轉運點，出發前配對、4 小時窗。送出後由主管准駁、再進批次媒合。</div>
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title">出差用車申請 <span class="g-tag">G50/G54</span></div>
-        <div class="row">
-          <div class="field"><label>申請人</label><input type="text" id="ca-applicant" value="業務部-周雅婷"></div>
-          <div class="field"><label>部門</label><input type="text" id="ca-dept" value="業務部"></div>
-          <div class="field"><label>分機</label><input type="text" id="ca-ext" value="2201"></div>
-        </div>
-        <div class="field"><label>任務型態</label>
-          <div class="radio-group">
-            <label class="radio-pill sel" id="ca-round"><input type="radio" name="ca-type" value="round" checked>來回單</label>
-            <label class="radio-pill" id="ca-oneway"><input type="radio" name="ca-type" value="oneway">單程單（轉運點）</label>
-          </div>
-        </div>
-        <div class="row">
-          <div class="field"><label>出發地</label><select id="ca-origin">${oOpts}</select></div>
-          <div class="field"><label>目的地</label><select id="ca-dest">${dOpts}</select></div>
-        </div>
-        <div class="row">
-          <div class="field"><label>出發日期</label><input type="date" id="ca-date" value="2026-08-27"></div>
-          <div class="field"><label>最早上車（去程）</label><input type="time" id="ca-pickup" value="09:00"></div>
-        </div>
-        <div class="row">
-          <div class="field" id="ca-return-wrap"><label>最早回程時間</label><input type="time" id="ca-return" value="16:00"></div>
-          <div class="field"><label>人數</label><input type="number" id="ca-pax" value="2"></div>
-        </div>
-        <div class="callout info">最晚抵達時間為系統查車程表算出的參考值，<b>不參與媒合判斷</b>（G55）。</div>
-        <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待主管准駁）</button>
-        <button class="btn btn-ghost" id="ca-demo">載入範例批次</button>
+    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="cn-back">← 返回查詢</button>
+      新增出差用車申請單
+    </div>
+    <div class="card">
+      <div class="card-title">出差用車申請 <span class="g-tag">G50/G54</span></div>
+      <div class="row">
+        <div class="field"><label>申請人</label><input type="text" id="ca-applicant" value="業務部-周雅婷"></div>
+        <div class="field"><label>部門</label><input type="text" id="ca-dept" value="業務部"></div>
+        <div class="field"><label>分機</label><input type="text" id="ca-ext" value="2201"></div>
       </div>
-      <div class="card">
-        <div class="card-title">我的申請單</div>
-        <div id="ca-list"></div>
+      <div class="field"><label>任務型態</label>
+        <div class="radio-group">
+          <label class="radio-pill sel" id="ca-round"><input type="radio" name="ca-type" value="round" checked>來回單</label>
+          <label class="radio-pill" id="ca-oneway"><input type="radio" name="ca-type" value="oneway">單程單（轉運點）</label>
+        </div>
       </div>
+      <div class="row">
+        <div class="field"><label>出發地</label><select id="ca-origin">${oOpts}</select></div>
+        <div class="field"><label>目的地</label><select id="ca-dest">${dOpts}</select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>出發日期</label><input type="date" id="ca-date" value="2026-08-27"></div>
+        <div class="field"><label>最早上車（去程）</label><input type="time" id="ca-pickup" value="09:00"></div>
+      </div>
+      <div class="row">
+        <div class="field" id="ca-return-wrap"><label>最早回程時間</label><input type="time" id="ca-return" value="16:00"></div>
+        <div class="field"><label>人數</label><input type="number" id="ca-pax" value="2"></div>
+      </div>
+      <div class="callout info">最晚抵達時間為系統查車程表算出的參考值，<b>不參與媒合判斷</b>（G55）。</div>
+      <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待主管准駁）</button>
+      <button class="btn btn-ghost" id="ca-cancel">取消</button>
     </div>`;
   const setType = () => {
     const round = $('#page-c_apply input[value=round]').checked;
@@ -968,6 +1200,7 @@ RENDER.c_apply = function () {
     $('#ca-return-wrap').style.display = round ? 'block' : 'none';
   };
   $$('#page-c_apply input[name=ca-type]').forEach(r => r.onchange = setType);
+  $('#ca-cancel').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   $('#ca-submit').onclick = () => {
     const type = $('#page-c_apply input[name=ca-type]:checked').value;
     const app = ModuleC.createApp({
@@ -976,11 +1209,11 @@ RENDER.c_apply = function () {
       departDate: $('#ca-date').value, earliestPickup: $('#ca-pickup').value,
       earliestReturn: $('#ca-return').value, pax: +$('#ca-pax').value,
     });
-    toast(`${app.id} 已送出，等待主管准駁`, 'ok'); renderCaList();
+    toast(`${app.id} 已送出，等待主管准駁`, 'ok');
+    cApply.resultIds = null; cApply.view = 'detail'; cApply.detailId = app.id;
+    RENDER.c_apply();
   };
-  $('#ca-demo').onclick = loadCDemo;
-  renderCaList();
-};
+}
 function loadCDemo() {
   const D = '2026-08-27';
   const demos = [
@@ -991,36 +1224,10 @@ function loadCDemo() {
     { type: 'round', origin: '台北總部', dest: '新竹分公司', earliestPickup: '07:30', earliestReturn: '19:30', pax: 4, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
   ];
   demos.forEach(d => ModuleC.createApp({ ...d, departDate: D }));
-  toast('已載入 5 筆共乘申請（待審核）', 'ok'); renderCaList();
+  toast('已載入 5 筆共乘申請（待審核）', 'ok');
 }
-function cActionCell(a) {
-  let op = '<span class="muted">—</span>';
-  if (a.status === 'matched') op = `<button class="btn btn-primary btn-sm" data-board="${a.id}">確認上車</button>`;
-  else if (a.status === 'boarded') op = `<button class="btn btn-accent btn-sm" data-done="${a.id}">確認行程完成</button>`;
-  else if (a.status === 'completed') op = '<span class="badge b-green">✓ 已完成</span>';
-  return `<td>${op}</td>`;
-}
-function renderCaList() {
-  if (!$('#ca-list')) return;
-  const rows = ModuleC.applications;
-  $('#ca-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無申請單，可「載入範例批次」</div>` : `
-    <div class="card-desc" style="margin-bottom:10px;">媒合成功後，乘客可在此確認上車、抵達後確認行程完成。</div>
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>狀態</th><th>乘客操作</th></tr></thead><tbody>
-      ${rows.map(a => `<tr><td>${a.id}</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
-        <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
-        <td>${a.pax}</td><td>${stBadge(a.status, 'C')}</td>${cActionCell(a)}</tr>`).join('')}
-    </tbody></table></div>`;
-  $$('#ca-list [data-board]').forEach(b => b.onclick = () => {
-    const a = ModuleC.applications.find(x => x.id === b.dataset.board);
-    ModuleC.confirmBoard(a); toast(`${a.id} 乘客已確認上車`, 'ok');
-    renderCaList(); if ($('#cr-tab-track')) renderCr_track();
-  });
-  $$('#ca-list [data-done]').forEach(b => b.onclick = () => {
-    const a = ModuleC.applications.find(x => x.id === b.dataset.done);
-    ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok');
-    renderCaList(); if ($('#cr-tab-track')) renderCr_track();
-  });
-}
+// 相容：審核端動作呼叫此函式刷新申請端 grid
+function renderCaList() { if ($('#cq-grid')) renderCGrid(); }
 
 /* ============================================================
    模組 C · 審核/調度端（業務單位）

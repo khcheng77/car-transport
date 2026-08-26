@@ -28,6 +28,7 @@ const ModuleB = {
       handleMin: data.handleMin,
       approvedAt: null,
       status: 'submitted',  // submitted → approved/rejected → loaded
+      createdAt: new Date(),
     };
     this.orders.push(o);
     return o;
