@@ -122,6 +122,17 @@ const ModuleC = {
       .filter(a => ['matched', 'boarded', 'completed'].includes(a.status) && a.vehicle && a.driver)
       .forEach(a => this.occupy(occupied, a, a.vehicle, a.driver));
 
+    // 資源檢核透明化：列出本批次範圍內受影響的保修車輛與請假司機（G60/G61）
+    const fromStr = fromDate, toStr = end.toISOString().slice(0, 10);
+    const maintInWin = DB.maintenance.filter(m => m.from <= toStr && m.to >= fromStr);
+    const leaveInWin = DB.driverLeaves.filter(l => l.date >= fromStr && l.date <= toStr);
+    if (maintInWin.length || leaveInWin.length) {
+      trace.push(`<span class="dim">資源檢核（本批次範圍內排除）：</span>`);
+      maintInWin.forEach(m => trace.push(`  <span class="no">🔧 車輛 ${m.vehicle} 保修 ${m.from}~${m.to}（${m.reason}）→ 該期間不可派</span>`));
+      leaveInWin.forEach(l => { const d = DB.drivers.find(x => x.id === l.driver);
+        trace.push(`  <span class="no">🌴 司機 ${d ? d.name : l.driver} 請假 ${l.date} ${l.from}~${l.to} → 重疊任務不可指派</span>`); });
+    }
+
     // 分兩型態，不互相混合（G50）
     const rounds = targets.filter(a => a.type === 'round');
     const oneways = targets.filter(a => a.type === 'oneway');
