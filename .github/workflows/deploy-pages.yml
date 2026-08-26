@@ -15,8 +15,11 @@ permissions:
   id-token: write
 
 # 同時只保留一次部署，新的推送會取消進行中的舊部署
+# 註：原本的 group "pages" 被一個無法取消的殭屍 run 永久佔用（GitHub 端異常，
+# API 顯示 queued 但從未入列、cancel 回 409），導致後續 run 全部排隊等不到。
+# 改用新的 group 名稱以跳脫該死結；沿用 cancel-in-progress 維持原本行為。
 concurrency:
-  group: pages
+  group: pages-deploy-v2
   cancel-in-progress: true
 
 jobs:
