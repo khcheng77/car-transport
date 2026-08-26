@@ -276,40 +276,195 @@ function renderItemEditor(boxSel, arr, onChange) {
    模組 A · 申請端（使用者）
    ============================================================ */
 let aaItems = [];
+// 申請功能的子畫面狀態：list 查詢 / new 新增 / detail 明細
+let aApply = { view: 'list', detailId: null, query: { applicant: '', station: '', status: '', mode: '' }, resultIds: null };
+
+function fmtTime(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+}
+
 RENDER.a_apply = function () {
   const p = $('#page-a_apply');
-  const stOpts = DB.stations.map(s => `<option value="${s.id}">${s.order}. ${s.name}</option>`).join('');
+  if (aApply.view === 'new') return renderAApplyNew(p);
+  if (aApply.view === 'detail') return renderAApplyDetail(p, aApply.detailId);
+  return renderAApplyList(p);
+};
+
+/* ---------- 查詢畫面：上半查詢條件 + 下半歷史紀錄 grid ---------- */
+function renderAApplyList(p) {
+  const q = aApply.query;
+  const stOpts = ['<option value="">全部站點</option>'].concat(
+    DB.stations.map(s => `<option value="${s.id}" ${q.station === s.id ? 'selected' : ''}>${s.order}. ${s.name}</option>`)).join('');
+  const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准待排'], ['matched', '已排班待接受'],
+    ['accepted', '已接受待交貨'], ['delivered', '已交貨'], ['rejected', '已駁回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  const modeOpts = [['', '全部模式'], ['asap', '越快越好'], ['exact', '指定期望時間']]
+    .map(([v, t]) => `<option value="${v}" ${q.mode === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">收貨申請（使用者）</div>
-    <div class="section-sub">一單一目的地、可多筆貨物。收貨時間二選一：指定期望 / 越快越好。送出後狀態為「待審核」，由業務單位審核與排班。</div>
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
-        <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
-        <div class="row">
-          <div class="field"><label>目的地站點</label><select id="aa-station">${stOpts}</select></div>
-          <div class="field"><label>建物</label><select id="aa-building"></select></div>
-        </div>
-        <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
-          <div class="radio-group">
-            <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好</label>
-            <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
-          </div>
-        </div>
-        <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
-        <div class="field"><label>上下貨時間（分鐘，自填 G15）</label><input type="number" id="aa-handle" value="15"></div>
-        <div class="divider"></div>
-        <div class="card-title">貨物項目</div>
-        <div id="aa-items"></div>
-        <button class="btn btn-ghost btn-sm" id="aa-add">＋ 新增貨物</button>
-        <div class="divider"></div>
-        <button class="btn btn-primary" id="aa-submit">▶ 送出申請（待業務審核）</button>
-        <button class="btn btn-ghost" id="aa-demo">載入範例</button>
+    <div class="section-sub">先查詢歷史申請紀錄，點擊任一筆可檢視明細；或按「新增」建立新的收貨申請單。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <span>
+          <button class="btn btn-primary btn-sm" id="aq-search">🔍 查詢</button>
+          <button class="btn btn-accent btn-sm" id="aq-new">＋ 新增</button>
+        </span>
       </div>
-      <div class="card">
-        <div class="card-title">我的申請單</div>
-        <div id="aa-list"></div>
+      <div class="grid-2">
+        <div class="field"><label>申請人（模糊）</label><input type="text" id="aq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
+        <div class="field"><label>目的地站點</label><select id="aq-station">${stOpts}</select></div>
+        <div class="field"><label>狀態</label><select id="aq-status">${statusOpts}</select></div>
+        <div class="field"><label>收貨模式</label><select id="aq-mode">${modeOpts}</select></div>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史申請紀錄</span>
+        <span><span class="muted" id="aq-count"></span>
+          <button class="btn btn-ghost btn-sm" id="aq-demo" style="margin-left:10px;">載入範例資料</button></span>
+      </div>
+      <div id="aq-grid"></div>
+    </div>`;
+  $('#aq-search').onclick = () => { runAQuery(); };
+  $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
+  $('#aq-demo').onclick = () => {
+    [['S3', 'asap', 15, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
+     ['S6', 'exact', 20, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
+     ['S3', 'asap', 25, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
+    ].forEach(([s, mode, h, items]) => ModuleA.createApp({
+      applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
+      items, recvMode: mode, expectTime: '13:00', handleMin: h }));
+    aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（待審核）', 'ok');
+  };
+  renderAGrid();
+}
+function runAQuery() {
+  aApply.query = {
+    applicant: $('#aq-applicant').value.trim(),
+    station: $('#aq-station').value,
+    status: $('#aq-status').value,
+    mode: $('#aq-mode').value,
+  };
+  const q = aApply.query;
+  const res = ModuleA.applications.filter(a =>
+    (!q.applicant || a.applicant.includes(q.applicant)) &&
+    (!q.station || a.station === q.station) &&
+    (!q.status || a.status === q.status) &&
+    (!q.mode || a.recvMode === q.mode));
+  aApply.resultIds = res.map(a => a.id);
+  renderAGrid();
+  toast(`查詢完成，共 ${res.length} 筆`, 'ok');
+}
+function renderAGrid() {
+  if (!$('#aq-grid')) return;
+  // resultIds=null 代表尚未查詢，預設顯示全部歷史
+  const rows = aApply.resultIds == null
+    ? ModuleA.applications
+    : aApply.resultIds.map(id => ModuleA.applications.find(a => a.id === id)).filter(Boolean);
+  $('#aq-count').textContent = `${rows.length} 筆`;
+  $('#aq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>班次</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
+        const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
+        return `<tr data-detail="${a.id}" style="cursor:pointer;">
+          <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
+          <td>${st.name}/${a.building}</td>
+          <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
+          <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td>
+          <td class="muted">${fmtTime(a.createdAt)}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至申請單明細。</div>`;
+  $$('#aq-grid [data-detail]').forEach(tr => tr.onclick = () => {
+    aApply.detailId = tr.dataset.detail; aApply.view = 'detail'; RENDER.a_apply();
+  });
+}
+
+/* ---------- 明細畫面 ---------- */
+function renderAApplyDetail(p, id) {
+  const a = ModuleA.applications.find(x => x.id === id);
+  if (!a) { aApply.view = 'list'; return RENDER.a_apply(); }
+  const st = DB.stations.find(s => s.id === a.station);
+  const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
+  const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
+  const totalVol = a.items.reduce((s, it) => s + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0);
+  let action = '';
+  if (a.status === 'matched') action = `<button class="btn btn-primary" data-accept="${a.id}">確認接受排班</button>`;
+  else if (a.status === 'accepted') action = `<button class="btn btn-accent" data-recv="${a.id}">確認已收到貨</button>`;
+  else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
+  p.innerHTML = `
+    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="ad-back">← 返回查詢</button>
+      收貨申請明細 · ${a.id}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status)}</div>
+      <div class="grid-2">
+        <div class="field"><label>單號</label><div>${a.id}</div></div>
+        <div class="field"><label>申請人</label><div>${a.applicant}</div></div>
+        <div class="field"><label>目的地</label><div>${st.name} / ${a.building}</div></div>
+        <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間 ' + a.expectTime : '越快越好'}</div></div>
+        <div class="field"><label>上下貨時間</label><div>${a.handleMin} 分</div></div>
+        <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">貨物項目（總體積約 ${totalVol.toFixed(0)}L）</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>品名</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th></tr></thead><tbody>
+        ${a.items.map(it => { const cat = DB.wasteFactors.find(f => f.code === it.category);
+          return `<tr><td>${it.name}</td><td>${it.l}×${it.w}×${it.h}</td><td>${cat ? cat.name : it.category}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td></tr>`; }).join('')}
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-title">排班與交貨狀態</div>
+      <div class="grid-2">
+        <div class="field"><label>排定班次</label><div>${sh ? sh.label : '<span class="muted">尚未排班</span>'}</div></div>
+        <div class="field"><label>車輛</label><div>${veh ? veh.name : '—'}</div></div>
+        <div class="field"><label>預計到站</label><div>${a.arrival || '—'}</div></div>
+        <div class="field"><label>異常回報</label><div>${a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'}</div></div>
+      </div>
+      ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
+    </div>`;
+  $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
+  const acc = $(`#page-a_apply [data-accept]`);
+  if (acc) acc.onclick = () => { ModuleA.acceptSchedule(a); toast(`${a.id} 已確認接受排班`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); };
+  const rcv = $(`#page-a_apply [data-recv]`);
+  if (rcv) rcv.onclick = () => { ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 已確認收到貨`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); };
+}
+
+/* ---------- 新增畫面 ---------- */
+function renderAApplyNew(p) {
+  const stOpts = DB.stations.map(s => `<option value="${s.id}">${s.order}. ${s.name}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="an-back">← 返回查詢</button>
+      新增收貨申請單
+    </div>
+    <div class="card">
+      <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
+      <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
+      <div class="row">
+        <div class="field"><label>目的地站點</label><select id="aa-station">${stOpts}</select></div>
+        <div class="field"><label>建物</label><select id="aa-building"></select></div>
+      </div>
+      <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
+        <div class="radio-group">
+          <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好</label>
+          <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
+        </div>
+      </div>
+      <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
+      <div class="field"><label>上下貨時間（分鐘，自填 G15）</label><input type="number" id="aa-handle" value="15"></div>
+      <div class="divider"></div>
+      <div class="card-title">貨物項目</div>
+      <div id="aa-items"></div>
+      <button class="btn btn-ghost btn-sm" id="aa-add">＋ 新增貨物</button>
+      <div class="divider"></div>
+      <button class="btn btn-primary" id="aa-submit">▶ 送出申請（待業務審核）</button>
+      <button class="btn btn-ghost" id="aa-cancel">取消</button>
     </div>`;
   const fillBuildings = () => {
     const st = DB.stations.find(s => s.id === $('#aa-station').value);
@@ -325,56 +480,24 @@ RENDER.a_apply = function () {
   if (aaItems.length === 0) aaItems = [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 5, category: 'BOX', weight: 10 }];
   renderAaItems();
   $('#aa-add').onclick = () => { aaItems.push({ name: '貨物', l: 50, w: 40, h: 30, qty: 1, category: 'BOX', weight: 12 }); renderAaItems(); };
-  $('#aa-submit').onclick = submitAa;
-  $('#aa-demo').onclick = () => {
-    [['S3', 'asap', 15, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
-     ['S6', 'exact', 20, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
-     ['S3', 'asap', 25, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([st, mode, h, items]) => ModuleA.createApp({
-      applicant: '業務部-周雅婷', station: st, building: DB.stations.find(s => s.id === st).buildings[0],
-      items, recvMode: mode, expectTime: '13:00', handleMin: h }));
-    toast('已載入 3 筆收貨申請（待審核）', 'ok'); renderAaList();
+  $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
+  $('#aa-submit').onclick = () => {
+    const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
+    const app = ModuleA.createApp({
+      applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
+      items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
+      handleMin: +$('#aa-handle').value || 0,
+    });
+    aaItems = [];
+    toast(`${app.id} 已送出，等待業務審核`, 'ok');
+    aApply.resultIds = null;        // 回到查詢畫面顯示全部（含新單）
+    aApply.view = 'detail'; aApply.detailId = app.id; // 送出後直接看明細
+    RENDER.a_apply();
   };
-  renderAaList();
-};
+}
 function renderAaItems() { renderItemEditor('#aa-items', aaItems, renderAaItems); }
-function submitAa() {
-  const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
-  const app = ModuleA.createApp({
-    applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
-    items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
-    handleMin: +$('#aa-handle').value || 0,
-  });
-  toast(`${app.id} 已送出，等待業務審核`, 'ok'); renderAaList();
-}
-function renderAaList() {
-  if (!$('#aa-list')) return;
-  const rows = ModuleA.applications;
-  $('#aa-list').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">📝</div>尚無申請單</div>` : `
-    <div class="card-desc" style="margin-bottom:10px;">排班後，接收人可在此確認接受排班、並於收到貨後確認交貨。</div>
-    <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>目的地</th><th>班次/車輛/到站</th><th>狀態</th><th>接收人操作</th></tr></thead><tbody>
-      ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
-        const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
-        const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
-        const schedule = sh ? `${sh.label}｜${veh.name}｜到站 ${a.arrival || '—'}` : '<span class="muted">尚未排班</span>';
-        let action = '<span class="muted">—</span>';
-        if (a.status === 'matched') action = `<button class="btn btn-primary btn-sm" data-accept="${a.id}">確認接受排班</button>`;
-        else if (a.status === 'accepted') action = `<button class="btn btn-accent btn-sm" data-recv="${a.id}">確認已收到貨</button>`;
-        else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
-        return `<tr><td>${a.id}</td><td>${st.name}/${a.building}</td>
-          <td>${schedule}</td><td>${stBadge(a.status)}</td><td>${action}</td></tr>`; }).join('')}
-    </tbody></table></div>`;
-  $$('#aa-list [data-accept]').forEach(b => b.onclick = () => {
-    const a = ModuleA.applications.find(x => x.id === b.dataset.accept);
-    ModuleA.acceptSchedule(a); toast(`${a.id} 接收人已確認接受排班`, 'ok');
-    renderAaList(); if ($('#ar-tab-review')) renderAr_review();
-  });
-  $$('#aa-list [data-recv]').forEach(b => b.onclick = () => {
-    const a = ModuleA.applications.find(x => x.id === b.dataset.recv);
-    ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 接收人已確認收到貨`, 'ok');
-    renderAaList(); if ($('#ar-tab-review')) renderAr_review();
-  });
-}
+// 相容：審核端動作呼叫此函式刷新申請端 grid（若目前正在查詢畫面）
+function renderAaList() { if ($('#aq-grid')) renderAGrid(); }
 
 /* ============================================================
    模組 A · 審核/調度端（業務單位）

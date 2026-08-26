@@ -24,6 +24,7 @@ const ModuleA = {
       approvedAt: null,              // 審核通過時間（核准時填入，排序用 G16）
       status: 'submitted',           // submitted → approved/rejected → matched
       assignedShift: null,
+      createdAt: new Date(),         // 建立時間（查詢/列表用）
     };
     this.applications.push(app);
     return app;
