@@ -21,9 +21,10 @@ const ModuleC = {
       type: data.type,             // 'round' 來回單 | 'oneway' 單程單
       origin: data.origin,
       dest: data.dest,
-      departDate: data.departDate, // yyyy-mm-dd
+      departDate: data.departDate,   // 起始日期（去程當天）yyyy-mm-dd
       earliestPickup: data.earliestPickup, // 去程最早上車 HH:MM
-      earliestReturn: data.earliestReturn, // 回程最早（來回單）
+      returnDate: data.returnDate || data.departDate, // 結束日期（回程當天）；單程單不適用
+      earliestReturn: data.earliestReturn, // 回程上車時間（來回單）HH:MM
       pax: data.pax,
       approvedAt: null,
       status: 'submitted',         // submitted|approved|rejected|matched|manual|coordinate|void
@@ -101,28 +102,31 @@ const ModuleC = {
     const rounds = targets.filter(a => a.type === 'round');
     const oneways = targets.filter(a => a.type === 'oneway');
 
-    // === 來回單：出發地/目的地/最早上車時間完全相同（G54）===
+    // === 來回單：地點（出發地/目的地）、起始日期、結束日期、上車時間（去程/回程）
+    //     全部完全相同才可合併（G54）===
     trace.push(`\n<span class="hl">【來回單分支】</span> ${rounds.length} 筆`);
     const usedR = new Set();
     for (const a of rounds) {
       if (usedR.has(a.id) || a.status !== 'approved') continue;
-      // 找完全相同者合併
+      // 找六項完全相同者合併：出發地、目的地、起始日期、結束日期、去程上車時間、回程上車時間
       const group = rounds.filter(b => !usedR.has(b.id) && b.status === 'approved' &&
         b.origin === a.origin && b.dest === a.dest &&
-        b.earliestPickup === a.earliestPickup);
+        b.departDate === a.departDate && b.returnDate === a.returnDate &&
+        b.earliestPickup === a.earliestPickup && b.earliestReturn === a.earliestReturn);
       const totalPax = group.reduce((s, b) => s + b.pax, 0);
       const travel = this.travelMin(a.origin, a.dest);
       if (travel == null) {
         this._coordinate(a, batch, trace, '查無車程資料'); usedR.add(a.id); continue;
       }
-      // 預估完成（去+回，示意）+ 工時檢核（G52）
-      const estStart = hhmmToMin(a.earliestPickup);
-      const estEnd = estStart + travel * 2 + 30;
-      if (estEnd > this.WORK_END) {
-        group.forEach(b => { this._coordinate(b, batch, trace, '預估完成超過工時 20:30'); usedR.add(b.id); });
+      // 工時檢核（G52）：去程當天、回程當天各自完成時間都不得晚於 20:30
+      const outEnd = hhmmToMin(a.earliestPickup) + travel;
+      const retEnd = hhmmToMin(a.earliestReturn) + travel;
+      if (outEnd > this.WORK_END || retEnd > this.WORK_END) {
+        group.forEach(b => { this._coordinate(b, batch, trace, '去程或回程預估完成超過工時 20:30'); usedR.add(b.id); });
         continue;
       }
-      const res = this.findResource({ ...a, pax: totalPax }, estStart, estEnd);
+      // 資源可用性以去程當天時段檢核（示意）
+      const res = this.findResource({ ...a, pax: totalPax }, hhmmToMin(a.earliestPickup), outEnd);
       if (!res) {
         group.forEach(b => { this._coordinate(b, batch, trace, '無可用車輛/司機（保修或請假）'); usedR.add(b.id); });
         continue;
@@ -133,8 +137,9 @@ const ModuleC = {
         usedR.add(b.id);
         batch.items.push({ app: b.id, result: 'matched', group: gid });
       });
+      const period = `${a.departDate} ${a.earliestPickup} ~ ${a.returnDate} ${a.earliestReturn}`;
       trace.push(`  <span class="ok">✓ 合併 ${group.map(g=>g.id).join('+')}｜${totalPax}人｜車 ${res.vehicle.id}/司機 ${res.driver.name}</span>`
-        + (group.length>1 ? ` <span class="dim">(${a.origin}→${a.dest} ${a.earliestPickup} 完全相同 G54)</span>` : ''));
+        + (group.length>1 ? ` <span class="dim">(${a.origin}→${a.dest}｜${period} 六項完全相同 G54)</span>` : ''));
     }
 
     // === 單程單：出發前配對、同轉運點、4 小時窗（G51）===

@@ -1095,11 +1095,13 @@ function renderCGrid() {
   $('#cq-count').textContent = `${rows.length} 筆`;
   $('#cq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>日期/上車</th><th>人</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
       ${rows.map(a => `<tr data-detail="${a.id}" style="cursor:pointer;">
         <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
         <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin} → ${a.dest}</td>
-        <td>${a.departDate.slice(5)} ${a.earliestPickup}</td><td>${a.pax}</td>
+        <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
+        <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '<span class="muted">—</span>'}</td>
+        <td>${a.pax}</td>
         <td>${stBadge(a.status, 'C')}</td><td class="muted">${fmtTime(a.createdAt)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至申請單明細。</div>`;
@@ -1130,9 +1132,10 @@ function renderCApplyDetail(p, id) {
         <div class="field"><label>申請人</label><div>${a.applicant}（${a.dept}/${a.ext}）</div></div>
         <div class="field"><label>任務型態</label><div>${a.type === 'round' ? '來回單' : '單程單（交通轉運點）'}</div></div>
         <div class="field"><label>路線</label><div>${a.origin} → ${a.dest}</div></div>
-        <div class="field"><label>出發日期</label><div>${a.departDate}</div></div>
-        <div class="field"><label>最早上車（去程）</label><div>${a.earliestPickup}</div></div>
-        ${a.type === 'round' ? `<div class="field"><label>最早回程時間</label><div>${a.earliestReturn || '—'}</div></div>` : ''}
+        <div class="field"><label>去程（出發日期 / 上車時間）</label><div>${a.departDate} ${a.earliestPickup}</div></div>
+        ${a.type === 'round'
+          ? `<div class="field"><label>回程（回程日期 / 上車時間）</label><div>${a.returnDate} ${a.earliestReturn || '—'}</div></div>`
+          : `<div class="field"><label>回程</label><div class="muted">單程單不適用</div></div>`}
         <div class="field"><label>最晚抵達（參考 G55）</label><div class="muted">${ModuleC.latestArrival(a)}</div></div>
         <div class="field"><label>人數</label><div>${a.pax}</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
@@ -1181,15 +1184,20 @@ function renderCApplyNew(p) {
         <div class="field"><label>出發地</label><select id="ca-origin">${oOpts}</select></div>
         <div class="field"><label>目的地</label><select id="ca-dest">${dOpts}</select></div>
       </div>
+      <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">去程（起始）</div>
       <div class="row">
         <div class="field"><label>出發日期</label><input type="date" id="ca-date" value="2026-08-27"></div>
-        <div class="field"><label>最早上車（去程）</label><input type="time" id="ca-pickup" value="09:00"></div>
+        <div class="field"><label>最早上車時間</label><input type="time" id="ca-pickup" value="09:00"></div>
       </div>
-      <div class="row">
-        <div class="field" id="ca-return-wrap"><label>最早回程時間</label><input type="time" id="ca-return" value="16:00"></div>
-        <div class="field"><label>人數</label><input type="number" id="ca-pax" value="2"></div>
+      <div id="ca-return-wrap">
+        <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">回程（結束）</div>
+        <div class="row">
+          <div class="field"><label>回程日期</label><input type="date" id="ca-rdate" value="2026-08-27"></div>
+          <div class="field"><label>回程上車時間</label><input type="time" id="ca-return" value="16:00"></div>
+        </div>
       </div>
-      <div class="callout info">最晚抵達時間為系統查車程表算出的參考值，<b>不參與媒合判斷</b>（G55）。</div>
+      <div class="field" style="max-width:160px;"><label>人數</label><input type="number" id="ca-pax" value="2"></div>
+      <div class="callout info">來回單須「出發地、目的地、出發日期、回程日期、去程上車、回程上車」六項完全相同才能媒合（G54）。最晚抵達時間僅供參考，<b>不參與媒合判斷</b>（G55）。</div>
       <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待主管准駁）</button>
       <button class="btn btn-ghost" id="ca-cancel">取消</button>
     </div>`;
@@ -1207,6 +1215,7 @@ function renderCApplyNew(p) {
       applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, ext: $('#ca-ext').value,
       type, origin: $('#ca-origin').value, dest: $('#ca-dest').value,
       departDate: $('#ca-date').value, earliestPickup: $('#ca-pickup').value,
+      returnDate: type === 'round' ? $('#ca-rdate').value : $('#ca-date').value,
       earliestReturn: $('#ca-return').value, pax: +$('#ca-pax').value,
     });
     toast(`${app.id} 已送出，等待主管准駁`, 'ok');
@@ -1215,15 +1224,18 @@ function renderCApplyNew(p) {
   };
 }
 function loadCDemo() {
-  const D = '2026-08-27';
+  const D = '2026-08-27', D2 = '2026-08-29';
   const demos = [
-    { type: 'round', origin: '台北總部', dest: '台中辦公室', earliestPickup: '09:00', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
-    { type: 'round', origin: '台北總部', dest: '台中辦公室', earliestPickup: '09:00', earliestReturn: '16:00', pax: 2, applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310' },
-    { type: 'oneway', origin: '台北總部', dest: '桃園機場T1', earliestPickup: '08:00', earliestReturn: '', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
-    { type: 'oneway', origin: '桃園機場T1', dest: '台北總部', earliestPickup: '11:00', earliestReturn: '', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
-    { type: 'round', origin: '台北總部', dest: '新竹分公司', earliestPickup: '07:30', earliestReturn: '19:30', pax: 4, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
+    // BZ001/BZ002：同地點、同起訖日期、同去回上車時間 → 可合併（多天來回）
+    { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
+    { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2, applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310' },
+    // 單程單一對（4 小時窗配對）
+    { type: 'oneway', origin: '台北總部', dest: '桃園機場T1', departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
+    { type: 'oneway', origin: '桃園機場T1', dest: '台北總部', departDate: D, earliestPickup: '11:00', returnDate: D, earliestReturn: '', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
+    // BZ005：回程日期不同（單天來回）→ 與 BZ001/002 不合併，示範日期須完全相同
+    { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '16:00', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
   ];
-  demos.forEach(d => ModuleC.createApp({ ...d, departDate: D }));
+  demos.forEach(d => ModuleC.createApp(d));
   toast('已載入 5 筆共乘申請（待審核）', 'ok');
 }
 // 相容：審核端動作呼叫此函式刷新申請端 grid
