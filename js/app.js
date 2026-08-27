@@ -769,17 +769,17 @@ function renderBGrid() {
   $('#bq-count').textContent = `${rows.length} 筆`;
   $('#bq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的託運紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>路線</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
+      <th>單號</th><th>申請人</th><th>收貨據點</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
       ${rows.map(o => `<tr data-detail="${o.id}" style="cursor:pointer;">
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
-        <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
+        <td>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td>
         <td>${o.dispatchVehicle ? '<b>' + o.dispatchVehicle + '</b>' : '<span class="muted">—</span>'}</td>
         <td>${o.pickupTime ? '<b style="color:var(--navy);">' + o.pickupTime + '</b>' : '<span class="muted">待派車</span>'}</td>
         <td>${stBadge(o.status)}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至託運單明細。</div>`;
+    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至託運單明細。幹線車沿南北路線逐據點收貨，<b>來收時間依收貨據點遠近而不同</b>（越南邊越晚），非全部由同一地點出發。</div>`;
   $$('#bq-grid [data-detail]').forEach(tr => tr.onclick = () => {
     bApply.detailId = tr.dataset.detail; bApply.view = 'detail'; RENDER.b_apply();
   });
@@ -804,7 +804,7 @@ function renderBApplyDetail(p, id) {
       <div class="grid-2">
         <div class="field"><label>單號</label><div>${o.id}</div></div>
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
-        <div class="field"><label>${o.leg === 'return' ? '收貨（上車）據點' : '目的地據點'}</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</div></div>
+        <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
         <div class="field"><label>貨物類別（浪費係數 G03）</label><div>${(DB.wasteFactors.find(f => f.code === o.category) || {}).name || o.category}　係數 ${WasteFactorProvider.get(o.category)}</div></div>
@@ -817,7 +817,7 @@ function renderBApplyDetail(p, id) {
       <div class="card-title">派車資訊</div>
       <div class="grid-2">
         <div class="field"><label>指派車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '<span class="muted">尚未派車</span>'}</div></div>
-        <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>` : '<span class="muted">待派車</span>'}</div></div>
+        <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>　<span class="hint">幹線車抵達「${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}」收貨的時間</span>` : '<span class="muted">待派車</span>'}</div></div>
       </div>
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>`;
@@ -845,7 +845,7 @@ function renderBApplyNew(p) {
           <label class="radio-pill" id="ba-ret"><input type="radio" name="ba-leg" value="return">回程（北上回 D10）</label>
         </div>
       </div>
-      <div class="field"><label id="ba-site-label">目的地據點</label><select id="ba-site">${siteOpts}</select></div>
+      <div class="field"><label id="ba-site-label">收貨據點</label><span class="hint">幹線車沿南北路線到此據點收貨</span><select id="ba-site">${siteOpts}</select></div>
       <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
         <div class="radio-group">
           <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
@@ -871,7 +871,7 @@ function renderBApplyNew(p) {
     const ret = $('#page-b_apply input[value=return]').checked;
     $('#ba-out').classList.toggle('sel', !ret);
     $('#ba-ret').classList.toggle('sel', ret);
-    $('#ba-site-label').textContent = ret ? '收貨（上車）據點' : '目的地據點';
+    $('#ba-site-label').textContent = ret ? '收貨（上車）據點' : '收貨據點';
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };

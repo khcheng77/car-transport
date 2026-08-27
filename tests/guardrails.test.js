@@ -223,6 +223,19 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(/^\d{2}:\d{2}$/.test(rn.pickupTime || ''), '回程單應有來收時間，實得 ' + rn.pickupTime);
     ok(g.dispatchVehicle && d.dispatchVehicle && rn.dispatchVehicle, '每張已載單應有車號');
   });
+
+  test('來收時間依收貨據點：同據點同車相同、不同據點不同（沿線現場收）', () => {
+    const H = fresh();
+    // 同一收貨據點 D6 兩張 + 另一據點 D3 一張，皆非直達、同車貪婪
+    const a = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    const b = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    const c = H.ModuleB.createOrder({ applicant: 'C', leg: 'outbound', site: 'D3', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    [a, b, c].forEach(o => H.ModuleB.approve(o));
+    H.ModuleB.dispatch('V-T02', 'greedy');
+    eq(a.pickupTime, b.pickupTime, '同一收貨據點、同車 → 來收時間應相同');
+    ok(c.pickupTime !== a.pickupTime, '較南邊的據點 → 來收時間應較晚（不同）');
+    ok(H.hhmmToMin(c.pickupTime) > H.hhmmToMin(a.pickupTime), 'D3 比 D6 南 → 來收時間應更晚');
+  });
 });
 
 /* =================================================================
