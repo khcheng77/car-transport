@@ -1,0 +1,27 @@
+name: Guardrails Tests
+
+# 每次 push 或開 PR 皆執行 Guardrails 回歸測試（純 Node、零相依、無網路呼叫）
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# 同分支的新推送取消進行中的舊測試
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run guardrail regression tests
+        run: node tests/guardrails.test.js

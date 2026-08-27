@@ -51,6 +51,18 @@ open index.html          # macOS
 # 或直接雙擊檔案 / 拖入瀏覽器
 ```
 
+## 測試（Guardrails 回歸）
+
+核心演算法（裝載判定、媒合、貪婪終點、資源檢核）附一組**純 Node、零相依、無網路呼叫**的
+回歸測試，對照 `docs/PLAN.md` 第 3 節 Guardrails（G01–G63）逐項驗證，並固化歷次稽核修正，
+避免日後改動悄悄違反已定案業務邏輯。
+
+```
+node tests/guardrails.test.js
+```
+
+每次 push / PR 由 `.github/workflows/tests.yml` 自動執行。
+
 ## 專案結構
 
 ```
@@ -105,7 +117,7 @@ docs/                 PLAN.md 與三份原始需求報告
 
 - 資料持久化（正式版接既有 MIS SQL Server，VD_ 前綴資料表）
 - 兩層審批流程的完整簽核畫面（本原型以「已核准」示意）
-- 單元測試（正式版 VD.Tests，MSTest/NUnit）
+- 正式版單元測試（VD.Tests，MSTest/NUnit）；本原型已具 `tests/` 下的 Node 版 Guardrails 回歸測試
 - SMTP 實際寄信、司機請假內網 API 實際串接（本原型以示意畫面呈現）
 
 ## 待確認事項（沿用 PLAN.md 第 5 節）
