@@ -207,6 +207,22 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     const r = H.ModuleB.dispatchReturn('V-T01', 'D2', true, 1000);
     eq(r.matrixRow, 5); eq(r.endpoint, 'D10'); ok(r.locked, '應鎖定'); eq(r.carried.length, 0);
   });
+
+  test('派車後每張已載單標記「幾點來收」（車號＋來收時間，顯示給申請人）', () => {
+    const H = fresh();
+    // 去程非直達 + 直達各一，及一張回程單
+    const g = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', direct: false, volume: 2000, category: 'BOX', weight: 300, handleMin: 30 });
+    const d = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D3', direct: true, volume: 2000, category: 'BOX', weight: 300, handleMin: 20 });
+    const rn = H.ModuleB.createOrder({ applicant: 'C', leg: 'return', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 200, handleMin: 20 });
+    [g, d, rn].forEach(o => H.ModuleB.approve(o));
+    H.ModuleB.dispatch('V-T02', 'greedy');
+    H.ModuleB.dispatch('V-T01', 'direct');
+    H.ModuleB.dispatchReturn('V-T02', 'D6', false, 0);
+    ok(/^\d{2}:\d{2}$/.test(g.pickupTime || ''), '去程非直達單應有來收時間，實得 ' + g.pickupTime);
+    ok(/^\d{2}:\d{2}$/.test(d.pickupTime || ''), '去程直達單應有來收時間，實得 ' + d.pickupTime);
+    ok(/^\d{2}:\d{2}$/.test(rn.pickupTime || ''), '回程單應有來收時間，實得 ' + rn.pickupTime);
+    ok(g.dispatchVehicle && d.dispatchVehicle && rn.dispatchVehicle, '每張已載單應有車號');
+  });
 });
 
 /* =================================================================

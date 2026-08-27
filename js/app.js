@@ -699,8 +699,6 @@ function renderBApplyList(p) {
   const q = bApply.query;
   const siteOpts = ['<option value="">全部據點</option>'].concat(
     DB.sites.map(s => `<option value="${s.id}" ${q.site === s.id ? 'selected' : ''}>${s.name}</option>`)).join('');
-  const legOpts = [['', '全部方向'], ['outbound', '去程'], ['return', '回程']]
-    .map(([v, t]) => `<option value="${v}" ${q.leg === v ? 'selected' : ''}>${t}</option>`).join('');
   const dirOpts = [['', '全部型態'], ['1', '直達'], ['0', '非直達']]
     .map(([v, t]) => `<option value="${v}" ${q.direct === v ? 'selected' : ''}>${t}</option>`).join('');
   const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准待排'], ['loaded', '已派車待接受'],
@@ -719,7 +717,6 @@ function renderBApplyList(p) {
       </div>
       <div class="grid-2">
         <div class="field"><label>申請人（模糊）</label><input type="text" id="bq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
-        <div class="field"><label>行程方向</label><select id="bq-leg">${legOpts}</select></div>
         <div class="field"><label>據點</label><select id="bq-site">${siteOpts}</select></div>
         <div class="field"><label>派送型態</label><select id="bq-direct">${dirOpts}</select></div>
         <div class="field"><label>狀態</label><select id="bq-status">${statusOpts}</select></div>
@@ -751,7 +748,7 @@ function renderBApplyList(p) {
 }
 function runBQuery() {
   bApply.query = {
-    applicant: $('#bq-applicant').value.trim(), leg: $('#bq-leg').value,
+    applicant: $('#bq-applicant').value.trim(), leg: '',
     site: $('#bq-site').value, direct: $('#bq-direct').value, status: $('#bq-status').value,
   };
   const q = bApply.query;
@@ -772,13 +769,15 @@ function renderBGrid() {
   $('#bq-count').textContent = `${rows.length} 筆`;
   $('#bq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的託運紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      <th>單號</th><th>申請人</th><th>路線</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
       ${rows.map(o => `<tr data-detail="${o.id}" style="cursor:pointer;">
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
-        <td>${o.leg === 'return' ? '<span class="badge b-gray">回程</span>' : '<span class="badge b-navy">去程</span>'}</td>
         <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
-        <td>${o.volume}L</td><td>${stBadge(o.status)}</td><td class="muted">${fmtTime(o.createdAt)}</td></tr>`).join('')}
+        <td>${o.volume}L</td>
+        <td>${o.dispatchVehicle ? '<b>' + o.dispatchVehicle + '</b>' : '<span class="muted">—</span>'}</td>
+        <td>${o.pickupTime ? '<b style="color:var(--navy);">' + o.pickupTime + '</b>' : '<span class="muted">待派車</span>'}</td>
+        <td>${stBadge(o.status)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至託運單明細。</div>`;
   $$('#bq-grid [data-detail]').forEach(tr => tr.onclick = () => {
@@ -805,8 +804,7 @@ function renderBApplyDetail(p, id) {
       <div class="grid-2">
         <div class="field"><label>單號</label><div>${o.id}</div></div>
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
-        <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
-        <div class="field"><label>路線</label><div>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</div></div>
+        <div class="field"><label>${o.leg === 'return' ? '收貨（上車）據點' : '目的地據點'}</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
         <div class="field"><label>貨物類別（浪費係數 G03）</label><div>${(DB.wasteFactors.find(f => f.code === o.category) || {}).name || o.category}　係數 ${WasteFactorProvider.get(o.category)}</div></div>
@@ -816,10 +814,10 @@ function renderBApplyDetail(p, id) {
       </div>
     </div>
     <div class="card">
-      <div class="card-title">派車與交貨狀態</div>
+      <div class="card-title">派車資訊</div>
       <div class="grid-2">
-        <div class="field"><label>派遣模式</label><div>${o.dispatchMode ? (o.dispatchMode === '直達' ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>') : '<span class="muted">尚未派車</span>'}</div></div>
-        <div class="field"><label>指派車輛</label><div>${veh ? veh.name : '—'}</div></div>
+        <div class="field"><label>指派車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '<span class="muted">尚未派車</span>'}</div></div>
+        <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>` : '<span class="muted">待派車</span>'}</div></div>
       </div>
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>`;

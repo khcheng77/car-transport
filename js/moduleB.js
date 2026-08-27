@@ -75,12 +75,15 @@ const ModuleB = {
       const sameDest = directs.filter(o => o.dest === targetDest);
       trace.push(`<span class="hl">直達車</span>：鎖定單一目的地 ${this.siteById(targetDest).name}（G38 不湊單、不論貨量）`);
       trace.push(`終點 = 申請單目的地｜純容量加總、不跑貪婪法（G39）`);
+      // 預計來收時間：車輛自出發據點直達，抵達目的地據點的時間（示意，08:00 出發）
+      const directEta = minToHHMM(8 * 60 + Math.abs(this.siteById(origin).order - this.siteById(targetDest).order) * DB.legMinutes);
       let load = 0, wt = 0; const carried = [];
       for (const o of sameDest) {
         const ev = this.effVolume(o);   // 有效體積（含類別浪費係數 G03）
         if (load + ev <= veh.volume && wt + o.weight <= veh.weight) {
           load += ev; wt += o.weight; carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
+          o.pickupTime = directEta;     // 幾點來收（顯示給申請人）
           trace.push(`  <span class="ok">✓ 載入 ${o.id}（${o.volume}L × 係數 ${WasteFactorProvider.get(o.category)} = ${ev.toFixed(0)}L）累計 ${load.toFixed(0)}L</span>`);
         } else {
           trace.push(`  <span class="no">✗ ${o.id} 超出容量 → 留下一班直達車（G39）</span>`);
@@ -108,6 +111,7 @@ const ModuleB = {
       const legs = Math.abs(prevOrder - site.order);
       totalTime += legs * DB.legMinutes;
       prevOrder = site.order;
+      const arriveEta = minToHHMM(8 * 60 + totalTime); // 車輛抵達本站（來收）時間
 
       // 本站待裝載單（目的地 = 本站，示意收貨）
       const here = nonDirect.filter(o => o.dest === site.id && o.status === 'approved');
@@ -122,6 +126,7 @@ const ModuleB = {
           stopLoaded += ev; stopTime += o.handleMin;
           carried.push(o); stopCarried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = site.id;
+          o.pickupTime = arriveEta;     // 幾點來收（顯示給申請人）
         }
       }
       stops.push({ site, loaded: Math.round(stopLoaded), count: stopCarried.length,
@@ -196,6 +201,8 @@ const ModuleB = {
         if (net + ev <= veh.volume && wt + o.weight <= veh.weight) {
           net += ev; wt += o.weight; carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = 'D10';
+          // 幾點來收：自折返據點沿回程路線抵達本單上車據點的時間（示意，08:00 起）
+          o.pickupTime = minToHHMM(8 * 60 + Math.abs(this.siteById(turnaroundId).order - this.siteById(o.pickupSite).order) * DB.legMinutes);
           trace.push(`  <span class="ok">✓ 載直達回程單 ${o.id}（${this.siteById(o.pickupSite).name} 上車，有效 ${ev.toFixed(0)}L）淨值 ${net.toFixed(0)}L</span>`);
         }
       }
@@ -214,6 +221,7 @@ const ModuleB = {
     for (const site of path) {
       totalTime += Math.abs(site.order - prevOrder) * DB.legMinutes;
       prevOrder = site.order;
+      const arriveEta = minToHHMM(8 * 60 + totalTime); // 車輛抵達本站（來收）時間
       const here = nonDirectReturn.filter(o => o.pickupSite === site.id && o.status === 'approved');
       let stopLoaded = 0;
       for (const o of here) {
@@ -223,6 +231,7 @@ const ModuleB = {
           net += ev; wt += o.weight; totalTime += o.handleMin; stopLoaded += ev;
           carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = 'D10';
+          o.pickupTime = arriveEta;     // 幾點來收（顯示給申請人）
         } else {
           deferred.push(o);
         }
