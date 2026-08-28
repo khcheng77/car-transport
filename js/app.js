@@ -481,7 +481,7 @@ function renderAApplyList(p) {
      ['S3', 'asap', 15, 10, '林口物流中心 一號月台', [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
     ].forEach(([s, mode, lm, um, loc, items, recipient]) => ModuleA.submit({
       applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
-      pickupLoc: loc, deliverTime: '14:00', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }));
+      pickupLoc: loc, deliverTime: mode === 'exact' ? '14:00' : '', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }));
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
@@ -618,8 +618,8 @@ function renderAApplyNew(p) {
           <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間（依交貨時間）</label>
         </div>
       </div>
-      <div class="row">
-        <div class="field"><label>交貨時間（幾點交貨）</label><input type="time" id="aa-deliver" value="14:00"></div>
+      <div class="row" id="aa-deliver-wrap" style="display:none;">
+        <div class="field"><label>交貨時間（幾點交貨）<span class="hint">指定期望時間才需填</span></label><input type="time" id="aa-deliver" value="14:00"></div>
       </div>
       <div class="row">
         <div class="field"><label>上貨時間（分，自填 G15）</label><input type="number" id="aa-load" value="10"></div>
@@ -643,6 +643,7 @@ function renderAApplyNew(p) {
     const exact = $('#page-a_apply input[value=exact]').checked;
     $('#aa-mode-asap').classList.toggle('sel', !exact);
     $('#aa-mode-exact').classList.toggle('sel', exact);
+    $('#aa-deliver-wrap').style.display = exact ? '' : 'none'; // 交貨時間僅指定期望時間需要
   });
   renderAaItems(); // 一開始顯示空白清單
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
@@ -659,7 +660,8 @@ function renderAApplyNew(p) {
       applicant: $('#aa-applicant').value, station: $('#aa-station').value,
       building: bldgVal('aa-building', 'aa-destother'),
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
-      deliverTime: $('#aa-deliver').value,
+      deliverTime: mode === 'exact' ? $('#aa-deliver').value : '', // 越快越好不用交貨時間
+
       recipient: recipientVal('aa'),
       items: aaItems.map(x => ({ ...x })), recvMode: mode,
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,

@@ -175,6 +175,14 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.expectTime, undefined, '不應再保存 expectTime 欄位');
   });
 
+  test('越快越好不使用交貨時間：空 deliverTime 不設限、選最早班次', () => {
+    const H = fresh();
+    // 越快越好模式即使貨物很小，仍應忽略交貨時間、直接排最早班次
+    const { app, result } = submit(H, { recvMode: 'asap', deliverTime: '' });
+    ok(result.ok, '應媒合成功'); eq(app.deliverTime, '', '越快越好不帶交貨時間');
+    eq(result.shift.id, 'R-A1', '無截止 → 排最早班次 R-A1');
+  });
+
   test('交貨時間接進媒合：到站晚於交貨時間之班次不採計', () => {
     const H = fresh();
     // S3 到站：R-A1≈09:06、R-A2≈13:36、R-A3≈17:06；交貨時間 12:00 → 只剩 R-A1 可用
