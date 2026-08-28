@@ -163,10 +163,16 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     ok(result.ok, '應排入'); eq(result.shift.id, 'R-A1', 'asap 應排最早班次 R-A1（08:30）');
   });
 
-  test('G19 指定期望時間：選到站時間差最小的班次（早晚都比）', () => {
+  test('G19 指定期望時間：以交貨時間為目標，選到站時間差最小的班次（早晚都比）', () => {
     const H = fresh();
-    const { result } = submit(H, { recvMode: 'exact', expectTime: '20:00' });
-    ok(result.ok); eq(result.shift.id, 'R-A3', '期望 20:00 應選最接近的末班');
+    const { result } = submit(H, { recvMode: 'exact', deliverTime: '20:00' });
+    ok(result.ok); eq(result.shift.id, 'R-A3', '交貨時間 20:00 應選最接近的末班');
+  });
+
+  test('指定期望時間不再需要期望到站時間欄位（expectTime 已移除）', () => {
+    const H = fresh();
+    const { app } = submit(H, { recvMode: 'exact', deliverTime: '20:00' });
+    eq(app.expectTime, undefined, '不應再保存 expectTime 欄位');
   });
 
   test('交貨時間接進媒合：到站晚於交貨時間之班次不採計', () => {

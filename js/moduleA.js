@@ -26,8 +26,7 @@ const ModuleA = {
       deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨 HH:MM（接進媒合：到站須不晚於此）
       recipient: data.recipient || {},  // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
       items: data.items,
-      recvMode: data.recvMode,       // 'exact' | 'asap'
-      expectTime: data.expectTime,   // exact 模式的期望到站時間
+      recvMode: data.recvMode,       // 'exact'（以交貨時間為目標）| 'asap'（越快越好）
       loadMin, unloadMin,            // 上貨/下貨時間（分）
       handleMin,                     // 站內佔用時間＝上貨＋下貨（G15）
       submitSeq: this.approveSeq++,  // 送出序（同站處理順序＝送出先後，取代原審核通過時間 G16）
@@ -82,27 +81,27 @@ const ModuleA = {
       vehiclePool[sh.id] = DB.vehicles.find(v => v.id === sh.vehicle);
     });
 
+    // 交貨時間（幾點交貨）：兩種模式共用之目標／截止時間；空值＝不設限（相容既有）
+    const deadline = app.deliverTime ? hhmmToMin(app.deliverTime) : null;
+
     // 依收貨模式決定嘗試班次順序（G19）
     let shifts = [...DB.regionalShifts];
-    if (app.recvMode === 'exact' && app.expectTime) {
-      const exp = hhmmToMin(app.expectTime);
-      // 到站時間差最小（早晚都比 G19）
+    if (app.recvMode === 'exact' && deadline != null) {
+      // 指定期望時間：以「交貨時間」為目標，選到站時間差最小者（早晚都比 G19）
       shifts.sort((a, b) => {
-        const da = Math.abs(this.shiftArrivalAtStation(a, station.order) - exp);
-        const db = Math.abs(this.shiftArrivalAtStation(b, station.order) - exp);
+        const da = Math.abs(this.shiftArrivalAtStation(a, station.order) - deadline);
+        const db = Math.abs(this.shiftArrivalAtStation(b, station.order) - deadline);
         return da - db;
       });
-      trace.push(`<span class="dim">收貨模式：指定期望 ${app.expectTime}｜依到站時間差最小排序班次</span>`);
+      trace.push(`<span class="dim">收貨模式：指定期望｜以交貨時間 ${app.deliverTime} 為目標，依到站時間差最小排序班次</span>`);
     } else {
-      // 越快越好：最早排得進去（依出發時間 G19）
+      // 越快越好：離現在最近、最早排得進去的班次（依出發時間 G19）
       shifts.sort((a, b) => hhmmToMin(a.depart) - hhmmToMin(b.depart));
-      trace.push(`<span class="dim">收貨模式：越快越好｜依最早班次排序</span>`);
+      trace.push(`<span class="dim">收貨模式：越快越好｜依最早（離現在最近）班次排序</span>`);
     }
 
     // 逐班次嘗試（時間軸最近的下一班 G10）
     let fitsSomeEmpty = false; // 是否存在「空車放得下」的班次（用來區分太大 vs 今天已滿）
-    // 交貨時間（幾點交貨）接進媒合：到站須不晚於此；空值＝不設限（相容既有）
-    const deadline = app.deliverTime ? hhmmToMin(app.deliverTime) : null;
     let anyOnTime = false;     // 是否存在能在交貨時間前到站的班次（用來區分 late vs full）
     if (deadline != null) trace.push(`<span class="dim">交貨時間：須於 ${app.deliverTime} 前到站，晚到班次不採計</span>`);
     for (let i = 0; i < shifts.length; i++) {

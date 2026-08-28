@@ -481,7 +481,7 @@ function renderAApplyList(p) {
      ['S3', 'asap', 15, 10, '林口物流中心 一號月台', [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
     ].forEach(([s, mode, lm, um, loc, items, recipient]) => ModuleA.submit({
       applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
-      pickupLoc: loc, deliverTime: '14:00', recipient, items, recvMode: mode, expectTime: '13:00', loadMin: lm, unloadMin: um }));
+      pickupLoc: loc, deliverTime: '14:00', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }));
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
@@ -519,7 +519,7 @@ function renderAGrid() {
           <td><button class="btn btn-ghost btn-sm" data-detail="${a.id}">細節</button></td>
           <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
           <td>${st.name}/${a.building}</td>
-          <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
+          <td>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好'}</td>
           <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td>
           <td class="muted">${fmtTime(a.createdAt)}</td></tr>`; }).join('')}
     </tbody></table></div>
@@ -550,7 +550,7 @@ function renderAApplyDetail(p, id) {
         <div class="field"><label>申請人</label><div>${a.applicant}</div></div>
         <div class="field"><label>收貨地點（起）</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>送貨地點（迄）</label><div>${st.name} / ${a.building}</div></div>
-        <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間 ' + a.expectTime : '越快越好'}</div></div>
+        <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間（依交貨時間）' : '越快越好（離現在最近）'}</div></div>
         <div class="field"><label>交貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>上貨 / 下貨時間</label><div>${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
@@ -614,12 +614,11 @@ function renderAApplyNew(p) {
       </div>
       <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
         <div class="radio-group">
-          <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好</label>
-          <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
+          <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好（離現在最近）</label>
+          <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間（依交貨時間）</label>
         </div>
       </div>
       <div class="row">
-        <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
         <div class="field"><label>交貨時間（幾點交貨）</label><input type="time" id="aa-deliver" value="14:00"></div>
       </div>
       <div class="row">
@@ -644,7 +643,6 @@ function renderAApplyNew(p) {
     const exact = $('#page-a_apply input[value=exact]').checked;
     $('#aa-mode-asap').classList.toggle('sel', !exact);
     $('#aa-mode-exact').classList.toggle('sel', exact);
-    $('#aa-exact-wrap').style.display = exact ? 'block' : 'none';
   });
   renderAaItems(); // 一開始顯示空白清單
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
@@ -663,7 +661,7 @@ function renderAApplyNew(p) {
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
       deliverTime: $('#aa-deliver').value,
       recipient: recipientVal('aa'),
-      items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
+      items: aaItems.map(x => ({ ...x })), recvMode: mode,
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
     aaItems = [];
