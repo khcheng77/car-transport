@@ -376,19 +376,20 @@ function renderAGrid() {
   $('#aq-count').textContent = `${rows.length} 筆`;
   $('#aq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>班次</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      <th></th><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>班次</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
-        return `<tr data-detail="${a.id}" style="cursor:pointer;">
+        return `<tr>
+          <td><button class="btn btn-ghost btn-sm" data-detail="${a.id}">細節</button></td>
           <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
           <td>${st.name}/${a.building}</td>
           <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
           <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td>
           <td class="muted">${fmtTime(a.createdAt)}</td></tr>`; }).join('')}
     </tbody></table></div>
-    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至申請單明細。</div>`;
-  $$('#aq-grid [data-detail]').forEach(tr => tr.onclick = () => {
-    aApply.detailId = tr.dataset.detail; aApply.view = 'detail'; RENDER.a_apply();
+    <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至申請單明細。</div>`;
+  $$('#aq-grid [data-detail]').forEach(b => b.onclick = () => {
+    aApply.detailId = b.dataset.detail; aApply.view = 'detail'; RENDER.a_apply();
   });
 }
 
@@ -728,8 +729,9 @@ function renderBGrid() {
   $('#bq-count').textContent = `${rows.length} 筆`;
   $('#bq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的託運紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>收貨據點</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
-      ${rows.map(o => `<tr data-detail="${o.id}" style="cursor:pointer;">
+      <th></th><th>單號</th><th>申請人</th><th>收貨據點</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(o => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-detail="${o.id}">細節</button></td>
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
         <td>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
@@ -738,9 +740,9 @@ function renderBGrid() {
         <td>${o.pickupTime ? '<b style="color:var(--navy);">' + o.pickupTime + '</b>' : '<span class="muted">待派車</span>'}</td>
         <td>${stBadge(o.status)}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至託運單明細。幹線車沿南北路線逐據點收貨，<b>來收時間依收貨據點遠近而不同</b>（越南邊越晚），非全部由同一地點出發。</div>`;
-  $$('#bq-grid [data-detail]').forEach(tr => tr.onclick = () => {
-    bApply.detailId = tr.dataset.detail; bApply.view = 'detail'; RENDER.b_apply();
+    <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至託運單明細。幹線車沿南北路線逐據點收貨，<b>來收時間依收貨據點遠近而不同</b>（越南邊越晚），非全部由同一地點出發。</div>`;
+  $$('#bq-grid [data-detail]').forEach(b => b.onclick = () => {
+    bApply.detailId = b.dataset.detail; bApply.view = 'detail'; RENDER.b_apply();
   });
 }
 
@@ -1105,8 +1107,9 @@ function renderCGrid() {
   $('#cq-count').textContent = `${rows.length} 筆`;
   $('#cq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
-      ${rows.map(a => `<tr data-detail="${a.id}" style="cursor:pointer;">
+      <th></th><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      ${rows.map(a => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-detail="${a.id}">細節</button></td>
         <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
         <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin} → ${a.dest}</td>
         <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
@@ -1114,9 +1117,9 @@ function renderCGrid() {
         <td>${a.pax}</td>
         <td>${stBadge(a.status, 'C')}</td><td class="muted">${fmtTime(a.createdAt)}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="muted" style="margin-top:8px;">點擊任一列可跳轉至申請單明細。</div>`;
-  $$('#cq-grid [data-detail]').forEach(tr => tr.onclick = () => {
-    cApply.detailId = tr.dataset.detail; cApply.view = 'detail'; RENDER.c_apply();
+    <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至申請單明細。</div>`;
+  $$('#cq-grid [data-detail]').forEach(b => b.onclick = () => {
+    cApply.detailId = b.dataset.detail; cApply.view = 'detail'; RENDER.c_apply();
   });
 }
 
