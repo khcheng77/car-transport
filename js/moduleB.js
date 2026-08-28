@@ -19,6 +19,11 @@ const ModuleB = {
     const items = (data.items && data.items.length)
       ? data.items.map(x => ({ ...x, name: x.name || '貨物', qty: x.qty || 1, category: x.category || 'BOX', weight: +x.weight || 0 }))
       : [{ name: '貨物', volume: +data.volume || 0, weight: +data.weight || 0, category: data.category || 'BOX' }];
+    // 上貨時間＋下貨時間（分），加總為裝卸時間 handleMin（G35）；相容：只給 handleMin 亦可
+    const split = (data.loadMin != null || data.unloadMin != null);
+    const loadMin = +(data.loadMin || 0);
+    const unloadMin = +(data.unloadMin || 0);
+    const handleMin = split ? (loadMin + unloadMin) : (+data.handleMin || 0);
     const o = {
       id: 'LB' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
@@ -27,9 +32,12 @@ const ModuleB = {
       origin: leg === 'return' ? data.site : 'D10',
       dest: leg === 'return' ? 'D10' : data.site,
       pickupSite: leg === 'return' ? data.site : null,
+      pickupLoc: data.pickupLoc || '',     // 收貨地點（據點內建物/位置，示意）
+      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨（示意）HH:MM
       direct: data.direct,
       items,                 // 貨物項目清單
-      handleMin: data.handleMin,
+      loadMin, unloadMin,    // 上貨/下貨時間（分）
+      handleMin,             // 裝卸時間＝上貨＋下貨（G35）
       approvedAt: null,
       status: 'submitted',  // submitted → approved/rejected → loaded
       createdAt: new Date(),

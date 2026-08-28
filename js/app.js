@@ -418,12 +418,12 @@ function renderAApplyList(p) {
   $('#aq-search').onclick = () => { runAQuery(); };
   $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
   $('#aq-demo').onclick = () => {
-    [['S3', 'asap', 15, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
-     ['S6', 'exact', 20, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
-     ['S3', 'asap', 25, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([s, mode, h, items]) => ModuleA.submit({
+    [['S3', 'asap', 10, 5, '五股廠 原料倉', [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
+     ['S6', 'exact', 12, 8, '中壢據點 北棟', [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
+     ['S3', 'asap', 15, 10, '林口物流中心 一號月台', [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
+    ].forEach(([s, mode, lm, um, loc, items]) => ModuleA.submit({
       applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
-      items, recvMode: mode, expectTime: '13:00', handleMin: h }));
+      pickupLoc: loc, deliverTime: '14:00', items, recvMode: mode, expectTime: '13:00', loadMin: lm, unloadMin: um }));
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
@@ -490,9 +490,11 @@ function renderAApplyDetail(p, id) {
       <div class="grid-2">
         <div class="field"><label>單號</label><div>${a.id}</div></div>
         <div class="field"><label>申請人</label><div>${a.applicant}</div></div>
+        <div class="field"><label>收貨地點</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>目的地</label><div>${st.name} / ${a.building}</div></div>
         <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間 ' + a.expectTime : '越快越好'}</div></div>
-        <div class="field"><label>上下貨時間</label><div>${a.handleMin} 分</div></div>
+        <div class="field"><label>交貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>上貨 / 下貨時間</label><div>${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
       </div>
     </div>
@@ -540,6 +542,7 @@ function renderAApplyNew(p) {
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
+      <div class="field"><label>收貨地點</label><input type="text" id="aa-pickuploc" placeholder="例：五股廠 原料倉 3 號門"></div>
       <div class="row">
         <div class="field"><label>目的地站點</label><select id="aa-station">${stOpts}</select></div>
         <div class="field"><label>建物</label><select id="aa-building"></select></div>
@@ -550,8 +553,14 @@ function renderAApplyNew(p) {
           <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
         </div>
       </div>
-      <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
-      <div class="field"><label>上下貨時間（分鐘，自填 G15）</label><input type="number" id="aa-handle" value="15"></div>
+      <div class="row">
+        <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
+        <div class="field"><label>交貨時間（幾點交貨）</label><input type="time" id="aa-deliver" value="14:00"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>上貨時間（分，自填 G15）</label><input type="number" id="aa-load" value="10"></div>
+        <div class="field"><label>下貨時間（分，自填 G15）</label><input type="number" id="aa-unload" value="5"></div>
+      </div>
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="aa-add">＋ 新增</button></div>
@@ -586,8 +595,9 @@ function renderAApplyNew(p) {
     // 送出即自動媒合（G10–G12/G16/G19）
     const { app, result } = ModuleA.submit({
       applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
+      pickupLoc: $('#aa-pickuploc').value, deliverTime: $('#aa-deliver').value,
       items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
-      handleMin: +$('#aa-handle').value || 0,
+      loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
     aaItems = [];
     if (result.ok) {
@@ -783,16 +793,18 @@ function renderBApplyList(p) {
      ['D6', false, 20, [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 8, category: 'BOX', weight: 10 }]],
      ['D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }]],
      ['D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([site, direct, handleMin, items]) =>
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, handleMin, items }));
+    ].forEach(([site, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, items,
+        pickupLoc: ModuleB.siteById(site).name + ' 月台', deliverTime: '15:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
     [['D2', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }]],
      ['D3', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }]],
      ['D5', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }]]
-    ].forEach(([site, direct, handleMin, items]) =>
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, handleMin, items }));
+    ].forEach(([site, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, items,
+        pickupLoc: ModuleB.siteById(site).name + ' 月台', deliverTime: '17:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -855,10 +867,12 @@ function renderBApplyDetail(p, id) {
         <div class="field"><label>單號</label><div>${o.id}</div></div>
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
         <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
+        <div class="field"><label>收貨地點</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
+        <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
         <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
-        <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
+        <div class="field"><label>上貨 / 下貨時間</label><div>${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
       </div>
     </div>
@@ -906,13 +920,18 @@ function renderBApplyNew(p) {
         </div>
       </div>
       <div class="field"><label id="ba-site-label">收貨據點</label><span class="hint">幹線車沿南北路線到此據點收貨</span><select id="ba-site">${siteOpts}</select></div>
+      <div class="field"><label>收貨地點 <span class="hint">據點內建物/位置</span></label><input type="text" id="ba-pickuploc" placeholder="例：台中據點 A 棟月台"></div>
       <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
         <div class="radio-group">
           <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
           <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
         </div>
       </div>
-      <div class="field" style="max-width:200px;"><label>裝卸時間 (分)</label><input type="number" id="ba-handle" value="30"></div>
+      <div class="row">
+        <div class="field"><label>交貨時間（幾點交貨）</label><input type="time" id="ba-deliver" value="15:00"></div>
+        <div class="field"><label>上貨時間 (分，G35)</label><input type="number" id="ba-load" value="20"></div>
+        <div class="field"><label>下貨時間 (分，G35)</label><input type="number" id="ba-unload" value="10"></div>
+      </div>
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="ba-add">＋ 新增</button></div>
@@ -947,8 +966,9 @@ function renderBApplyNew(p) {
       applicant: $('#ba-applicant').value,
       leg: $('#page-b_apply input[name=ba-leg]:checked').value,
       site: $('#ba-site').value,
+      pickupLoc: $('#ba-pickuploc').value, deliverTime: $('#ba-deliver').value,
       direct: $('#page-b_apply input[value="1"]').checked,
-      handleMin: +$('#ba-handle').value,
+      loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
       items: baItems.map(x => ({ ...x })),
     });
     baItems = [];
@@ -1043,10 +1063,12 @@ function renderBApproveDetail(p, id) {
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
         <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
         <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</div></div>
+        <div class="field"><label>收貨地點</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
+        <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
         <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
-        <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
+        <div class="field"><label>上貨 / 下貨時間</label><div>${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
         ${o.reviewNote ? `<div class="field"><label>審核備註</label><div>${o.reviewNote}</div></div>` : ''}
       </div>

@@ -146,6 +146,17 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.status, 'delivered', 'matched 應可直接進入已交貨');
   });
 
+  test('上貨＋下貨時間加總為站內佔用時間 handleMin（G15），並用於額度判定', () => {
+    const H = fresh();
+    const { app } = submit(H, { loadMin: 18, unloadMin: 12, handleMin: undefined }); // 合計 30 ≤ 40
+    eq(app.handleMin, 30, 'handleMin 應為上貨＋下貨加總');
+    eq(app.assignedShift, 'R-A1', '30 分在額度內應排首班');
+    // 幹線同樣加總
+    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+      loadMin: 20, unloadMin: 15, items: [{ name: 'a', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
+    eq(o.handleMin, 35, '幹線 handleMin 應為上貨＋下貨加總（G35）');
+  });
+
   test('G19 越快越好：選最早出發班次', () => {
     const H = fresh();
     const { result } = submit(H, { recvMode: 'asap' });

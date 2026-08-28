@@ -12,15 +12,23 @@ const ModuleA = {
   // 收貨時間模式 G19：exact=指定期望時間 / asap=越快越好
   // 區域內物流：不經主管核准、不需業務按鈕；送出後由 submit() 立即自動媒合
   createApp(data) {
+    // 上貨時間＋下貨時間（分），加總為站內佔用時間 handleMin（G15）；相容：只給 handleMin 亦可
+    const split = (data.loadMin != null || data.unloadMin != null);
+    const loadMin = +(data.loadMin || 0);
+    const unloadMin = +(data.unloadMin || 0);
+    const handleMin = split ? (loadMin + unloadMin) : (+data.handleMin || 0);
     const app = {
       id: 'LA' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
       station: data.station,
       building: data.building,
+      pickupLoc: data.pickupLoc || '',  // 收貨地點（示意）
+      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨（示意）HH:MM
       items: data.items,
       recvMode: data.recvMode,       // 'exact' | 'asap'
       expectTime: data.expectTime,   // exact 模式的期望到站時間
-      handleMin: data.handleMin,     // 上下貨自填分鐘（G15）
+      loadMin, unloadMin,            // 上貨/下貨時間（分）
+      handleMin,                     // 站內佔用時間＝上貨＋下貨（G15）
       submitSeq: this.approveSeq++,  // 送出序（同站處理順序＝送出先後，取代原審核通過時間 G16）
       status: 'submitted',           // submitted →（自動媒合）→ matched / unscheduled
       assignedShift: null,
