@@ -42,6 +42,16 @@ const ModuleA = {
     return { app, result: r };
   },
 
+  // 重新媒合（僅限尚未媒合成功者，例如編輯貨物後再試）：清掉舊排班再跑一次
+  rematch(app) {
+    app.assignedShift = null; app.arrival = null;
+    const r = this.match(app);   // 成功時 match 內已設 status='matched'
+    app.matchTrace = r.trace;
+    app.status = r.ok ? 'matched' : 'unscheduled';
+    app.note = r.ok ? '' : r.msg;
+    return r;
+  },
+
   // 媒合成功即完成排班，不需接收人「確認接受」；交貨確認可由 matched 直接進入
   // 交貨確認（matched → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
   confirmDelivery(app, by) { if (app.status === 'matched') { app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室'; } },

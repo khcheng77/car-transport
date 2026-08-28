@@ -127,6 +127,16 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.status, 'unscheduled');
   });
 
+  test('未媒合單可編輯貨物後重新媒合成功（rematch）', () => {
+    const H = fresh();
+    const { app, result } = submit(H, { items: [item({ name: '長料', l: 999, w: 999, h: 999 })] });
+    ok(!result.ok && app.status === 'unscheduled', '應先失敗為未排入');
+    app.items = [item({ name: '小箱', l: 40, w: 30, h: 30, qty: 1, category: 'BOX', weight: 5 })]; // 編輯縮小
+    const r = H.ModuleA.rematch(app);
+    ok(r.ok, '縮小後重新媒合應成功');
+    eq(app.status, 'matched'); ok(app.assignedShift, '應寫入班次');
+  });
+
   test('媒合成功後狀態為 matched，且可直接交貨（不需先接受）', () => {
     const H = fresh();
     const { app } = submit(H);

@@ -309,6 +309,57 @@ function renderItemEditor(boxSel, arr, onChange) {
   $$(boxSel + ' .x-btn').forEach(b => b.onclick = () => { arr.splice(+b.dataset.del, 1); onChange(); });
 }
 
+/* ---- 貨物編輯彈窗（新增/編輯共用）：送出 → onSave(新項目)，取消 → 關閉 ---- */
+function openCargoEditor(item, onSave) {
+  const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '' }, item || {});
+  const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
+  openModal(item ? '編輯貨物內容' : '新增貨物', `
+    <div class="field"><label>品名</label><input type="text" id="ce-name" value="${it.name}"></div>
+    <div class="row">
+      <div class="field"><label>長 (cm)</label><input type="number" id="ce-l" value="${it.l}"></div>
+      <div class="field"><label>寬 (cm)</label><input type="number" id="ce-w" value="${it.w}"></div>
+      <div class="field"><label>高 (cm)</label><input type="number" id="ce-h" value="${it.h}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>類別 <span class="hint">浪費係數查表 G03</span></label><select id="ce-cat">${catOpts}</select></div>
+      <div class="field"><label>數量</label><input type="number" id="ce-qty" value="${it.qty}"></div>
+      <div class="field"><label>單件重 (kg)</label><input type="number" id="ce-wt" value="${it.weight}"></div>
+    </div>
+    <div style="text-align:center;margin-top:20px;">
+      <button class="btn btn-primary" id="ce-ok">▶ 送出</button>
+      <button class="btn btn-ghost" id="ce-cancel">取消</button>
+    </div>`);
+  $('#ce-cancel').onclick = closeModal;
+  $('#ce-ok').onclick = () => {
+    const name = $('#ce-name').value.trim();
+    const l = +$('#ce-l').value, w = +$('#ce-w').value, h = +$('#ce-h').value;
+    const qty = +$('#ce-qty').value, weight = +$('#ce-wt').value;
+    if (!name) { toast('請填品名', 'err'); return; }
+    if (!(l > 0 && w > 0 && h > 0)) { toast('長寬高需為正數', 'err'); return; }
+    if (!(qty > 0)) { toast('數量需為正整數', 'err'); return; }
+    onSave({ name, l, w, h, qty, category: $('#ce-cat').value, weight: weight > 0 ? weight : 0 });
+    closeModal();
+  };
+}
+
+/* ---- 貨物項目唯讀 grid；editable 時最左欄加「編輯／刪除」按鈕 ---- */
+function renderCargoGrid(sel, items, editable, onChange) {
+  const box = $(sel);
+  if (!box) return;
+  const catName = (c) => (DB.wasteFactors.find(f => f.code === c) || {}).name || c;
+  const head = `${editable ? '<th></th>' : ''}<th>品名</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>`;
+  const body = items.length === 0
+    ? `<tr><td colspan="${editable ? 6 : 5}" class="muted" style="text-align:center;padding:16px;">尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。</td></tr>`
+    : items.map((it, i) => `<tr>
+        ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-cedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-cdel="${i}">刪除</button></td>` : ''}
+        <td>${it.name}</td><td>${it.l}×${it.w}×${it.h}</td><td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td></tr>`).join('');
+  box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  if (editable) {
+    $$(sel + ' [data-cedit]').forEach(b => b.onclick = () => openCargoEditor(items[+b.dataset.cedit], upd => { items[+b.dataset.cedit] = upd; onChange(); }));
+    $$(sel + ' [data-cdel]').forEach(b => b.onclick = () => { items.splice(+b.dataset.cdel, 1); onChange(); });
+  }
+}
+
 /* ============================================================
    模組 A · 申請端（使用者）
    ============================================================ */
@@ -428,6 +479,7 @@ function renderAApplyDetail(p, id) {
   const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
   const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
   const totalVol = a.items.reduce((s, it) => s + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0);
+  const canEdit = !['matched', 'delivered'].includes(a.status); // 媒合後不可編輯貨物
   let action = '';
   if (a.status === 'matched') action = `<button class="btn btn-accent" data-recv="${a.id}">確認已收到貨</button>`;
   else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
@@ -445,16 +497,16 @@ function renderAApplyDetail(p, id) {
       </div>
     </div>
     <div class="card">
-      <div class="card-title">貨物項目（總體積約 ${totalVol.toFixed(0)}L）</div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>品名</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th></tr></thead><tbody>
-        ${a.items.map(it => { const cat = DB.wasteFactors.find(f => f.code === it.category);
-          return `<tr><td>${it.name}</td><td>${it.l}×${it.w}×${it.h}</td><td>${cat ? cat.name : it.category}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td></tr>`; }).join('')}
-      </tbody></table></div>
+      <div class="card-title" style="justify-content:space-between;"><span>貨物項目（總體積約 ${totalVol.toFixed(0)}L）</span>
+        ${canEdit ? `<button class="btn btn-accent btn-sm" id="ad-add">＋ 新增</button>` : ''}</div>
+      <div id="ad-items"></div>
+      ${canEdit ? `<div class="muted" style="margin-top:6px;">此單尚未媒合，可編輯貨物；編輯後可按下方「重新媒合」再試一次。</div>` : ''}
     </div>
     <div class="card">
       <div class="card-title">自動媒合結果</div>
       ${a.status === 'unscheduled'
-        ? `<div class="callout warn"><b>未排入 — 請改期</b><br>${a.note || '當日各班次皆無法排入（不留候補、不排隔日 G12）。'}</div>`
+        ? `<div class="callout warn"><b>未排入 — 請改期</b><br>${a.note || '當日各班次皆無法排入（不留候補、不排隔日 G12）。'}</div>
+           <div style="margin-top:12px;"><button class="btn btn-primary btn-sm" id="ad-rematch">↻ 重新媒合</button></div>`
         : `<div class="grid-2">
         <div class="field"><label>排定班次</label><div>${sh ? sh.label : '<span class="muted">尚未排班</span>'}</div></div>
         <div class="field"><label>車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '—'}</div></div>
@@ -464,6 +516,17 @@ function renderAApplyDetail(p, id) {
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>
     ${backBar('ad-back')}`;
+  renderCargoGrid('#ad-items', a.items, canEdit, () => RENDER.a_apply());
+  if (canEdit) {
+    const add = $('#ad-add');
+    if (add) add.onclick = () => openCargoEditor(null, it => { a.items.push(it); RENDER.a_apply(); });
+    const rm = $('#ad-rematch');
+    if (rm) rm.onclick = confirmThen({ title: '確認重新媒合？', text: '將依目前貨物內容重新執行自動媒合。' }, () => {
+      const r = ModuleA.rematch(a);
+      toast(r.ok ? `${a.id} 已媒合：${r.shift.label}／到站約 ${r.arrival}` : `${a.id}｜${r.msg}`, r.ok ? 'ok' : 'err');
+      RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review();
+    });
+  }
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   const rcv = $(`#page-a_apply [data-recv]`);
   if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此收貨申請將標記為已交貨。' }, () => { ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 已確認收到貨`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
@@ -490,9 +553,9 @@ function renderAApplyNew(p) {
       <div class="field" id="aa-exact-wrap" style="display:none;"><label>期望到站時間</label><input type="time" id="aa-expect" value="13:00"></div>
       <div class="field"><label>上下貨時間（分鐘，自填 G15）</label><input type="number" id="aa-handle" value="15"></div>
       <div class="divider"></div>
-      <div class="card-title">貨物項目</div>
+      <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
+        <button class="btn btn-accent btn-sm" id="aa-add">＋ 新增</button></div>
       <div id="aa-items"></div>
-      <button class="btn btn-ghost btn-sm" id="aa-add">＋ 新增貨物</button>
       <div class="divider"></div>
       <div class="callout info" style="margin-bottom:10px;">送出後系統<b>立即自動媒合</b>（無需主管核准、無需業務按鈕），並直接告知媒合到的<b>班次時間與車號</b>。</div>
       <button class="btn btn-primary" id="aa-submit">▶ 送出並自動媒合</button>
@@ -511,11 +574,11 @@ function renderAApplyNew(p) {
     $('#aa-mode-exact').classList.toggle('sel', exact);
     $('#aa-exact-wrap').style.display = exact ? 'block' : 'none';
   });
-  if (aaItems.length === 0) aaItems = [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 5, category: 'BOX', weight: 10 }];
-  renderAaItems();
-  $('#aa-add').onclick = () => { aaItems.push({ name: '貨物', l: 50, w: 40, h: 30, qty: 1, category: 'BOX', weight: 12 }); renderAaItems(); };
+  renderAaItems(); // 一開始顯示空白清單
+  $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   $('#aa-submit').onclick = async () => {
+    if (aaItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
     const ok = await confirmDialog({ title: '確認送出收貨申請？',
       text: '送出後系統將<b>立即自動媒合</b>並告知班次時間與車號。' });
     if (!ok) return;
@@ -538,7 +601,7 @@ function renderAApplyNew(p) {
     RENDER.a_apply();
   };
 }
-function renderAaItems() { renderItemEditor('#aa-items', aaItems, renderAaItems); }
+function renderAaItems() { renderCargoGrid('#aa-items', aaItems, true, renderAaItems); }
 // 相容：審核端動作呼叫此函式刷新申請端 grid（若目前正在查詢畫面）
 function renderAaList() { if ($('#aq-grid')) renderAGrid(); }
 
