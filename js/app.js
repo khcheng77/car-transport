@@ -1229,8 +1229,8 @@ function renderBDispatchResult(r, startLabel) {
   if (r.stops && r.stops.length) {
     const back = r.mode && r.mode.startsWith('return');
     const startStop = `<div class="stop hit"><div class="s-name">${startLabel}</div><div class="s-meta">${back ? '折返起點' : '出發'}</div></div>`;
-    const stopHtml = r.stops.map(s => `<div class="stop ${s.site.id === r.endpoint ? 'end' : (s.count ? 'hit' : 'skip')}">
-        <div class="s-name">${s.site.name}</div><div class="s-meta">${s.count ? '收 ' + s.count + ' 單' : '無貨'}｜${s.cumVol}L</div></div>`).join('');
+    const stopHtml = r.stops.map(s => `<div class="stop ${s.site.id === r.endpoint ? 'end' : ((s.count || s.unloaded) ? 'hit' : 'skip')}">
+        <div class="s-name">${s.site.name}</div><div class="s-meta">${[s.count ? '收 ' + s.count + ' 單' : '', s.unloaded ? '卸 ' + s.unloaded + 'L' : ''].filter(Boolean).join('／') || '無貨'}｜車上 ${s.cumVol}L</div></div>`).join('');
     const endStop = back ? `<div class="stop end"><div class="s-name">${ModuleB.siteById('D10').name}</div><div class="s-meta">回到出發據點</div></div>` : '';
     routeViz = `<div class="route" style="margin-top:12px;">${back ? '' : startStop}${stopHtml}${back ? endStop : ''}</div>`;
   }
@@ -1241,6 +1241,7 @@ function renderBDispatchResult(r, startLabel) {
       <div class="r-head">派車模式：${modeBadge}　終點：${endpoint}${r.days && r.days !== '—' ? `　出勤天數：${r.days} 天 <span class="g-tag">G37</span>` : ''}</div>
       <div>觸發原因：${r.reason || '—'}｜容量使用 <b>${r.capUsed || 0}L</b> / ${r.capTotal || 0}L${r.timeUsed != null ? `｜時間 <b>${r.timeUsed}分</b> / ${r.timeTotal}分` : ''}</div>
       ${r.carried ? `<div style="margin-top:6px;">載運：${r.carried.map(o => o.id).join(', ') || '（無）'}</div>` : ''}
+      ${r.delivered && r.delivered.length ? `<div style="margin-top:6px;">沿線卸貨送達（G33）：${r.delivered.map(o => o.id + '→' + ModuleB.siteById(o.dropSite).name).join('、')}</div>` : ''}
       ${deferredHtml}
       ${routeViz}
     </div>

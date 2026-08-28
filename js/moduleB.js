@@ -82,7 +82,7 @@ const ModuleB = {
   // 交貨確認（accepted → delivered）：接收人確認收到，或調度/駕駛回報送達
   confirmDelivery(o, by) { if (o.status === 'accepted') { o.status = 'delivered'; o.deliveredAt = Date.now(); o.deliveredBy = by || '調度室'; } },
 
-  TIME_LIMIT: 8 * 60, // 總計時間上限（分鐘），示意 = 一日行車 8 小時
+  TIME_LIMIT: 3 * 8 * 60, // 總計時間上限（分鐘），示意涵蓋最長約 3 天行程（天數另查對照表 G37）
   siteById(id) { return DB.sites.find(s => s.id === id); },
 
   /* 有效體積＝各項貨量 × 該項類別浪費係數 加總（沿用共用係數 Provider，G01/G03，A/B 共用）
@@ -133,60 +133,74 @@ const ModuleB = {
         modeLabel: '去程・直達', matrixRow: 2, capUsed: Math.round(load), capTotal: veh.volume };
     }
 
-    // ---- 非直達貪婪終點判斷（G32/G33/G35）----
+    // ---- 非直達貪婪：動態淨值＋到迄點卸貨釋出容量（G32/G33/G34/G35）----
     const nonDirect = pending.filter(o => !o.direct);
     const seq = this.southboundFrom(origin);
-    let netVol = 0, netWt = 0;       // 動態淨值（G33）
-    let totalTime = 0;               // 累積行駛 + 裝卸（G35）
+    let netVol = 0, netWt = 0, peakVol = 0;  // 動態淨值（G33）與峰值
+    let totalTime = 0;                        // 累積行駛 + 裝卸（G35）
     let endpoint = origin;
-    const carried = [], stops = [];
-    trace.push(`<span class="hl">非直達車（貪婪法）</span>：容量以動態淨值為準（G33），時間 = 行駛+裝卸（G35）`);
-    trace.push(`容量上限 ${veh.volume}L / 時間上限 ${this.TIME_LIMIT}分`);
+    const carried = [], deliveredHere = [], stops = [];
+    const onboard = [];                       // 目前車上（尚未卸貨）
+    trace.push(`<span class="hl">非直達車（貪婪法）</span>：動態淨值＋<b>到送貨據點卸貨釋出容量</b>（G33），時間 = 行駛+裝卸（G35）`);
+    trace.push(`容量上限 ${veh.volume}L`);
 
     let prevOrder = this.siteById(origin).order;
     for (const site of seq) {
-      // 行駛到本站
-      const legs = Math.abs(prevOrder - site.order);
-      totalTime += legs * DB.legMinutes;
+      totalTime += Math.abs(prevOrder - site.order) * DB.legMinutes; // 行駛到本站
       prevOrder = site.order;
-      const arriveEta = minToHHMM(8 * 60 + totalTime); // 車輛抵達本站（來收）時間
-
-      // 本站待裝載單（目的地 = 本站，示意收貨）
-      const here = nonDirect.filter(o => o.dest === site.id && o.status === 'approved');
-      let stopLoaded = 0, stopTime = 0;
-      const stopCarried = [];
-      for (const o of here) {
-        // 部分裝載：整張表單為最小單位（G34）；容量以有效體積計（含浪費係數 G03）
-        const ev = this.effVolume(o);
-        if (netVol + ev <= veh.volume && netWt + o.weight <= veh.weight
-            && totalTime + o.handleMin <= this.TIME_LIMIT) {
-          netVol += ev; netWt += o.weight; totalTime += o.handleMin;
-          stopLoaded += ev; stopTime += o.handleMin;
-          carried.push(o); stopCarried.push(o); o.status = 'loaded';
-          o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = site.id;
-          o.pickupTime = arriveEta;     // 幾點來收（顯示給申請人）
-        }
-      }
-      stops.push({ site, loaded: Math.round(stopLoaded), count: stopCarried.length,
-        cumVol: Math.round(netVol), cumTime: totalTime, arrive: minToHHMM(8*60 + totalTime) });
-
-      // 貪婪終點判斷：容量或時間任一觸頂 → 終點（G32）
-      const volFull = netVol >= veh.volume * 0.95;
-      const timeFull = totalTime >= this.TIME_LIMIT;
-      trace.push(`  ${site.name}：到站累計 ${netVol.toFixed(0)}L / ${totalTime}分`
-        + (stopCarried.length ? ` <span class="ok">裝 ${stopCarried.length} 單</span>` : ' <span class="dim">無貨</span>'));
-      if (volFull || timeFull) {
-        endpoint = site.id;
-        trace.push(`  <span class="hl">▲ ${volFull ? '容量' : '時間'}觸頂 → 終點 = ${site.name}（G32）</span>`);
+      if (totalTime > this.TIME_LIMIT) { // 時間觸頂 → 終點不再延伸（G32）
+        trace.push(`  <span class="hl">▲ 時間觸頂（${totalTime}分）→ 終點不再延伸</span>`);
         break;
       }
-      endpoint = site.id;
+      const arriveEta = minToHHMM(8 * 60 + totalTime);
+      let unloaded = 0, loaded = 0, nLoad = 0, activity = false;
+
+      // 1) 先卸貨：車上以本站為送貨據點（迄）者 → 釋出容量（G33）
+      for (let i = onboard.length - 1; i >= 0; i--) {
+        const o = onboard[i];
+        if (o.dropSite === site.id) {
+          const ev = this.effVolume(o);
+          netVol -= ev; netWt -= o.weight; totalTime += (o.unloadMin || 0);
+          unloaded += ev; onboard.splice(i, 1); deliveredHere.push(o);
+          o.dispatchDropTime = arriveEta; activity = true;
+        }
+      }
+      // 2) 再裝貨：以本站為收貨據點（起）者，依核准時間、整張表單為最小單位（G34）
+      const here = nonDirect.filter(o => o.pickSite === site.id && o.status === 'approved')
+        .sort((a, b) => a.approvedAt - b.approvedAt);
+      for (const o of here) {
+        const ev = this.effVolume(o);
+        const lt = (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
+        if (netVol + ev <= veh.volume && netWt + o.weight <= veh.weight
+            && totalTime + lt <= this.TIME_LIMIT) {
+          netVol += ev; netWt += o.weight; totalTime += lt;
+          loaded += ev; nLoad++; carried.push(o); onboard.push(o); o.status = 'loaded';
+          o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = o.dropSite;
+          o.pickupTime = arriveEta;
+          activity = true;
+        }
+        // 放不下整張 → 跳過留下一班（G34）
+      }
+      peakVol = Math.max(peakVol, netVol);
+      if (activity) {
+        endpoint = site.id;
+        stops.push({ site, loaded: Math.round(loaded), unloaded: Math.round(unloaded), count: nLoad, cumVol: Math.round(netVol), cumTime: totalTime, arrive: arriveEta });
+        trace.push(`  ${site.name}：`
+          + (unloaded ? `<span class="b-amber">卸 ${unloaded.toFixed(0)}L</span> ` : '')
+          + (loaded ? `<span class="ok">裝 ${nLoad} 單 ${loaded.toFixed(0)}L</span> ` : (unloaded ? '' : '<span class="dim">無貨</span> '))
+          + `→ 車上淨值 ${netVol.toFixed(0)}L / ${totalTime}分`);
+      }
     }
+    // 終點須涵蓋所有已載單的送貨據點（迄）——取最南者
+    let endOrder = this.siteById(endpoint).order;
+    carried.forEach(o => { endOrder = Math.min(endOrder, this.siteById(o.dropSite).order); });
+    endpoint = DB.sites.find(s => s.order === endOrder).id;
 
     const days = DB.dayCountStopover[endpoint] || '?';
-    return { mode: 'greedy', endpoint, carried, stops, trace, days,
-      reason: '無直達單 → 沿線貪婪收送（G32）',
-      modeLabel: '去程・非直達', matrixRow: 1, capUsed: Math.round(netVol), capTotal: veh.volume,
+    trace.push(`<span class="hl">終點 = ${this.siteById(endpoint).name}｜峰值淨值 ${peakVol.toFixed(0)}L（G32/G33）</span>`);
+    return { mode: 'greedy', endpoint, carried, delivered: deliveredHere, stops, trace, days,
+      reason: '無直達單 → 沿線貪婪收送、到迄點卸貨釋出容量（G32/G33）',
+      modeLabel: '去程・非直達', matrixRow: 1, capUsed: Math.round(peakVol), capTotal: veh.volume,
       timeUsed: totalTime, timeTotal: this.TIME_LIMIT };
   },
 
@@ -252,36 +266,51 @@ const ModuleB = {
         capUsed: Math.round(net), capTotal: veh.volume, locked: true };
     }
 
-    // 矩陣第 3 列：回程・非直達且無撞期 → 動態淨值、沿路收送非直達貨
-    trace.push(`  <span class="ok">無撞期直達單 → 比照停靠車邏輯，沿路收送非直達回程貨（G40）</span>`);
+    // 矩陣第 3 列：回程・非直達且無撞期 → 動態淨值、沿路收送＋到迄點卸貨釋出容量
+    trace.push(`  <span class="ok">無撞期直達單 → 沿路收送回程貨、到送貨據點卸貨釋出容量（G33/G40）</span>`);
     let prevOrder = this.siteById(turnaroundId).order;
-    let totalTime = 0;
+    let totalTime = 0, peakVol = startNet;
+    const onboard = [];
     for (const site of path) {
       totalTime += Math.abs(site.order - prevOrder) * DB.legMinutes;
       prevOrder = site.order;
-      const arriveEta = minToHHMM(8 * 60 + totalTime); // 車輛抵達本站（來收）時間
+      const arriveEta = minToHHMM(8 * 60 + totalTime);
+      let unloaded = 0, stopLoaded = 0, nLoad = 0;
+      // 卸貨：車上以本站為送貨據點（迄）者 → 釋出容量（回程 dropSite 多為 D10，於終點卸）
+      for (let i = onboard.length - 1; i >= 0; i--) {
+        const o = onboard[i];
+        if (o.dropSite === site.id) {
+          const ev = this.effVolume(o);
+          net -= ev; wt -= o.weight; totalTime += (o.unloadMin || 0);
+          unloaded += ev; onboard.splice(i, 1); o.dispatchDropTime = arriveEta;
+        }
+      }
+      // 裝貨：本站為收貨據點（起）者
       const here = nonDirectReturn.filter(o => o.pickupSite === site.id && o.status === 'approved');
-      let stopLoaded = 0;
       for (const o of here) {
         const ev = this.effVolume(o);
+        const lt = (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
         if (net + ev <= veh.volume && wt + o.weight <= veh.weight
-            && totalTime + o.handleMin <= this.TIME_LIMIT) {
-          net += ev; wt += o.weight; totalTime += o.handleMin; stopLoaded += ev;
-          carried.push(o); o.status = 'loaded';
-          o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = 'D10';
-          o.pickupTime = arriveEta;     // 幾點來收（顯示給申請人）
+            && totalTime + lt <= this.TIME_LIMIT) {
+          net += ev; wt += o.weight; totalTime += lt; stopLoaded += ev; nLoad++;
+          carried.push(o); onboard.push(o); o.status = 'loaded';
+          o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = o.dropSite;
+          o.pickupTime = arriveEta;
         } else {
           deferred.push(o);
         }
       }
-      stops.push({ site, loaded: Math.round(stopLoaded), count: here.filter(o => o.status === 'loaded').length, cumVol: Math.round(net) });
-      trace.push(`  ${site.name}：淨值 ${net.toFixed(0)}L / 時間 ${totalTime}分`
-        + (stopLoaded ? ` <span class="ok">收 ${stopLoaded.toFixed(0)}L</span>` : ' <span class="dim">無回程貨</span>'));
+      peakVol = Math.max(peakVol, net);
+      stops.push({ site, loaded: Math.round(stopLoaded), unloaded: Math.round(unloaded), count: nLoad, cumVol: Math.round(net) });
+      trace.push(`  ${site.name}：`
+        + (unloaded ? `<span class="b-amber">卸 ${unloaded.toFixed(0)}L</span> ` : '')
+        + (stopLoaded ? `<span class="ok">收 ${stopLoaded.toFixed(0)}L</span> ` : (unloaded ? '' : '<span class="dim">無回程貨</span> '))
+        + `→ 淨值 ${net.toFixed(0)}L / ${totalTime}分`);
     }
-    trace.push(`  <span class="hl">回程終點＝${this.siteById('D10').name}（G36）</span>`);
+    trace.push(`  <span class="hl">回程終點＝${this.siteById('D10').name}（G36），峰值淨值 ${peakVol.toFixed(0)}L</span>`);
     return { mode: 'return-greedy', matrixRow: 3, modeLabel: '回程・非直達且無撞期',
       endpoint, carried, deferred, stops, trace, days: '—',
-      reason: '回程無撞期直達單 → 動態淨值沿路收送（G40）',
-      capUsed: Math.round(net), capTotal: veh.volume, timeUsed: totalTime, timeTotal: this.TIME_LIMIT, locked: false };
+      reason: '回程無撞期直達單 → 動態淨值沿路收送、到迄點卸貨（G33/G40）',
+      capUsed: Math.round(peakVol), capTotal: veh.volume, timeUsed: totalTime, timeTotal: this.TIME_LIMIT, locked: false };
   },
 };

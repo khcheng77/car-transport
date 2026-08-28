@@ -229,6 +229,21 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(r.carried.length >= 1 && r.carried.length < 3, '應部分裝載後觸頂，非全載');
   });
 
+  test('G33 到送貨據點卸貨釋出容量：接力兩單皆可載（否則會爆容量）', () => {
+    const H = fresh();
+    // V-T02 容量 20160L。兩單各 ≈13200L 有效，同時在車上會爆（26400>20160）
+    const big = () => [{ name: '大箱', l: 200, w: 200, h: 300, qty: 1, category: 'BOX', weight: 100 }]; // 12000L×1.1=13200
+    const o1 = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D9', destSite: 'D6', direct: false, handleMin: 20, items: big() });
+    const o2 = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D6', destSite: 'D3', direct: false, handleMin: 20, items: big() });
+    [o1, o2].forEach(o => H.ModuleB.approve(o));
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.some(o => o.id === o1.id) && r.carried.some(o => o.id === o2.id),
+      'o1 於 D6 卸貨後釋出容量 → o2 於 D6 才裝得下（G33）');
+    ok(r.capUsed <= r.capTotal, '峰值淨值不得超過容量');
+    ok(r.delivered && r.delivered.some(o => o.id === o1.id), 'o1 應已於 D6 卸貨（delivered）');
+    eq(r.endpoint, 'D3', '終點須涵蓋最南送貨據點 D3');
+  });
+
   test('G34 部分裝載以整張表單為最小單位（放不下整張跳過）', () => {
     const H = fresh();
     const small = mkOrder(H, { site: 'D9', volume: 1000, weight: 100 }); // 先核准
