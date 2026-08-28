@@ -37,7 +37,8 @@ const ModuleB = {
       pickupSite: leg === 'return' ? data.site : null,
       pickSite,                            // 收貨據點（起）
       dropSite,                            // 送貨據點（迄）
-      pickupLoc: data.pickupLoc || '',     // 收貨地點（據點內建物/位置，示意）
+      pickupLoc: data.pickupLoc || '',     // 收貨地點（收貨據點內建物/位置）
+      deliverLoc: data.deliverLoc || '',   // 送貨地點（送貨據點內建物/位置）
       deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨（示意）HH:MM
       direct: data.direct,
       items,                 // 貨物項目清單

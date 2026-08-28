@@ -37,17 +37,18 @@ const DB = {
   ],
 
   /* ---- 南北幹線 10 據點（G30）南→北一直線固定順序 ---- */
+  // 據點內建物清單（G31：系統只給清單，順序由司機自行決定）示意
   sites: [
-    { id: 'D1', name: '屏東據點', order: 1 },
-    { id: 'D2', name: '高雄左營', order: 2 },
-    { id: 'D3', name: '台南據點', order: 3 },
-    { id: 'D4', name: '嘉義據點', order: 4 },
-    { id: 'D5', name: '雲林據點', order: 5 },
-    { id: 'D6', name: '台中據點', order: 6 },
-    { id: 'D7', name: '苗栗據點', order: 7 },
-    { id: 'D8', name: '新竹據點', order: 8 },
-    { id: 'D9', name: '桃園龍潭', order: 9 },
-    { id: 'D10',name: '台北據點', order: 10 },
+    { id: 'D1', name: '屏東據點', order: 1,  buildings: ['A 棟倉庫', '月台區'] },
+    { id: 'D2', name: '高雄左營', order: 2,  buildings: ['物流中心', '冷鏈倉'] },
+    { id: 'D3', name: '台南據點', order: 3,  buildings: ['主倉', '南棟月台'] },
+    { id: 'D4', name: '嘉義據點', order: 4,  buildings: ['收發室', '倉儲區'] },
+    { id: 'D5', name: '雲林據點', order: 5,  buildings: ['一號倉', '二號倉'] },
+    { id: 'D6', name: '台中據點', order: 6,  buildings: ['A 棟月台', 'B 棟倉庫'] },
+    { id: 'D7', name: '苗栗據點', order: 7,  buildings: ['主廠倉'] },
+    { id: 'D8', name: '新竹據點', order: 8,  buildings: ['科園倉', '收貨區'] },
+    { id: 'D9', name: '桃園龍潭', order: 9,  buildings: ['北棟月台', '南棟倉'] },
+    { id: 'D10',name: '台北據點', order: 10, buildings: ['總部收發', '中央倉'] },
   ],
 
   /* ---- 據點間行駛分鐘數（相鄰站，示意）---- */

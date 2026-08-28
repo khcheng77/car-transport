@@ -360,6 +360,32 @@ function renderCargoGrid(sel, items, editable, onChange) {
   }
 }
 
+/* ---- 建物下拉（含「其他」）＋「其他」文字框：選「其他」才顯示文字框 ---- */
+const stationBuildings = id => { const s = DB.stations.find(x => x.id === id); return s ? s.buildings : []; };
+const siteBuildings = id => { const s = DB.sites.find(x => x.id === id); return s ? (s.buildings || []) : []; };
+function bldgFieldHtml(label, selId, otherId) {
+  return `<div class="field"><label>${label}</label>
+      <select id="${selId}"></select>
+      <input type="text" id="${otherId}" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;"></div>`;
+}
+// 依 site/station 填入建物選項並掛上「其他」顯示/隱藏
+function wireBldg(siteSelId, bldgSelId, otherId, buildingsOf) {
+  const toggle = () => { $('#' + otherId).style.display = ($('#' + bldgSelId).value === '其他') ? 'block' : 'none'; };
+  const fill = () => {
+    const bs = buildingsOf($('#' + siteSelId).value) || [];
+    $('#' + bldgSelId).innerHTML = [...bs, '其他'].map(b => `<option>${b}</option>`).join('');
+    toggle();
+  };
+  $('#' + siteSelId).onchange = fill;
+  $('#' + bldgSelId).onchange = toggle;
+  fill();
+}
+// 取得建物實際值（選「其他」則取文字框）
+function bldgVal(bldgSelId, otherId) {
+  const v = $('#' + bldgSelId).value;
+  return v === '其他' ? ($('#' + otherId).value.trim() || '其他') : v;
+}
+
 /* ============================================================
    模組 A · 申請端（使用者）
    ============================================================ */
@@ -542,10 +568,13 @@ function renderAApplyNew(p) {
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
-      <div class="field"><label>收貨地點（起）</label><select id="aa-pickuploc">${stOpts}</select></div>
+      <div class="row">
+        <div class="field"><label>收貨地點站點（起）</label><select id="aa-pickuploc">${stOpts}</select></div>
+        ${bldgFieldHtml('收貨建物', 'aa-pickbldg', 'aa-pickother')}
+      </div>
       <div class="row">
         <div class="field"><label>送貨地點站點（迄）</label><select id="aa-station">${stOpts}</select></div>
-        <div class="field"><label>建物</label><select id="aa-building"></select></div>
+        ${bldgFieldHtml('送貨建物', 'aa-building', 'aa-destother')}
       </div>
       <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
         <div class="radio-group">
@@ -572,11 +601,8 @@ function renderAApplyNew(p) {
     </div>
     ${backBar('an-back')}`;
   $('#an-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
-  const fillBuildings = () => {
-    const st = DB.stations.find(s => s.id === $('#aa-station').value);
-    $('#aa-building').innerHTML = st.buildings.map(b => `<option>${b}</option>`).join('');
-  };
-  $('#aa-station').onchange = fillBuildings; fillBuildings();
+  wireBldg('aa-pickuploc', 'aa-pickbldg', 'aa-pickother', stationBuildings); // 收貨建物
+  wireBldg('aa-station', 'aa-building', 'aa-destother', stationBuildings);    // 送貨建物
   $$('#page-a_apply input[name=aa-recv]').forEach(r => r.onchange = () => {
     const exact = $('#page-a_apply input[value=exact]').checked;
     $('#aa-mode-asap').classList.toggle('sel', !exact);
@@ -595,8 +621,10 @@ function renderAApplyNew(p) {
     // 送出即自動媒合（G10–G12/G16/G19）
     const pickSt = DB.stations.find(s => s.id === $('#aa-pickuploc').value);
     const { app, result } = ModuleA.submit({
-      applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
-      pickupLoc: pickSt ? pickSt.name : '', deliverTime: $('#aa-deliver').value,
+      applicant: $('#aa-applicant').value, station: $('#aa-station').value,
+      building: bldgVal('aa-building', 'aa-destother'),
+      pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
+      deliverTime: $('#aa-deliver').value,
       items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
@@ -797,7 +825,8 @@ function renderBApplyList(p) {
      ['D9', 'D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
     ].forEach(([pick, drop, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
       ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site: pick, destSite: drop, direct, items,
-        pickupLoc: ModuleB.siteById(pick).name + ' 月台', deliverTime: '15:00', loadMin: lm, unloadMin: handleMin - lm }); });
+        pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
+        deliverTime: '15:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
@@ -807,7 +836,8 @@ function renderBApplyList(p) {
      ['D5', 'D10', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }]]
     ].forEach(([pick, drop, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
       ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site: pick, destSite: drop, direct, items,
-        pickupLoc: ModuleB.siteById(pick).name + ' 月台', deliverTime: '17:00', loadMin: lm, unloadMin: handleMin - lm }); });
+        pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
+        deliverTime: '17:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -871,7 +901,8 @@ function renderBApplyDetail(p, id) {
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
         <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
         <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span></div></div>
-        <div class="field"><label>收貨地點</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>收貨地點（建物）</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>送貨地點（建物）</label><div>${o.deliverLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
@@ -925,9 +956,12 @@ function renderBApplyNew(p) {
       </div>
       <div class="row">
         <div class="field"><label id="ba-site-label">收貨據點（起）</label><select id="ba-site">${siteOpts}</select></div>
-        <div class="field"><label>送貨據點（迄）</label><select id="ba-dest">${siteOpts}</select></div>
+        ${bldgFieldHtml('收貨建物', 'ba-pickbldg', 'ba-pickother')}
       </div>
-      <div class="field"><label>收貨地點 <span class="hint">收貨據點內建物/位置</span></label><input type="text" id="ba-pickuploc" placeholder="例：台中據點 A 棟月台"></div>
+      <div class="row">
+        <div class="field"><label>送貨據點（迄）</label><select id="ba-dest">${siteOpts}</select></div>
+        ${bldgFieldHtml('送貨建物', 'ba-dropbldg', 'ba-dropother')}
+      </div>
       <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
         <div class="radio-group">
           <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
@@ -954,6 +988,8 @@ function renderBApplyNew(p) {
     $('#ba-d').classList.toggle('sel', $('#page-b_apply input[value="1"]').checked);
   };
   $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
+  wireBldg('ba-site', 'ba-pickbldg', 'ba-pickother', siteBuildings); // 收貨建物
+  wireBldg('ba-dest', 'ba-dropbldg', 'ba-dropother', siteBuildings); // 送貨建物
   const setLeg = () => {
     const ret = $('#page-b_apply input[value=return]').checked;
     $('#ba-out').classList.toggle('sel', !ret);
@@ -961,6 +997,7 @@ function renderBApplyNew(p) {
     // 送貨據點預設：去程→最南端 D1、回程→回基地 D10（仍可自行改）
     $('#ba-dest').value = ret ? 'D10' : 'D1';
     $('#ba-site').value = ret ? 'D1' : 'D6';
+    $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依新據點重填建物選單
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
   setLeg();
@@ -978,7 +1015,9 @@ function renderBApplyNew(p) {
       leg: $('#page-b_apply input[name=ba-leg]:checked').value,
       site: $('#ba-site').value,
       destSite: $('#ba-dest').value,
-      pickupLoc: $('#ba-pickuploc').value, deliverTime: $('#ba-deliver').value,
+      pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),
+      deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),
+      deliverTime: $('#ba-deliver').value,
       direct: $('#page-b_apply input[value="1"]').checked,
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
       items: baItems.map(x => ({ ...x })),
@@ -1076,7 +1115,8 @@ function renderBApproveDetail(p, id) {
         <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
         <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}</div></div>
         <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}</div></div>
-        <div class="field"><label>收貨地點</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>收貨地點（建物）</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>送貨地點（建物）</label><div>${o.deliverLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
