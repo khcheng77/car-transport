@@ -39,7 +39,8 @@ const ModuleB = {
       dropSite,                            // 送貨據點（迄）
       pickupLoc: data.pickupLoc || '',     // 收貨地點（收貨據點內建物/位置）
       deliverLoc: data.deliverLoc || '',   // 送貨地點（送貨據點內建物/位置）
-      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨（示意）HH:MM
+      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨 HH:MM（接進派車：抵達迄點須不晚於此）
+      recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
       direct: data.direct,
       items,                 // 貨物項目清單
       loadMin, unloadMin,    // 上貨/下貨時間（分）
@@ -119,6 +120,11 @@ const ModuleB = {
       let load = 0, wt = 0; const carried = [];
       for (const o of sameDest) {
         const ev = this.effVolume(o);   // 有效體積（含類別浪費係數 G03）
+        // 交貨時間檢核：直達抵達迄點時間晚於交貨時間 → 留下一班直達車
+        if (o.deliverTime && hhmmToMin(directEta) > hhmmToMin(o.deliverTime)) {
+          trace.push(`  <span class="no">✗ ${o.id} 直達 ${directEta} 送達晚於交貨時間 ${o.deliverTime} → 留下一班直達車（交貨時間檢核）</span>`);
+          continue;
+        }
         if (load + ev <= veh.volume && wt + o.weight <= veh.weight) {
           load += ev; wt += o.weight; carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
@@ -172,6 +178,14 @@ const ModuleB = {
       for (const o of here) {
         const ev = this.effVolume(o);
         const lt = (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
+        // 交貨時間檢核：估算抵達送貨據點(迄)時間，晚於交貨時間 → 留下一班（G34）
+        if (o.deliverTime) {
+          const estDrop = 8 * 60 + totalTime + lt + Math.abs(site.order - this.siteById(o.dropSite).order) * DB.legMinutes;
+          if (estDrop > hhmmToMin(o.deliverTime)) {
+            trace.push(`  <span class="no">✗ ${o.id} 預計 ${minToHHMM(estDrop)} 送達晚於交貨時間 ${o.deliverTime} → 留下一班（交貨時間檢核）</span>`);
+            continue;
+          }
+        }
         if (netVol + ev <= veh.volume && netWt + o.weight <= veh.weight
             && totalTime + lt <= this.TIME_LIMIT) {
           netVol += ev; netWt += o.weight; totalTime += lt;
@@ -291,6 +305,14 @@ const ModuleB = {
       for (const o of here) {
         const ev = this.effVolume(o);
         const lt = (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
+        // 交貨時間檢核：估算抵達送貨據點(迄)時間，晚於交貨時間 → 順延下一趟
+        if (o.deliverTime) {
+          const estDrop = 8 * 60 + totalTime + lt + Math.abs(site.order - this.siteById(o.dropSite).order) * DB.legMinutes;
+          if (estDrop > hhmmToMin(o.deliverTime)) {
+            trace.push(`  <span class="no">✗ ${o.id} 預計 ${minToHHMM(estDrop)} 送達晚於交貨時間 ${o.deliverTime} → 順延下一趟</span>`);
+            deferred.push(o); continue;
+          }
+        }
         if (net + ev <= veh.volume && wt + o.weight <= veh.weight
             && totalTime + lt <= this.TIME_LIMIT) {
           net += ev; wt += o.weight; totalTime += lt; stopLoaded += ev; nLoad++;

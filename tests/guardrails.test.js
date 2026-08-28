@@ -168,6 +168,45 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const { result } = submit(H, { recvMode: 'exact', expectTime: '20:00' });
     ok(result.ok); eq(result.shift.id, 'R-A3', '期望 20:00 應選最接近的末班');
   });
+
+  test('交貨時間接進媒合：到站晚於交貨時間之班次不採計', () => {
+    const H = fresh();
+    // S3 到站：R-A1≈09:06、R-A2≈13:36、R-A3≈17:06；交貨時間 12:00 → 只剩 R-A1 可用
+    const { result } = submit(H, { recvMode: 'asap', deliverTime: '12:00' });
+    ok(result.ok, '應可媒合到能準時到站的班次');
+    eq(result.shift.id, 'R-A1', '只有 R-A1 能於 12:00 前到站');
+  });
+
+  test('交貨時間過早：無班次可在交貨時間前到站 → reason=late', () => {
+    const H = fresh();
+    // S3 最早班次到站 ≈09:06；交貨時間 08:00 → 無班次可準時
+    const { app, result } = submit(H, { recvMode: 'asap', deliverTime: '08:00' });
+    ok(!result.ok, '應媒合失敗');
+    eq(result.reason, 'late', '無班次可準時到站 → late');
+    ok(/交貨時間/.test(result.msg), '訊息需點出交貨時間');
+    eq(app.status, 'unscheduled', '不得寫入班次');
+  });
+
+  test('交貨時間空值＝不設限：行為與既有相容（放寬則排最早班）', () => {
+    const H = fresh();
+    eq(submit(H, { deliverTime: '' }).result.shift.id, 'R-A1', '空值不設限應排最早班');
+    eq(submit(fresh(), { deliverTime: '23:59' }).result.shift.id, 'R-A1', '寬鬆截止仍排最早班');
+  });
+
+  test('接收人資訊（單位/姓名/電話/代理人）隨申請單保存', () => {
+    const H = fresh();
+    const r = { unit: '生產部', name: '林建志', phone: '03-1234567', agentName: '陳怡君', agentPhone: '0912-345-678' };
+    const { app } = submit(H, { recipient: r });
+    eq(app.recipient.unit, '生產部'); eq(app.recipient.name, '林建志');
+    eq(app.recipient.phone, '03-1234567'); eq(app.recipient.agentName, '陳怡君');
+    eq(app.recipient.agentPhone, '0912-345-678');
+  });
+
+  test('未帶接收人資訊時 recipient 為空物件（不擲例外）', () => {
+    const H = fresh();
+    const { app } = submit(H);
+    eq(typeof app.recipient, 'object'); eq(Object.keys(app.recipient).length, 0);
+  });
 });
 
 /* =================================================================
@@ -323,6 +362,48 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     eq(a.pickupTime, b.pickupTime, '同一收貨據點、同車 → 來收時間應相同');
     ok(c.pickupTime !== a.pickupTime, '較南邊的據點 → 來收時間應較晚（不同）');
     ok(H.hhmmToMin(c.pickupTime) > H.hhmmToMin(a.pickupTime), 'D3 比 D6 南 → 來收時間應更晚');
+  });
+
+  test('交貨時間接進派車：估算送達晚於交貨時間 → 該單不排（留下一班）', () => {
+    const H = fresh();
+    // D6 上車（≈11:40 到）、送 D2；D6→D2 再走 220 分 → 送達 ≈15:40，晚於 12:00
+    const late = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', destSite: 'D2', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, deliverTime: '12:00' });
+    H.ModuleB.approve(late);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(!r.carried.includes(late), '預計送達晚於 12:00 → 不應排入');
+    eq(late.status, 'approved', '未排入者狀態不應改為 loaded');
+  });
+
+  test('交貨時間寬鬆：估算可於交貨時間前送達 → 正常排入', () => {
+    const H = fresh();
+    const good = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', destSite: 'D2', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, deliverTime: '17:00' });
+    H.ModuleB.approve(good);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.includes(good), '17:00 前可送達 → 應排入');
+    eq(good.status, 'loaded', '排入後狀態為 loaded');
+  });
+
+  test('交貨時間空值＝不設限：派車行為與既有相容', () => {
+    const H = fresh();
+    const o = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', destSite: 'D2', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }); // 無 deliverTime
+    H.ModuleB.approve(o);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.includes(o), '未設交貨時間應照常排入');
+  });
+
+  test('接收人資訊（單位/姓名/電話/代理人）隨幹線託運單保存', () => {
+    const H = fresh();
+    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20,
+      recipient: { unit: '台南營業所', name: '鄭文彬', phone: '06-2223344', agentName: '周雅琳', agentPhone: '0933-556-677' } });
+    eq(o.recipient.name, '鄭文彬'); eq(o.recipient.unit, '台南營業所');
+    eq(o.recipient.agentName, '周雅琳'); eq(o.recipient.agentPhone, '0933-556-677');
+    const o2 = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    eq(Object.keys(o2.recipient).length, 0, '未帶接收人 → 空物件');
   });
 });
 

@@ -386,6 +386,38 @@ function bldgVal(bldgSelId, otherId) {
   return v === '其他' ? ($('#' + otherId).value.trim() || '其他') : v;
 }
 
+/* ---- 接收人資訊（單位／姓名／電話＋代理人）：A/B 共用 ---- */
+// 表單區塊；prefix 為欄位 id 前綴（如 'aa' / 'ba'）
+function recipientFieldsHtml(prefix, r) {
+  r = r || {};
+  const v = s => (s || '').replace(/"/g, '&quot;');
+  return `
+    <div class="divider"></div>
+    <div class="card-title">接收人資訊</div>
+    <div class="row">
+      <div class="field"><label>單位</label><input type="text" id="${prefix}-runit" value="${v(r.unit)}" placeholder="收貨單位／部門"></div>
+      <div class="field"><label>姓名</label><input type="text" id="${prefix}-rname" value="${v(r.name)}" placeholder="接收人姓名"></div>
+      <div class="field"><label>電話</label><input type="text" id="${prefix}-rphone" value="${v(r.phone)}" placeholder="聯絡電話"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>代理人姓名 <span class="hint">選填</span></label><input type="text" id="${prefix}-aname" value="${v(r.agentName)}" placeholder="代理人姓名"></div>
+      <div class="field"><label>代理人電話 <span class="hint">選填</span></label><input type="text" id="${prefix}-aphone" value="${v(r.agentPhone)}" placeholder="代理人電話"></div>
+    </div>`;
+}
+// 讀取表單接收人資訊
+function recipientVal(prefix) {
+  const g = id => { const el = $('#' + prefix + '-' + id); return el ? el.value.trim() : ''; };
+  return { unit: g('runit'), name: g('rname'), phone: g('rphone'), agentName: g('aname'), agentPhone: g('aphone') };
+}
+// 明細顯示：回傳 HTML（無資料時顯示 —）
+function recipientDisplay(r) {
+  if (!r || (!r.unit && !r.name && !r.phone && !r.agentName && !r.agentPhone)) return '<span class="muted">—</span>';
+  const main = [r.unit, r.name, r.phone].filter(Boolean).join('　·　') || '—';
+  const agent = (r.agentName || r.agentPhone)
+    ? `<br><span class="hint">代理人：${[r.agentName, r.agentPhone].filter(Boolean).join('　·　')}</span>` : '';
+  return main + agent;
+}
+
 /* ============================================================
    模組 A · 申請端（使用者）
    ============================================================ */
@@ -444,12 +476,12 @@ function renderAApplyList(p) {
   $('#aq-search').onclick = () => { runAQuery(); };
   $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
   $('#aq-demo').onclick = () => {
-    [['S3', 'asap', 10, 5, '五股廠 原料倉', [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
-     ['S6', 'exact', 12, 8, '中壢據點 北棟', [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
-     ['S3', 'asap', 15, 10, '林口物流中心 一號月台', [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([s, mode, lm, um, loc, items]) => ModuleA.submit({
+    [['S3', 'asap', 10, 5, '五股廠 原料倉', [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
+     ['S6', 'exact', 12, 8, '中壢據點 北棟', [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
+     ['S3', 'asap', 15, 10, '林口物流中心 一號月台', [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
+    ].forEach(([s, mode, lm, um, loc, items, recipient]) => ModuleA.submit({
       applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
-      pickupLoc: loc, deliverTime: '14:00', items, recvMode: mode, expectTime: '13:00', loadMin: lm, unloadMin: um }));
+      pickupLoc: loc, deliverTime: '14:00', recipient, items, recvMode: mode, expectTime: '13:00', loadMin: lm, unloadMin: um }));
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
@@ -525,6 +557,10 @@ function renderAApplyDetail(p, id) {
       </div>
     </div>
     <div class="card">
+      <div class="card-title">接收人資訊</div>
+      <div class="field"><div>${recipientDisplay(a.recipient)}</div></div>
+    </div>
+    <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目（總體積約 ${totalVol.toFixed(0)}L）</span>
         ${canEdit ? `<button class="btn btn-accent btn-sm" id="ad-add">＋ 新增</button>` : ''}</div>
       <div id="ad-items"></div>
@@ -590,6 +626,7 @@ function renderAApplyNew(p) {
         <div class="field"><label>上貨時間（分，自填 G15）</label><input type="number" id="aa-load" value="10"></div>
         <div class="field"><label>下貨時間（分，自填 G15）</label><input type="number" id="aa-unload" value="5"></div>
       </div>
+      ${recipientFieldsHtml('aa')}
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="aa-add">＋ 新增</button></div>
@@ -625,6 +662,7 @@ function renderAApplyNew(p) {
       building: bldgVal('aa-building', 'aa-destother'),
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
       deliverTime: $('#aa-deliver').value,
+      recipient: recipientVal('aa'),
       items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
@@ -818,26 +856,26 @@ function renderBApplyList(p) {
   $('#bq-new').onclick = () => { bApply.view = 'new'; RENDER.b_apply(); };
   $('#bq-demo').onclick = () => {
     // [收貨據點(起), 送貨據點(迄), 直達?, 裝卸分, 貨物]（去程南下：起北於迄）
-    [['D9', 'D3', false, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 10, category: 'BOX', weight: 15 }, { name: '長管', l: 300, w: 20, h: 20, qty: 2, category: 'LONG', weight: 25 }]],
-     ['D9', 'D2', false, 25, [{ name: '棧板料', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
-     ['D6', 'D2', false, 20, [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 8, category: 'BOX', weight: 10 }]],
-     ['D6', 'D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }]],
-     ['D9', 'D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([pick, drop, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site: pick, destSite: drop, direct, items,
+    [['D9', 'D3', false, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 10, category: 'BOX', weight: 15 }, { name: '長管', l: 300, w: 20, h: 20, qty: 2, category: 'LONG', weight: 25 }], { unit: '台南營業所', name: '鄭文彬', phone: '06-2223344#12', agentName: '周雅琳', agentPhone: '0933-556-677' }],
+     ['D9', 'D2', false, 25, [{ name: '棧板料', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '左營物流中心', name: '蔡宗翰', phone: '07-3334455#08' }],
+     ['D6', 'D2', false, 20, [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 8, category: 'BOX', weight: 10 }], { unit: '高雄分公司', name: '洪佳蓉', phone: '07-4445566#21', agentName: '張裕明', agentPhone: '0955-234-567' }],
+     ['D6', 'D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }], { unit: '屏東廠', name: '潘俊傑', phone: '08-7778899#33' }],
+     ['D9', 'D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '雲林倉儲', name: '簡淑芬', phone: '05-5556677#14', agentName: '許志偉', agentPhone: '0966-345-678' }]
+    ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
-        deliverTime: '15:00', loadMin: lm, unloadMin: handleMin - lm }); });
+        deliverTime: '18:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
     // 回程北上：收貨南部據點 → 送回基地 D10
-    [['D2', 'D10', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }]],
-     ['D3', 'D10', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }]],
-     ['D5', 'D10', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }]]
-    ].forEach(([pick, drop, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site: pick, destSite: drop, direct, items,
+    [['D2', 'D10', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }], { unit: '台北總部收發', name: '謝孟儒', phone: '02-27001234#500', agentName: '王品瑄', agentPhone: '0977-456-789' }],
+     ['D3', 'D10', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }], { unit: '研發部', name: '吳承恩', phone: '02-27005678#412' }],
+     ['D5', 'D10', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }], { unit: '中央倉', name: '林曉琪', phone: '02-27009999#601', agentName: '陳柏宇', agentPhone: '0988-567-890' }]
+    ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
-        deliverTime: '17:00', loadMin: lm, unloadMin: handleMin - lm }); });
+        deliverTime: '19:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -912,6 +950,10 @@ function renderBApplyDetail(p, id) {
       </div>
     </div>
     <div class="card">
+      <div class="card-title">接收人資訊</div>
+      <div class="field"><div>${recipientDisplay(o.recipient)}</div></div>
+    </div>
+    <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         ${bCanEdit ? `<button class="btn btn-accent btn-sm" id="bd-add">＋ 新增</button>` : ''}</div>
       <div id="bd-items"></div>
@@ -973,6 +1015,7 @@ function renderBApplyNew(p) {
         <div class="field"><label>上貨時間 (分，G35)</label><input type="number" id="ba-load" value="20"></div>
         <div class="field"><label>下貨時間 (分，G35)</label><input type="number" id="ba-unload" value="10"></div>
       </div>
+      ${recipientFieldsHtml('ba')}
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="ba-add">＋ 新增</button></div>
@@ -1018,6 +1061,7 @@ function renderBApplyNew(p) {
       pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),
       deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),
       deliverTime: $('#ba-deliver').value,
+      recipient: recipientVal('ba'),
       direct: $('#page-b_apply input[value="1"]').checked,
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
       items: baItems.map(x => ({ ...x })),
@@ -1125,6 +1169,10 @@ function renderBApproveDetail(p, id) {
         <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
         ${o.reviewNote ? `<div class="field"><label>審核備註</label><div>${o.reviewNote}</div></div>` : ''}
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title">接收人資訊</div>
+      <div class="field"><div>${recipientDisplay(o.recipient)}</div></div>
     </div>
     <div class="card">
       <div class="card-title">貨物項目</div>

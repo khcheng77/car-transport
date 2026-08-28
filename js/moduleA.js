@@ -23,7 +23,8 @@ const ModuleA = {
       station: data.station,
       building: data.building,
       pickupLoc: data.pickupLoc || '',  // 收貨地點（示意）
-      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨（示意）HH:MM
+      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨 HH:MM（接進媒合：到站須不晚於此）
+      recipient: data.recipient || {},  // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
       items: data.items,
       recvMode: data.recvMode,       // 'exact' | 'asap'
       expectTime: data.expectTime,   // exact 模式的期望到站時間
@@ -100,6 +101,10 @@ const ModuleA = {
 
     // 逐班次嘗試（時間軸最近的下一班 G10）
     let fitsSomeEmpty = false; // 是否存在「空車放得下」的班次（用來區分太大 vs 今天已滿）
+    // 交貨時間（幾點交貨）接進媒合：到站須不晚於此；空值＝不設限（相容既有）
+    const deadline = app.deliverTime ? hhmmToMin(app.deliverTime) : null;
+    let anyOnTime = false;     // 是否存在能在交貨時間前到站的班次（用來區分 late vs full）
+    if (deadline != null) trace.push(`<span class="dim">交貨時間：須於 ${app.deliverTime} 前到站，晚到班次不採計</span>`);
     for (let i = 0; i < shifts.length; i++) {
       const sh = shifts[i];
       const veh = vehiclePool[sh.id];
@@ -110,6 +115,13 @@ const ModuleA = {
       const emptyRes = checkLoad(app.items, veh, { volume: 0, weight: 0 });
       if (emptyRes.ok) fitsSomeEmpty = true;
       else trace.push(`  <span class="no">✗ 本班車即使空車也放不下（尺寸／容量太大）</span>`);
+
+      // --- 交貨時間檢核：到站晚於交貨時間 → 此班不符，順延下一班 ---
+      if (deadline != null && arr > deadline) {
+        trace.push(`  <span class="no">✗ 到站約 ${minToHHMM(arr)} 晚於交貨時間 ${app.deliverTime} → 不符交貨時間，跳過此班</span>`);
+        continue;
+      }
+      anyOnTime = true;
 
       // --- 站內時間額度（G16）：同站已排入單 + 本單 handleMin 是否超額 ---
       const sameStation = this.applications.filter(a =>
@@ -148,6 +160,10 @@ const ModuleA = {
     if (!fitsSomeEmpty) {
       trace.push(`\n<span class="no">✗ 任何一班車空車都放不下 → 貨物太大</span>`);
       return { ok: false, reason: 'toobig', trace, msg: '貨物太大：超過任何一班車輛的尺寸或容量，無法承運。' };
+    }
+    if (deadline != null && !anyOnTime) {
+      trace.push(`\n<span class="no">✗ 無班次可於交貨時間 ${app.deliverTime} 前送達</span>`);
+      return { ok: false, reason: 'late', trace, msg: `交貨時間過早：今日無班次可在 ${app.deliverTime} 前送達，請放寬交貨時間或改期。` };
     }
     trace.push(`\n<span class="no">✗ 今日各班次容量／時間額度皆已滿</span>`);
     return { ok: false, reason: 'full', trace, msg: '今天已滿：各班次容量或時間額度皆不足，請改期。' };
