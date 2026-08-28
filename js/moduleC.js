@@ -37,9 +37,9 @@ const ModuleC = {
     return app;
   },
 
-  // 業務/調度端：主管准駁；駁回保留紀錄不進排班池（G63）
-  approve(app) { app.status = 'approved'; app.approvedAt = this.approveSeq++; },
-  reject(app) { app.status = 'rejected'; app.approvedAt = null; },
+  // 主管准駁；駁回保留紀錄不進排班池（G63）；note＝審核備註（選填/駁回必填）
+  approve(app, note) { app.status = 'approved'; app.approvedAt = this.approveSeq++; if (note != null) app.reviewNote = note; },
+  reject(app, note) { app.status = 'rejected'; app.approvedAt = null; if (note != null) app.reviewNote = note; },
 
   // 乘客確認上車（matched → boarded）
   confirmBoard(app) { if (app.status === 'matched') { app.status = 'boarded'; app.boardedAt = Date.now(); } },

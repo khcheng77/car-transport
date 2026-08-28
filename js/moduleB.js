@@ -35,9 +35,9 @@ const ModuleB = {
     return o;
   },
 
-  // 業務/調度端：核准時填入審核通過時間（G34 排序用）
-  approve(o) { o.status = 'approved'; o.approvedAt = this.approveSeq++; },
-  reject(o) { o.status = 'rejected'; o.approvedAt = null; },
+  // 主管准駁：核准時填入審核通過時間（G34 排序用）；note＝審核備註（選填/駁回必填）
+  approve(o, note) { o.status = 'approved'; o.approvedAt = this.approveSeq++; if (note != null) o.reviewNote = note; },
+  reject(o, note) { o.status = 'rejected'; o.approvedAt = null; if (note != null) o.reviewNote = note; },
 
   // 接收人確認接受（loaded → accepted）
   acceptDelivery(o) { if (o.status === 'loaded') { o.status = 'accepted'; o.acceptedAt = Date.now(); } },

@@ -882,41 +882,133 @@ function renderBApplyNew(p) {
 function renderBaList() { if ($('#bq-grid')) renderBGrid(); }
 
 /* ============================================================
-   模組 B · 主管准駁（直屬主管）— 獨立單元
+   模組 B · 主管准駁（直屬主管）— 查詢 / grid / 明細審核
    ============================================================ */
+let bApprove = { view: 'list', detailId: null, query: { applicant: '', leg: '', status: '' } };
+
 RENDER.b_approve = function () {
   const p = $('#page-b_approve');
-  const submitted = ModuleB.orders.filter(o => o.status === 'submitted');
-  const decided = ModuleB.orders.filter(o => ['approved', 'rejected'].includes(o.status));
+  if (bApprove.view === 'detail') return renderBApproveDetail(p, bApprove.detailId);
+  return renderBApproveList(p);
+};
+function bApproveRows() {
+  const q = bApprove.query;
+  return ModuleB.orders.filter(o =>
+    (!q.applicant || o.applicant.includes(q.applicant)) &&
+    (!q.leg || o.leg === q.leg) &&
+    (!q.status || o.status === q.status));
+}
+function renderBApproveList(p) {
+  const q = bApprove.query;
+  const legOpts = [['', '全部方向'], ['outbound', '去程'], ['return', '回程']]
+    .map(([v, t]) => `<option value="${v}" ${q.leg === v ? 'selected' : ''}>${t}</option>`).join('');
+  const stOpts = [['', '全部狀態'], ['submitted', '待准駁'], ['approved', '已核准'], ['rejected', '已駁回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">主管准駁（直屬主管）</div>
-    <div class="section-sub">員工建立幹線託運單後由直屬主管准駁。駁回保留紀錄但不進派車池；核准後才進入業務單位派車調度。（G63）</div>
+    <div class="section-sub">員工建立幹線託運單後由直屬主管准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進派車池。（G63）</div>
     <div class="card">
-      <div class="card-title">待准駁託運單 <span class="g-tag">G63</span></div>
-      ${submitted.length === 0 ? `<div class="empty">目前無待准駁託運單。</div>` : `
-      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="bap-approve-all">✓ 全部核准</button></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>操作</th></tr></thead><tbody>
-        ${submitted.map(o => `<tr><td>${o.id}</td><td>${o.applicant}</td>
-          <td>${o.leg === 'return' ? '回程' : '去程'}</td>
-          <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
-          <td>${o.direct ? '直達' : '非直達'}</td><td>${o.volume}L</td>
-          <td><button class="btn btn-primary btn-sm" data-ap="${o.id}">核准</button>
-              <button class="btn btn-ghost btn-sm" data-rj="${o.id}">駁回</button></td></tr>`).join('')}
-      </tbody></table></div>`}
+      <div class="card-title">查詢條件</div>
+      <div class="grid-2">
+        <div class="field"><label>申請人（模糊）</label><input type="text" id="bap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
+        <div class="field"><label>行程方向</label><select id="bap-q-leg">${legOpts}</select></div>
+        <div class="field"><label>狀態</label><select id="bap-q-status">${stOpts}</select></div>
+      </div>
+      <button class="btn btn-primary btn-sm" id="bap-search">🔍 查詢</button>
     </div>
     <div class="card">
-      <div class="card-title">已處理紀錄</div>
-      ${decided.length === 0 ? `<div class="muted">尚無已准駁紀錄。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>准駁結果</th></tr></thead><tbody>
-        ${decided.map(o => `<tr><td>${o.id}</td><td>${o.applicant}</td>
-          <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td><td>${stBadge(o.status)}</td></tr>`).join('')}
-      </tbody></table></div>`}
+      <div class="card-title" style="justify-content:space-between;">
+        <span>待准駁 / 已處理託運單</span>
+        <button class="btn btn-accent btn-sm" id="bap-approve-all">✓ 全部核准</button>
+      </div>
+      <div id="bap-grid"></div>
     </div>`;
-  const all = $('#bap-approve-all');
-  if (all) all.onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准所有待准駁託運單。' }, () => { submitted.forEach(o => ModuleB.approve(o)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); });
-  $$('#page-b_approve [data-ap]').forEach(b => b.onclick = confirmThen({ title: '確認核准此託運單？', text: '核准後進入業務單位派車調度。' }, () => { ModuleB.approve(ModuleB.orders.find(o => o.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); }));
-  $$('#page-b_approve [data-rj]').forEach(b => b.onclick = confirmThen({ title: '確認駁回此託運單？', text: '駁回後保留紀錄但不進派車池。' }, () => { ModuleB.reject(ModuleB.orders.find(o => o.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.b_approve(); renderBaList(); }));
-};
+  $('#bap-search').onclick = () => {
+    bApprove.query = { applicant: $('#bap-q-applicant').value.trim(), leg: $('#bap-q-leg').value, status: $('#bap-q-status').value };
+    renderBApproveGrid(); toast('查詢完成', 'ok');
+  };
+  $('#bap-approve-all').onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准目前清單中所有「待准駁」託運單。' }, () => {
+    const subs = bApproveRows().filter(o => o.status === 'submitted');
+    subs.forEach(o => ModuleB.approve(o));
+    toast(`已核准 ${subs.length} 筆`, 'ok');
+    renderBApproveGrid(); renderBaList(); if ($('#br-approved')) renderBr_approved();
+  });
+  renderBApproveGrid();
+}
+function renderBApproveGrid() {
+  if (!$('#bap-grid')) return;
+  const rows = bApproveRows();
+  $('#bap-grid').innerHTML = rows.length === 0 ? `<div class="empty">查無符合條件的託運單。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>方向</th><th>收貨據點</th><th>型態</th><th>貨量</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(o => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-bvdetail="${o.id}">細節</button></td>
+        <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
+        <td>${o.leg === 'return' ? '回程' : '去程'}</td>
+        <td>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</td>
+        <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
+        <td>${o.volume}L</td><td>${stBadge(o.status)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $$('#bap-grid [data-bvdetail]').forEach(b => b.onclick = () => { bApprove.detailId = b.dataset.bvdetail; bApprove.view = 'detail'; RENDER.b_approve(); });
+}
+function renderBApproveDetail(p, id) {
+  const o = ModuleB.orders.find(x => x.id === id);
+  if (!o) { bApprove.view = 'list'; return RENDER.b_approve(); }
+  const pending = o.status === 'submitted';
+  p.innerHTML = `
+    <div class="section-h">託運單審核 · ${o.id}</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
+      <div class="grid-2">
+        <div class="field"><label>單號</label><div>${o.id}</div></div>
+        <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
+        <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
+        <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</div></div>
+        <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
+        <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
+        <div class="field"><label>貨物類別（浪費係數 G03）</label><div>${(DB.wasteFactors.find(f => f.code === o.category) || {}).name || o.category}　係數 ${WasteFactorProvider.get(o.category)}</div></div>
+        <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
+        <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
+        ${o.reviewNote ? `<div class="field"><label>審核備註</label><div>${o.reviewNote}</div></div>` : ''}
+      </div>
+    </div>
+    ${pending ? `
+    <div class="card">
+      <div class="card-title">主管審核 <span class="g-tag">G63</span></div>
+      <div class="field"><label>是否同意</label>
+        <div class="radio-group">
+          <label class="radio-pill sel" id="bsv-yes-pill"><input type="radio" name="bsv-agree" value="yes" checked>是</label>
+          <label class="radio-pill" id="bsv-no-pill"><input type="radio" name="bsv-agree" value="no">否</label>
+        </div>
+      </div>
+      <div class="field"><label>審核備註 <span class="hint" id="bsv-req" style="display:none;color:#c0392b;">（駁回時必填）</span></label>
+        <input type="text" id="bsv-note" placeholder="請輸入審核意見（駁回為必填）"></div>
+      <div style="text-align:center;margin-top:22px;">
+        <button class="btn btn-primary" id="bsv-submit">▶ 送出</button>
+        <button class="btn btn-ghost" id="bsv-cancel">取消</button>
+      </div>
+    </div>` : backBar('bsv-back')}`;
+  if (pending) {
+    const syncReq = () => {
+      const no = $('#page-b_approve input[name=bsv-agree][value=no]').checked;
+      $('#bsv-yes-pill').classList.toggle('sel', !no);
+      $('#bsv-no-pill').classList.toggle('sel', no);
+      $('#bsv-req').style.display = no ? 'inline' : 'none';
+    };
+    $$('#page-b_approve input[name=bsv-agree]').forEach(r => r.onchange = syncReq);
+    $('#bsv-submit').onclick = () => {
+      const agree = $('#page-b_approve input[name=bsv-agree]:checked').value === 'yes';
+      const note = $('#bsv-note').value.trim();
+      if (!agree && !note) { toast('駁回時「審核備註」為必填', 'err'); $('#bsv-note').focus(); return; }
+      if (agree) { ModuleB.approve(o, note); toast(`${o.id} 已核准`, 'ok'); }
+      else { ModuleB.reject(o, note); toast(`${o.id} 已駁回`, 'err'); }
+      bApprove.view = 'list'; RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved();
+    };
+    $('#bsv-cancel').onclick = () => { bApprove.view = 'list'; RENDER.b_approve(); };
+  } else {
+    $('#bsv-back').onclick = () => { bApprove.view = 'list'; RENDER.b_approve(); };
+  }
+}
 
 /* ============================================================
    模組 B · 派車調度（業務單位）— 派車決策 / 決策矩陣 / 貨況追蹤
@@ -1310,37 +1402,133 @@ function renderCaList() { if ($('#cq-grid')) renderCGrid(); }
 /* ============================================================
    模組 C · 主管准駁（直屬主管）— 獨立單元
    ============================================================ */
+let cApprove = { view: 'list', detailId: null, query: { applicant: '', type: '', status: '' } };
+
 RENDER.c_approve = function () {
   const p = $('#page-c_approve');
-  const submitted = ModuleC.applications.filter(a => a.status === 'submitted');
-  const decided = ModuleC.applications.filter(a => ['approved', 'rejected'].includes(a.status));
+  if (cApprove.view === 'detail') return renderCApproveDetail(p, cApprove.detailId);
+  return renderCApproveList(p);
+};
+function cApproveRows() {
+  const q = cApprove.query;
+  return ModuleC.applications.filter(a =>
+    (!q.applicant || a.applicant.includes(q.applicant)) &&
+    (!q.type || a.type === q.type) &&
+    (!q.status || a.status === q.status));
+}
+function renderCApproveList(p) {
+  const q = cApprove.query;
+  const typeOpts = [['', '全部型態'], ['round', '來回單'], ['oneway', '單程單']]
+    .map(([v, t]) => `<option value="${v}" ${q.type === v ? 'selected' : ''}>${t}</option>`).join('');
+  const stOpts = [['', '全部狀態'], ['submitted', '待准駁'], ['approved', '已核准'], ['rejected', '已駁回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">主管准駁（直屬主管）</div>
-    <div class="section-sub">員工填單後由直屬主管審核出差用車本身的准駁。駁回保留紀錄但不進排班池；核准後才進入業務單位的批次媒合。（G63）</div>
+    <div class="section-sub">員工填單後由直屬主管審核出差用車准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進排班池。（G63）</div>
     <div class="card">
-      <div class="card-title">待准駁申請 <span class="g-tag">G63</span></div>
-      ${submitted.length === 0 ? `<div class="empty">目前無待准駁申請單。</div>` : `
-      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="cap-approve-all">✓ 全部核准</button></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>操作</th></tr></thead><tbody>
-        ${submitted.map(a => `<tr><td>${a.id}</td><td>${a.applicant}（${a.dept}）</td><td>${a.type === 'round' ? '來回' : '單程'}</td>
-          <td>${a.origin}→${a.dest}</td><td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
-          <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '—'}</td><td>${a.pax}</td>
-          <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
-              <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`).join('')}
-      </tbody></table></div>`}
+      <div class="card-title">查詢條件</div>
+      <div class="grid-2">
+        <div class="field"><label>申請人（模糊）</label><input type="text" id="cap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
+        <div class="field"><label>任務型態</label><select id="cap-q-type">${typeOpts}</select></div>
+        <div class="field"><label>狀態</label><select id="cap-q-status">${stOpts}</select></div>
+      </div>
+      <button class="btn btn-primary btn-sm" id="cap-search">🔍 查詢</button>
     </div>
     <div class="card">
-      <div class="card-title">已處理紀錄</div>
-      ${decided.length === 0 ? `<div class="muted">尚無已准駁紀錄。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>准駁結果</th></tr></thead><tbody>
-        ${decided.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td><td>${stBadge(a.status, 'C')}</td></tr>`).join('')}
-      </tbody></table></div>`}
+      <div class="card-title" style="justify-content:space-between;">
+        <span>待准駁 / 已處理申請單</span>
+        <button class="btn btn-accent btn-sm" id="cap-approve-all">✓ 全部核准</button>
+      </div>
+      <div id="cap-grid"></div>
     </div>`;
-  const all = $('#cap-approve-all');
-  if (all) all.onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准所有待准駁出差用車申請。' }, () => { submitted.forEach(a => ModuleC.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.c_approve(); renderCaList(); });
-  $$('#page-c_approve [data-ap]').forEach(b => b.onclick = confirmThen({ title: '確認核准此申請？', text: '核准後進入系統批次媒合。' }, () => { ModuleC.approve(ModuleC.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.c_approve(); renderCaList(); }));
-  $$('#page-c_approve [data-rj]').forEach(b => b.onclick = confirmThen({ title: '確認駁回此申請？', text: '駁回後保留紀錄但不進排班池。' }, () => { ModuleC.reject(ModuleC.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.c_approve(); renderCaList(); }));
-};
+  $('#cap-search').onclick = () => {
+    cApprove.query = { applicant: $('#cap-q-applicant').value.trim(), type: $('#cap-q-type').value, status: $('#cap-q-status').value };
+    renderCApproveGrid(); toast('查詢完成', 'ok');
+  };
+  $('#cap-approve-all').onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准目前清單中所有「待准駁」出差用車申請。' }, () => {
+    const subs = cApproveRows().filter(a => a.status === 'submitted');
+    subs.forEach(a => ModuleC.approve(a));
+    toast(`已核准 ${subs.length} 筆`, 'ok');
+    renderCApproveGrid(); renderCaList();
+  });
+  renderCApproveGrid();
+}
+function renderCApproveGrid() {
+  if (!$('#cap-grid')) return;
+  const rows = cApproveRows();
+  $('#cap-grid').innerHTML = rows.length === 0 ? `<div class="empty">查無符合條件的申請單。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(a => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-cvdetail="${a.id}">細節</button></td>
+        <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}（${a.dept}）</td>
+        <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin}→${a.dest}</td>
+        <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
+        <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '<span class="muted">—</span>'}</td>
+        <td>${a.pax}</td><td>${stBadge(a.status, 'C')}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $$('#cap-grid [data-cvdetail]').forEach(b => b.onclick = () => { cApprove.detailId = b.dataset.cvdetail; cApprove.view = 'detail'; RENDER.c_approve(); });
+}
+function renderCApproveDetail(p, id) {
+  const a = ModuleC.applications.find(x => x.id === id);
+  if (!a) { cApprove.view = 'list'; return RENDER.c_approve(); }
+  const pending = a.status === 'submitted';
+  p.innerHTML = `
+    <div class="section-h">出差用車審核 · ${a.id}</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
+      <div class="grid-2">
+        <div class="field"><label>單號</label><div>${a.id}</div></div>
+        <div class="field"><label>申請人</label><div>${a.applicant}（${a.dept}/${a.ext}）</div></div>
+        <div class="field"><label>任務型態</label><div>${a.type === 'round' ? '來回單' : '單程單（交通轉運點）'}</div></div>
+        <div class="field"><label>路線</label><div>${a.origin} → ${a.dest}</div></div>
+        <div class="field"><label>去程（出發日期 / 上車時間）</label><div>${a.departDate} ${a.earliestPickup}</div></div>
+        ${a.type === 'round'
+          ? `<div class="field"><label>回程（回程日期 / 上車時間）</label><div>${a.returnDate} ${a.earliestReturn || '—'}</div></div>`
+          : `<div class="field"><label>回程</label><div class="muted">單程單不適用</div></div>`}
+        <div class="field"><label>最晚抵達（參考 G55）</label><div class="muted">${ModuleC.latestArrival(a)}</div></div>
+        <div class="field"><label>人數</label><div>${a.pax}</div></div>
+        <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
+        ${a.reviewNote ? `<div class="field"><label>審核備註</label><div>${a.reviewNote}</div></div>` : ''}
+      </div>
+    </div>
+    ${pending ? `
+    <div class="card">
+      <div class="card-title">主管審核 <span class="g-tag">G63</span></div>
+      <div class="field"><label>是否同意</label>
+        <div class="radio-group">
+          <label class="radio-pill sel" id="csv-yes-pill"><input type="radio" name="csv-agree" value="yes" checked>是</label>
+          <label class="radio-pill" id="csv-no-pill"><input type="radio" name="csv-agree" value="no">否</label>
+        </div>
+      </div>
+      <div class="field"><label>審核備註 <span class="hint" id="csv-req" style="display:none;color:#c0392b;">（駁回時必填）</span></label>
+        <input type="text" id="csv-note" placeholder="請輸入審核意見（駁回為必填）"></div>
+      <div style="text-align:center;margin-top:22px;">
+        <button class="btn btn-primary" id="csv-submit">▶ 送出</button>
+        <button class="btn btn-ghost" id="csv-cancel">取消</button>
+      </div>
+    </div>` : backBar('csv-back')}`;
+  if (pending) {
+    const syncReq = () => {
+      const no = $('#page-c_approve input[name=csv-agree][value=no]').checked;
+      $('#csv-yes-pill').classList.toggle('sel', !no);
+      $('#csv-no-pill').classList.toggle('sel', no);
+      $('#csv-req').style.display = no ? 'inline' : 'none';
+    };
+    $$('#page-c_approve input[name=csv-agree]').forEach(r => r.onchange = syncReq);
+    $('#csv-submit').onclick = () => {
+      const agree = $('#page-c_approve input[name=csv-agree]:checked').value === 'yes';
+      const note = $('#csv-note').value.trim();
+      if (!agree && !note) { toast('駁回時「審核備註」為必填', 'err'); $('#csv-note').focus(); return; }
+      if (agree) { ModuleC.approve(a, note); toast(`${a.id} 已核准`, 'ok'); }
+      else { ModuleC.reject(a, note); toast(`${a.id} 已駁回`, 'err'); }
+      cApprove.view = 'list'; RENDER.c_approve(); renderCaList();
+    };
+    $('#csv-cancel').onclick = () => { cApprove.view = 'list'; RENDER.c_approve(); };
+  } else {
+    $('#csv-back').onclick = () => { cApprove.view = 'list'; RENDER.c_approve(); };
+  }
+}
 
 /* ============================================================
    模組 C · 媒合調度（業務單位）— 批次媒合 / 逾期作廢 / 派車追蹤
