@@ -47,6 +47,10 @@ function _swalClose(result) {
 function confirmThen(opts, fn) {
   return async function (ev) { if (await confirmDialog(opts)) return fn.call(this, ev); };
 }
+/* 頁面最下方置中的「回上一頁」按鈕（明細/新增頁共用）*/
+function backBar(id) {
+  return `<div style="text-align:center;margin-top:28px;"><button class="btn btn-ghost" id="${id}">← 回上一頁</button></div>`;
+}
 
 /* 通用狀態徽章（mod 用來區分同名狀態 matched 的顯示文字）*/
 function stBadge(s, mod) {
@@ -430,10 +434,7 @@ function renderAApplyDetail(p, id) {
   else if (a.status === 'accepted') action = `<button class="btn btn-accent" data-recv="${a.id}">確認已收到貨</button>`;
   else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
-    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
-      <button class="btn btn-ghost btn-sm" id="ad-back">← 返回查詢</button>
-      收貨申請明細 · ${a.id}
-    </div>
+    <div class="section-h">收貨申請明細 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status)}</div>
       <div class="grid-2">
@@ -463,7 +464,8 @@ function renderAApplyDetail(p, id) {
         <div class="field"><label>異常回報</label><div>${a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'}</div></div>
       </div>`}
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
-    </div>`;
+    </div>
+    ${backBar('ad-back')}`;
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   const acc = $(`#page-a_apply [data-accept]`);
   if (acc) acc.onclick = confirmThen({ title: '確認接受此排班？', text: '確認後即接受系統排定的班次與車輛。' }, () => { ModuleA.acceptSchedule(a); toast(`${a.id} 已確認接受排班`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
@@ -475,10 +477,7 @@ function renderAApplyDetail(p, id) {
 function renderAApplyNew(p) {
   const stOpts = DB.stations.map(s => `<option value="${s.id}">${s.order}. ${s.name}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
-      <button class="btn btn-ghost btn-sm" id="an-back">← 返回查詢</button>
-      新增收貨申請單
-    </div>
+    <div class="section-h">新增收貨申請單</div>
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
@@ -502,7 +501,9 @@ function renderAApplyNew(p) {
       <div class="callout info" style="margin-bottom:10px;">送出後系統<b>立即自動媒合</b>（無需主管核准、無需業務按鈕），並直接告知媒合到的<b>班次時間與車號</b>。</div>
       <button class="btn btn-primary" id="aa-submit">▶ 送出並自動媒合</button>
       <button class="btn btn-ghost" id="aa-cancel">取消</button>
-    </div>`;
+    </div>
+    ${backBar('an-back')}`;
+  $('#an-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   const fillBuildings = () => {
     const st = DB.stations.find(s => s.id === $('#aa-station').value);
     $('#aa-building').innerHTML = st.buildings.map(b => `<option>${b}</option>`).join('');
@@ -783,10 +784,7 @@ function renderBApplyDetail(p, id) {
   else if (o.status === 'accepted') action = `<button class="btn btn-accent" data-brecv="${o.id}">確認已收到貨</button>`;
   else if (o.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
-    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
-      <button class="btn btn-ghost btn-sm" id="bd-back">← 返回查詢</button>
-      幹線託運單明細 · ${o.id}
-    </div>
+    <div class="section-h">幹線託運單明細 · ${o.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
       <div class="grid-2">
@@ -808,7 +806,8 @@ function renderBApplyDetail(p, id) {
         <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>　<span class="hint">幹線車抵達「${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}」收貨的時間</span>` : '<span class="muted">待派車</span>'}</div></div>
       </div>
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
-    </div>`;
+    </div>
+    ${backBar('bd-back')}`;
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   const acc = $('#page-b_apply [data-baccept]');
   if (acc) acc.onclick = confirmThen({ title: '確認接受此派車？', text: '確認後即接受派定的車輛與來收時間。' }, () => { ModuleB.acceptDelivery(o); toast(`${o.id} 已確認接受`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
@@ -820,10 +819,7 @@ function renderBApplyDetail(p, id) {
 function renderBApplyNew(p) {
   const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
-      <button class="btn btn-ghost btn-sm" id="bn-back">← 返回查詢</button>
-      新增幹線託運單
-    </div>
+    <div class="section-h">新增幹線託運單</div>
     <div class="card">
       <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
       <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
@@ -849,7 +845,9 @@ function renderBApplyNew(p) {
         <select id="ba-cat">${DB.wasteFactors.map(f => `<option value="${f.code}">${f.name}（係數 ${f.factor}）</option>`).join('')}</select></div>
       <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待業務審核）</button>
       <button class="btn btn-ghost" id="ba-cancel">取消</button>
-    </div>`;
+    </div>
+    ${backBar('bn-back')}`;
+  $('#bn-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   const setDirect = () => {
     $('#ba-nd').classList.toggle('sel', $('#page-b_apply input[value="0"]').checked);
     $('#ba-d').classList.toggle('sel', $('#page-b_apply input[value="1"]').checked);
@@ -1164,10 +1162,7 @@ function renderCApplyDetail(p, id) {
   else if (a.status === 'boarded') action = `<button class="btn btn-accent" data-done="${a.id}">確認行程完成</button>`;
   else if (a.status === 'completed') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
-    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
-      <button class="btn btn-ghost btn-sm" id="cd-back">← 返回查詢</button>
-      出差用車申請明細 · ${a.id}
-    </div>
+    <div class="section-h">出差用車申請明細 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
       <div class="grid-2">
@@ -1200,7 +1195,8 @@ function renderCApplyDetail(p, id) {
       <div class="card-desc">自動媒合未成時，您可自行向「已確定有車」的單搭便車。候選＝出發日期前後 1 天、已派車的單（不篩目的地、不比時間）。聯繫對方後按「完成合併」即成立，免調度室確認。</div>
       <button class="btn btn-primary btn-sm" id="cd-find">🔍 列出候選便車</button>
       <div id="cd-candidates"></div>
-    </div>` : ''}`;
+    </div>` : ''}
+    ${backBar('cd-back')}`;
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   const brd = $('#page-c_apply [data-board]');
   if (brd) brd.onclick = confirmThen({ title: '確認上車？', text: '確認後此趟共乘將標記為已上車。' }, () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
@@ -1231,10 +1227,7 @@ function renderCApplyNew(p) {
   const oOpts = DB.bizOrigins.map(o => `<option>${o}</option>`).join('');
   const dOpts = DB.bizDests.map(d => `<option>${d}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h" style="display:flex;align-items:center;gap:12px;">
-      <button class="btn btn-ghost btn-sm" id="cn-back">← 返回查詢</button>
-      新增出差用車申請單
-    </div>
+    <div class="section-h">新增出差用車申請單</div>
     <div class="card">
       <div class="card-title">出差用車申請 <span class="g-tag">G50/G54</span></div>
       <div class="row">
@@ -1268,7 +1261,9 @@ function renderCApplyNew(p) {
       <div class="callout info">來回單須「出發地、目的地、出發日期、回程日期、去程上車、回程上車」六項完全相同才能媒合（G54）。最晚抵達時間僅供參考，<b>不參與媒合判斷</b>（G55）。</div>
       <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待主管准駁）</button>
       <button class="btn btn-ghost" id="ca-cancel">取消</button>
-    </div>`;
+    </div>
+    ${backBar('cn-back')}`;
+  $('#cn-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   const setType = () => {
     const round = $('#page-c_apply input[value=round]').checked;
     $('#ca-round').classList.toggle('sel', round);
