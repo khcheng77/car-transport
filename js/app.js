@@ -67,7 +67,7 @@ function stBadge(s, mod) {
     void: ['逾期作廢', 'b-red'],
     boarded: ['已上車', 'b-amber'],
     completed: ['行程完成', 'b-green'],
-    matched: mod === 'C' ? ['已媒合待上車', 'b-navy'] : ['已排班待接受', 'b-navy'],
+    matched: mod === 'C' ? ['已媒合待上車', 'b-navy'] : ['已排班', 'b-navy'],
   };
   const m = map[s];
   return m ? `<span class="badge ${m[1]}">${m[0]}</span>` : s;
@@ -136,7 +136,7 @@ function goto(pageId) {
 const RENDER = {};
 RENDER.dashboard = function () {
   const p = $('#page-dashboard');
-  const aMatched = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status)).length;
+  const aMatched = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status)).length;
   const bLoaded = ModuleB.orders.filter(o => ['loaded', 'accepted', 'delivered'].includes(o.status)).length;
   const cMatched = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status)).length;
   const pendReview = ModuleA.applications.filter(a => a.status === 'submitted').length
@@ -334,8 +334,7 @@ function renderAApplyList(p) {
   const q = aApply.query;
   const stOpts = ['<option value="">全部站點</option>'].concat(
     DB.stations.map(s => `<option value="${s.id}" ${q.station === s.id ? 'selected' : ''}>${s.order}. ${s.name}</option>`)).join('');
-  const statusOpts = [['', '全部狀態'], ['matched', '已排班待接受'], ['unscheduled', '未排入·請改期'],
-    ['accepted', '已接受待交貨'], ['delivered', '已交貨']]
+  const statusOpts = [['', '全部狀態'], ['matched', '已排班'], ['unscheduled', '未排入·請改期'], ['delivered', '已交貨']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   const modeOpts = [['', '全部模式'], ['asap', '越快越好'], ['exact', '指定期望時間']]
     .map(([v, t]) => `<option value="${v}" ${q.mode === v ? 'selected' : ''}>${t}</option>`).join('');
@@ -430,8 +429,7 @@ function renderAApplyDetail(p, id) {
   const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
   const totalVol = a.items.reduce((s, it) => s + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0);
   let action = '';
-  if (a.status === 'matched') action = `<button class="btn btn-primary" data-accept="${a.id}">確認接受排班</button>`;
-  else if (a.status === 'accepted') action = `<button class="btn btn-accent" data-recv="${a.id}">確認已收到貨</button>`;
+  if (a.status === 'matched') action = `<button class="btn btn-accent" data-recv="${a.id}">確認已收到貨</button>`;
   else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
     <div class="section-h">收貨申請明細 · ${a.id}</div>
@@ -467,8 +465,6 @@ function renderAApplyDetail(p, id) {
     </div>
     ${backBar('ad-back')}`;
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
-  const acc = $(`#page-a_apply [data-accept]`);
-  if (acc) acc.onclick = confirmThen({ title: '確認接受此排班？', text: '確認後即接受系統排定的班次與車輛。' }, () => { ModuleA.acceptSchedule(a); toast(`${a.id} 已確認接受排班`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
   const rcv = $(`#page-a_apply [data-recv]`);
   if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此收貨申請將標記為已交貨。' }, () => { ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 已確認收到貨`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
 }
@@ -535,7 +531,7 @@ function renderAApplyNew(p) {
       const veh = DB.vehicles.find(v => v.id === result.shift.vehicle);
       toast(`${app.id} 已自動媒合：${result.shift.label}／車 ${veh ? veh.id : result.shift.vehicle}／到站約 ${result.arrival}`, 'ok');
     } else {
-      toast(`${app.id} 未能排入：${result.msg}`, 'err');
+      toast(`${app.id}｜${result.msg}`, 'err');
     }
     aApply.resultIds = null;        // 回到查詢畫面顯示全部（含新單）
     aApply.view = 'detail'; aApply.detailId = app.id; // 送出後直接看媒合結果明細
@@ -597,29 +593,26 @@ function renderAr_review() {
 }
 // 已排定車次一覽（被安排的車次 + 媒合狀況 + 接受/交貨狀態）
 function renderAr_scheduled() {
-  const rows = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status));
+  const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
   const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。使用者送出申請並自動媒合成功後即會出現在此。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
       <th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>車輛</th><th>到站</th>
-      <th>接收人接受</th><th>交貨</th><th>操作</th></tr></thead><tbody>
+      <th>交貨</th><th>操作</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
-        const acc = (a.status === 'accepted' || a.status === 'delivered')
-          ? '<span class="badge b-green">已接受</span>' : '<span class="badge b-gray">待接受</span>';
         const del = a.status === 'delivered'
           ? `<span class="badge b-green">已交貨</span>` : '<span class="badge b-gray">未交貨</span>';
         let op = '<span class="muted">—</span>';
-        if (a.status === 'accepted') op = `<button class="btn btn-accent btn-sm" data-deliver="${a.id}">確認交貨</button>`;
-        else if (a.status === 'matched') op = '<span class="muted">待接收人接受</span>';
+        if (a.status === 'matched') op = `<button class="btn btn-accent btn-sm" data-deliver="${a.id}">確認交貨</button>`;
         else if (a.status === 'delivered') op = `<span class="muted">${a.deliveredBy || ''} 完成</span>`;
         return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
           <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td>
-          <td>${acc}</td><td>${del}</td><td>${op}</td></tr>`; }).join('')}
+          <td>${del}</td><td>${op}</td></tr>`; }).join('')}
     </tbody></table></div>`;
   return `<div class="card">
-    <div class="card-title">已排定車次一覽（被安排車次 · 媒合狀況 · 接受/交貨追蹤）</div>
-    <div class="card-desc">顯示每張已排班申請單的班次、車輛、到站時間，以及接收人接受與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
+    <div class="card-title">已排定車次一覽（被安排車次 · 交貨追蹤）</div>
+    <div class="card-desc">媒合成功即完成排班（免確認接受）。顯示每張已排班申請單的班次、車輛、到站時間與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
     ${body}</div>`;
 }
 function renderA_route() {
@@ -639,7 +632,7 @@ function renderA_route() {
     </div>`;
 }
 function renderA_incident() {
-  const matched = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status));
+  const matched = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
   $('#ar-tab-incident').innerHTML = `
     <div class="card">
       <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>

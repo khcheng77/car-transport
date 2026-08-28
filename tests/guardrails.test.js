@@ -104,14 +104,36 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(a3.assignedShift, 'R-A2', '第三單 45>40 應順延下一班（G16/G17）');
   });
 
-  test('G11/G12 當日最後一班仍裝不下 → 不留候補、標記未排入·請改期', () => {
+  test('太大：超過任何一班車尺寸/容量 → reason=toobig、回覆太大', () => {
     const H = fresh();
     const { app, result } = submit(H, { items: [item({ name: '巨件', l: 999, w: 999, h: 999 })] });
     ok(!result.ok, '應媒合失敗');
-    eq(result.reason, 'full', '最後一班仍裝不下 → full');
-    ok(/請明天請早再試|改期/.test(result.msg), '訊息需提示改期，不寫候補');
+    eq(result.reason, 'toobig', '空車都放不下 → toobig');
+    ok(/太大/.test(result.msg), '訊息需回覆「太大」');
     eq(app.assignedShift, null, '失敗不得寫入班次（不留候補 G12）');
-    eq(app.status, 'unscheduled', '失敗狀態應為未排入·請改期');
+    eq(app.status, 'unscheduled');
+  });
+
+  test('今天已滿：貨物本身放得下但各班次皆已滿 → reason=full、回覆今天已滿', () => {
+    const H = fresh();
+    // 先用大量佔滿三個班次車輛的容量（每件可放入空車，但累積後無空間）
+    // V-L01(≈14364L)/V-L02(≈11655L)；用多張大單填滿
+    const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 }); // ≈8078L×1.1
+    for (let i = 0; i < 8; i++) submit(H, { items: [big()], handleMin: 1 });
+    const { app, result } = submit(H, { items: [big()], handleMin: 1 });
+    ok(!result.ok, '此時應已滿');
+    eq(result.reason, 'full', '放得下空車但各班次已滿 → full');
+    ok(/今天已滿|已滿/.test(result.msg), '訊息需回覆「今天已滿」');
+    eq(app.status, 'unscheduled');
+  });
+
+  test('媒合成功後狀態為 matched，且可直接交貨（不需先接受）', () => {
+    const H = fresh();
+    const { app } = submit(H);
+    eq(app.status, 'matched', '媒合成功即已排班');
+    ok(typeof H.ModuleA.acceptSchedule === 'undefined', '不應再有確認接受排班步驟');
+    H.ModuleA.confirmDelivery(app, '接收人');
+    eq(app.status, 'delivered', 'matched 應可直接進入已交貨');
   });
 
   test('G19 越快越好：選最早出發班次', () => {

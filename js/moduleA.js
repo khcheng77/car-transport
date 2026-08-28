@@ -42,10 +42,9 @@ const ModuleA = {
     return { app, result: r };
   },
 
-  // 接收人確認接受排班（matched → accepted）
-  acceptSchedule(app) { if (app.status === 'matched') { app.status = 'accepted'; app.acceptedAt = Date.now(); } },
-  // 交貨確認（accepted → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
-  confirmDelivery(app, by) { if (app.status === 'accepted') { app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室'; } },
+  // 媒合成功即完成排班，不需接收人「確認接受」；交貨確認可由 matched 直接進入
+  // 交貨確認（matched → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
+  confirmDelivery(app, by) { if (app.status === 'matched') { app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室'; } },
 
   /* 各班次到達某站的時間（示意）：出發時間 + 站序×固定行駛 */
   shiftArrivalAtStation(shift, stationOrder) {
@@ -82,12 +81,17 @@ const ModuleA = {
     }
 
     // 逐班次嘗試（時間軸最近的下一班 G10）
+    let fitsSomeEmpty = false; // 是否存在「空車放得下」的班次（用來區分太大 vs 今天已滿）
     for (let i = 0; i < shifts.length; i++) {
       const sh = shifts[i];
       const veh = vehiclePool[sh.id];
-      const isLast = (i === shifts.length - 1);
       const arr = this.shiftArrivalAtStation(sh, station.order);
       trace.push(`\n▶ 嘗試班次 <span class="hl">${sh.label}</span>（車 ${veh.id}）到站約 ${minToHHMM(arr)}`);
+
+      // --- 尺寸/容量可行性：空車是否根本放不下（與其他訂單無關 → 判斷「太大」）---
+      const emptyRes = checkLoad(app.items, veh, { volume: 0, weight: 0 });
+      if (emptyRes.ok) fitsSomeEmpty = true;
+      else trace.push(`  <span class="no">✗ 本班車即使空車也放不下（尺寸／容量太大）</span>`);
 
       // --- 站內時間額度（G16）：同站已排入單 + 本單 handleMin 是否超額 ---
       const sameStation = this.applications.filter(a =>
@@ -96,18 +100,14 @@ const ModuleA = {
       const usedQuota = sameStation.reduce((s, a) => s + a.handleMin, 0);
       const remainQuota = this.STATION_QUOTA - usedQuota;
       if (app.handleMin > remainQuota) {
-        trace.push(`  <span class="no">✗ 站內時間額度不足：已用 ${usedQuota} 分、剩 ${remainQuota} 分 < 本單 ${app.handleMin} 分 → 跳過此單（G16）</span>`);
-        if (isLast) {
-          trace.push(`\n<span class="no">✗ 已是當日最後一班，時間額度仍不足</span>`);
-          return { ok: false, reason: 'quota', trace, msg: '本站當日各班次時間額度皆已滿，請改期或分批。' };
-        }
+        trace.push(`  <span class="no">✗ 站內時間額度不足：已用 ${usedQuota} 分、剩 ${remainQuota} 分 < 本單 ${app.handleMin} 分 → 跳過此班（G16/G17）</span>`);
         continue; // 順延下一班（G17）
       }
 
       // --- 裝載判定（LoadFeasibilityService）---
       // 既有負載：該班次車上已排入的所有申請單，逐張累計有效體積與重量（G01/G05）
       const onBoard = this.applications.filter(a =>
-        a.assignedShift === sh.id && ['matched', 'accepted', 'delivered'].includes(a.status));
+        a.assignedShift === sh.id && ['matched', 'delivered'].includes(a.status));
       const startLoad = onBoard.reduce((acc, a) => {
         const e = effectiveLoad(a.items);
         return { volume: acc.volume + e.volume, weight: acc.weight + e.weight };
@@ -117,20 +117,21 @@ const ModuleA = {
       res.trace.forEach(t => trace.push('  ' + t));
 
       if (res.ok) {
-        trace.push(`\n<span class="ok">✓ 裝得下 → 排入 ${sh.label}（同步回傳結果 G11）</span>`);
+        trace.push(`\n<span class="ok">✓ 裝得下 → 排入 ${sh.label}（媒合完成，免確認接受 G11）</span>`);
         app.status = 'matched';
         app.assignedShift = sh.id;
         app.arrival = minToHHMM(arr);
         return { ok: true, shift: sh, trace, arrival: minToHHMM(arr) };
-      } else {
-        trace.push(`  <span class="no">✗ 裝不下 → pass 下一班（G11）</span>`);
-        if (isLast) {
-          // 當日最後一班仍裝不下（G12）：不留候補、不排隔日
-          trace.push(`\n<span class="no">✗ 當日最後一班仍裝不下</span>`);
-          return { ok: false, reason: 'full', trace, msg: '請明天請早再試（不留候補、不排隔日 G12）' };
-        }
       }
+      trace.push(`  <span class="no">✗ 裝不下 → pass 下一班（G11）</span>`);
     }
-    return { ok: false, reason: 'none', trace, msg: '無可用班次。' };
+
+    // 全部班次皆無法排入：區分「太大」與「今天已滿」（G12 不留候補、不排隔日）
+    if (!fitsSomeEmpty) {
+      trace.push(`\n<span class="no">✗ 任何一班車空車都放不下 → 貨物太大</span>`);
+      return { ok: false, reason: 'toobig', trace, msg: '貨物太大：超過任何一班車輛的尺寸或容量，無法承運。' };
+    }
+    trace.push(`\n<span class="no">✗ 今日各班次容量／時間額度皆已滿</span>`);
+    return { ok: false, reason: 'full', trace, msg: '今天已滿：各班次容量或時間額度皆不足，請改期。' };
   },
 };
