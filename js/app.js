@@ -24,6 +24,26 @@ function openModal(title, bodyHtml) {
 }
 function closeModal() { $('#modal-mask').classList.remove('show'); }
 
+/* SweetAlert 風格確認視窗：回傳 Promise<boolean>；確定→true、取消/關閉→false */
+let _swalResolve = null;
+function confirmDialog(opts) {
+  opts = opts || {};
+  return new Promise((resolve) => {
+    _swalResolve = resolve;
+    $('#swal-title').textContent = opts.title || '確認送出？';
+    $('#swal-text').innerHTML = opts.text || '';
+    $('#swal-ok').textContent = opts.okText || '確定';
+    $('#swal-cancel').textContent = opts.cancelText || '取消';
+    $('#swal-mask').classList.add('show');
+    $('#swal-ok').focus();
+  });
+}
+function _swalClose(result) {
+  $('#swal-mask').classList.remove('show');
+  const r = _swalResolve; _swalResolve = null;
+  if (r) r(result);
+}
+
 /* 通用狀態徽章（mod 用來區分同名狀態 matched 的顯示文字）*/
 function stBadge(s, mod) {
   const map = {
@@ -494,7 +514,10 @@ function renderAApplyNew(p) {
   renderAaItems();
   $('#aa-add').onclick = () => { aaItems.push({ name: '貨物', l: 50, w: 40, h: 30, qty: 1, category: 'BOX', weight: 12 }); renderAaItems(); };
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
-  $('#aa-submit').onclick = () => {
+  $('#aa-submit').onclick = async () => {
+    const ok = await confirmDialog({ title: '確認送出收貨申請？',
+      text: '送出後系統將<b>立即自動媒合</b>並告知班次時間與車號。' });
+    if (!ok) return;
     const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
     // 送出即自動媒合（G10–G12/G16/G19）
     const { app, result } = ModuleA.submit({
@@ -836,7 +859,10 @@ function renderBApplyNew(p) {
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
-  $('#ba-submit').onclick = () => {
+  $('#ba-submit').onclick = async () => {
+    const ok = await confirmDialog({ title: '確認送出幹線託運單？',
+      text: '送出後將等待主管准駁，再由業務單位派車。' });
+    if (!ok) return;
     const o = ModuleB.createOrder({
       applicant: $('#ba-applicant').value,
       leg: $('#page-b_apply input[name=ba-leg]:checked').value,
@@ -1247,7 +1273,10 @@ function renderCApplyNew(p) {
   };
   $$('#page-c_apply input[name=ca-type]').forEach(r => r.onchange = setType);
   $('#ca-cancel').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
-  $('#ca-submit').onclick = () => {
+  $('#ca-submit').onclick = async () => {
+    const ok = await confirmDialog({ title: '確認送出出差用車申請？',
+      text: '送出後將等待主管准駁，再由系統批次媒合。' });
+    if (!ok) return;
     const type = $('#page-c_apply input[name=ca-type]:checked').value;
     const app = ModuleC.createApp({
       applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, ext: $('#ca-ext').value,
@@ -1482,6 +1511,10 @@ window.addEventListener('DOMContentLoaded', () => {
   buildNav();
   $('#modal-close').onclick = closeModal;
   $('#modal-mask').onclick = (e) => { if (e.target.id === 'modal-mask') closeModal(); };
+  // SweetAlert 風格確認視窗：確定→true、取消或點擊遮罩→false
+  $('#swal-ok').onclick = () => _swalClose(true);
+  $('#swal-cancel').onclick = () => _swalClose(false);
+  $('#swal-mask').onclick = (e) => { if (e.target.id === 'swal-mask') _swalClose(false); };
   tick(); setInterval(tick, 1000);
   goto('dashboard');
 });

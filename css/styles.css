@@ -221,3 +221,18 @@ table.dt tr:hover td { background: var(--blue-bg); }
   padding: 24px 26px; }
 .modal h3 { margin: 0 0 4px; color: var(--navy); }
 .modal .close-x { float: right; cursor: pointer; font-size: 20px; color: var(--ink-soft); border: none; background: none; }
+
+/* SweetAlert 風格確認視窗（自製） */
+.swal-mask { position: fixed; inset: 0; background: rgba(20,28,44,.45); display: none; align-items: center;
+  justify-content: center; z-index: 700; padding: 20px; }
+.swal-mask.show { display: flex; }
+.swal-box { background: #fff; border-radius: 16px; max-width: 440px; width: 100%; padding: 30px 28px 22px;
+  text-align: center; box-shadow: 0 12px 40px rgba(20,28,44,.28); animation: swal-pop .22s ease-out; }
+@keyframes swal-pop { from { transform: scale(.86); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.swal-icon { width: 66px; height: 66px; margin: 0 auto 18px; border-radius: 50%;
+  border: 4px solid var(--accent, #C97A3D); color: var(--accent, #C97A3D);
+  font-size: 40px; font-weight: 700; line-height: 60px; }
+.swal-title { margin: 0 0 8px; font-size: 20px; color: var(--navy, #1F3864); }
+.swal-text { font-size: 14.5px; color: var(--ink-soft, #565C64); line-height: 1.7; margin-bottom: 22px; }
+.swal-actions { display: flex; gap: 12px; justify-content: center; }
+.swal-actions .btn { min-width: 96px; }
