@@ -29,6 +29,7 @@ function stBadge(s, mod) {
   const map = {
     submitted: ['待審核', 'b-gray'],
     approved: ['已核准待排', 'b-navy'],
+    unscheduled: ['未排入·請改期', 'b-amber'],
     rejected: ['已駁回', 'b-red'],
     accepted: ['已接受待交貨', 'b-amber'],
     delivered: ['已交貨', 'b-green'],
@@ -53,8 +54,7 @@ const NAV = [
   ] },
   { group: '模組 A · 區域內物流', items: [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
-    { id: 'a_approve', ico: '✅', label: 'A｜主管准駁（主管）' },
-    { id: 'a_review', ico: '🗂', label: 'A｜排班調度（業務）' },
+    { id: 'a_review', ico: '🗂', label: 'A｜車次追蹤（業務）' },
   ] },
   { group: '模組 B · 南北幹線', items: [
     { id: 'b_apply', ico: '📝', label: 'B｜幹線託運申請（使用者）' },
@@ -71,9 +71,8 @@ const PAGE_META = {
   dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
-  a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · G13/G15/G19' },
-  a_approve: { title: '區域內物流 · 主管准駁（直屬主管）', crumb: '模組 A · 主管端 · G63' },
-  a_review: { title: '區域內物流 · 排班調度（業務單位）', crumb: '模組 A · 調度端 · G10–G20' },
+  a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
+  a_review: { title: '區域內物流 · 車次追蹤（業務單位）', crumb: '模組 A · 調度端 · G18/G20' },
   b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
   b_approve: { title: '南北幹線 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
   b_review: { title: '南北幹線 · 派車調度（業務單位）', crumb: '模組 B · 調度端 · G30–G44' },
@@ -133,9 +132,8 @@ RENDER.dashboard = function () {
 
     <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">業務單元（申請端 ｜ 主管 ｜ 審核/調度端）</div>
     <div class="grid-3">
-      ${unitCard('📝 A｜收貨申請', '使用者填收貨單、查看自己的申請狀態，接受排班與交貨確認。', 'a_apply', '申請端')}
-      ${unitCard('✅ A｜主管准駁', '直屬主管准駁收貨申請，駁回保留紀錄不進排班池。', 'a_approve', '主管')}
-      ${unitCard('🗂 A｜排班調度', '執行時間軸媒合、已排定車次、路線班次、駕駛異常回報。', 'a_review', '審核端')}
+      ${unitCard('📝 A｜收貨申請', '使用者填收貨單，送出即自動媒合並告知班次時間與車號；查看狀態、接受排班與交貨確認。', 'a_apply', '申請端')}
+      ${unitCard('🗂 A｜車次追蹤', '追蹤已自動排定車次與交貨狀態、路線班次、駕駛異常回報。', 'a_review', '審核端')}
       ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
       ${unitCard('✅ B｜主管准駁', '直屬主管准駁幹線託運單，駁回保留紀錄不進派車池。', 'b_approve', '主管')}
       ${unitCard('🚚 B｜派車調度', '貪婪/直達派車決策、回程直達鎖定、決策矩陣、貨況追蹤。', 'b_review', '審核端')}
@@ -308,8 +306,8 @@ function renderAApplyList(p) {
   const q = aApply.query;
   const stOpts = ['<option value="">全部站點</option>'].concat(
     DB.stations.map(s => `<option value="${s.id}" ${q.station === s.id ? 'selected' : ''}>${s.order}. ${s.name}</option>`)).join('');
-  const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准待排'], ['matched', '已排班待接受'],
-    ['accepted', '已接受待交貨'], ['delivered', '已交貨'], ['rejected', '已駁回']]
+  const statusOpts = [['', '全部狀態'], ['matched', '已排班待接受'], ['unscheduled', '未排入·請改期'],
+    ['accepted', '已接受待交貨'], ['delivered', '已交貨']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   const modeOpts = [['', '全部模式'], ['asap', '越快越好'], ['exact', '指定期望時間']]
     .map(([v, t]) => `<option value="${v}" ${q.mode === v ? 'selected' : ''}>${t}</option>`).join('');
@@ -345,10 +343,10 @@ function renderAApplyList(p) {
     [['S3', 'asap', 15, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }]],
      ['S6', 'exact', 20, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
      ['S3', 'asap', 25, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([s, mode, h, items]) => ModuleA.createApp({
+    ].forEach(([s, mode, h, items]) => ModuleA.submit({
       applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
       items, recvMode: mode, expectTime: '13:00', handleMin: h }));
-    aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（待審核）', 'ok');
+    aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
 }
@@ -430,13 +428,15 @@ function renderAApplyDetail(p, id) {
       </tbody></table></div>
     </div>
     <div class="card">
-      <div class="card-title">排班與交貨狀態</div>
-      <div class="grid-2">
+      <div class="card-title">自動媒合結果</div>
+      ${a.status === 'unscheduled'
+        ? `<div class="callout warn"><b>未排入 — 請改期</b><br>${a.note || '當日各班次皆無法排入（不留候補、不排隔日 G12）。'}</div>`
+        : `<div class="grid-2">
         <div class="field"><label>排定班次</label><div>${sh ? sh.label : '<span class="muted">尚未排班</span>'}</div></div>
-        <div class="field"><label>車輛</label><div>${veh ? veh.name : '—'}</div></div>
-        <div class="field"><label>預計到站</label><div>${a.arrival || '—'}</div></div>
+        <div class="field"><label>車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '—'}</div></div>
+        <div class="field"><label>預計到站時間</label><div>${a.arrival ? `<b style="color:var(--navy);">${a.arrival}</b>` : '—'}</div></div>
         <div class="field"><label>異常回報</label><div>${a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'}</div></div>
-      </div>
+      </div>`}
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>`;
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
@@ -474,7 +474,8 @@ function renderAApplyNew(p) {
       <div id="aa-items"></div>
       <button class="btn btn-ghost btn-sm" id="aa-add">＋ 新增貨物</button>
       <div class="divider"></div>
-      <button class="btn btn-primary" id="aa-submit">▶ 送出申請（待業務審核）</button>
+      <div class="callout info" style="margin-bottom:10px;">送出後系統<b>立即自動媒合</b>（無需主管核准、無需業務按鈕），並直接告知媒合到的<b>班次時間與車號</b>。</div>
+      <button class="btn btn-primary" id="aa-submit">▶ 送出並自動媒合</button>
       <button class="btn btn-ghost" id="aa-cancel">取消</button>
     </div>`;
   const fillBuildings = () => {
@@ -494,15 +495,21 @@ function renderAApplyNew(p) {
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   $('#aa-submit').onclick = () => {
     const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
-    const app = ModuleA.createApp({
+    // 送出即自動媒合（G10–G12/G16/G19）
+    const { app, result } = ModuleA.submit({
       applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
       items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
       handleMin: +$('#aa-handle').value || 0,
     });
     aaItems = [];
-    toast(`${app.id} 已送出，等待業務審核`, 'ok');
+    if (result.ok) {
+      const veh = DB.vehicles.find(v => v.id === result.shift.vehicle);
+      toast(`${app.id} 已自動媒合：${result.shift.label}／車 ${veh ? veh.id : result.shift.vehicle}／到站約 ${result.arrival}`, 'ok');
+    } else {
+      toast(`${app.id} 未能排入：${result.msg}`, 'err');
+    }
     aApply.resultIds = null;        // 回到查詢畫面顯示全部（含新單）
-    aApply.view = 'detail'; aApply.detailId = app.id; // 送出後直接看明細
+    aApply.view = 'detail'; aApply.detailId = app.id; // 送出後直接看媒合結果明細
     RENDER.a_apply();
   };
 }
@@ -511,51 +518,16 @@ function renderAaItems() { renderItemEditor('#aa-items', aaItems, renderAaItems)
 function renderAaList() { if ($('#aq-grid')) renderAGrid(); }
 
 /* ============================================================
-   模組 A · 主管准駁（直屬主管）— 獨立單元
-   ============================================================ */
-RENDER.a_approve = function () {
-  const p = $('#page-a_approve');
-  const submitted = ModuleA.applications.filter(a => a.status === 'submitted');
-  const decided = ModuleA.applications.filter(a => ['approved', 'rejected'].includes(a.status));
-  p.innerHTML = `
-    <div class="section-h">主管准駁（直屬主管）</div>
-    <div class="section-sub">員工填收貨申請後由直屬主管准駁。駁回保留紀錄但不進排班池；核准後才進入業務單位排班媒合。（G63）</div>
-    <div class="card">
-      <div class="card-title">待准駁申請 <span class="g-tag">G63</span></div>
-      ${submitted.length === 0 ? `<div class="empty">目前無待准駁申請單。</div>` : `
-      <div style="margin-bottom:10px;"><button class="btn btn-ghost btn-sm" id="aap-approve-all">✓ 全部核准</button></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>裝卸</th><th>操作</th></tr></thead><tbody>
-        ${submitted.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
-            <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td><td>${a.handleMin}分</td>
-            <td><button class="btn btn-primary btn-sm" data-ap="${a.id}">核准</button>
-                <button class="btn btn-ghost btn-sm" data-rj="${a.id}">駁回</button></td></tr>`; }).join('')}
-      </tbody></table></div>`}
-    </div>
-    <div class="card">
-      <div class="card-title">已處理紀錄</div>
-      ${decided.length === 0 ? `<div class="muted">尚無已准駁紀錄。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>准駁結果</th></tr></thead><tbody>
-        ${decided.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td><td>${stBadge(a.status)}</td></tr>`; }).join('')}
-      </tbody></table></div>`}
-    </div>`;
-  const all = $('#aap-approve-all');
-  if (all) all.onclick = () => { submitted.forEach(a => ModuleA.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.a_approve(); renderAaList(); };
-  $$('#page-a_approve [data-ap]').forEach(b => b.onclick = () => { ModuleA.approve(ModuleA.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.a_approve(); renderAaList(); });
-  $$('#page-a_approve [data-rj]').forEach(b => b.onclick = () => { ModuleA.reject(ModuleA.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.a_approve(); renderAaList(); });
-};
-
-/* ============================================================
-   模組 A · 排班調度（業務單位）— 執行媒合 / 路線班次 / 異常回報
+   模組 A · 車次追蹤（業務單位）— 已排定車次 / 路線班次 / 異常回報
+   （媒合已於使用者送出時自動完成，本單元不再執行媒合）
    ============================================================ */
 RENDER.a_review = function () {
   const p = $('#page-a_review');
   p.innerHTML = `
-    <div class="section-h">排班調度（業務單位）</div>
-    <div class="section-sub">對已核准申請執行時間軸最近班次媒合、路線班次維護、駕駛異常回報。主管准駁為獨立單元。</div>
+    <div class="section-h">車次追蹤（業務單位）</div>
+    <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合；供業務單位追蹤已排定車次與交貨狀態、維護路線班次、進行駕駛異常回報。</div>
     <div class="pill-tabs">
-      <div class="pill-tab active" data-tab="review">① 排班媒合</div>
+      <div class="pill-tab active" data-tab="review">① 已排定車次</div>
       <div class="pill-tab" data-tab="route">② 路線與班次</div>
       <div class="pill-tab" data-tab="incident">③ 駕駛異常回報</div>
     </div>
@@ -569,37 +541,24 @@ RENDER.a_review = function () {
   renderAr_review(); renderA_route(); renderA_incident();
 };
 function renderAr_review() {
-  // G16：同站多單一律依「審核通過時間」排序逐張判定時間額度
-  const approved = ModuleA.applications.filter(a => a.status === 'approved')
-    .sort((a, b) => a.approvedAt - b.approvedAt);
+  // 媒合已於使用者送出時自動完成，本頁僅追蹤結果
+  const unsched = ModuleA.applications.filter(a => a.status === 'unscheduled');
+  const unschedCard = unsched.length === 0 ? '' : `
+    <div class="card">
+      <div class="card-title">未排入·待使用者改期 <span class="g-tag">G12/G17</span></div>
+      <div class="card-desc">自動媒合時當日各班次皆裝不下或時間額度已滿，系統已即時提醒該使用者改期（不留候補、不排隔日 G12）。</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>原因</th></tr></thead><tbody>
+        ${unsched.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td><td class="muted">${a.note || '—'}</td></tr>`; }).join('')}
+      </tbody></table></div>
+    </div>`;
   $('#ar-tab-review').innerHTML = `
     <div class="card">
-      <div class="card-title">已核准 · 執行媒合 <span class="g-tag">G10–G12/G16</span></div>
-      <div class="card-desc">時間軸最近班次媒合、裝不下順延、當日末班仍不行提醒改期。同步回傳結果（G11）。清單依<b>審核通過時間</b>排序，請由上而下逐張執行（G16）。</div>
-      ${approved.length === 0 ? `<div class="empty">尚無已核准待排申請單。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th></th></tr></thead><tbody>
-        ${approved.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
-            <td>${a.recvMode === 'exact' ? '指定 ' + a.expectTime : '越快越好'}</td>
-            <td><button class="btn btn-accent btn-sm" data-match="${a.id}">執行媒合</button></td></tr>`; }).join('')}
-      </tbody></table></div>`}
-      <div id="ar-match-result"></div>
+      <div class="card-title">自動媒合機制 <span class="g-tag">G10–G12/G16/G19</span></div>
+      <div class="card-desc">使用者送出收貨申請後，系統即時執行「時間軸最近班次」媒合：裝得下即排入並同步告知班次時間與車號（G10/G11）；裝不下順延下一班（G17）；當日末班仍不行即提醒改期（G12）。同站多單依<b>送出先後</b>累計站內時間額度（G16）。無主管核准、無業務按鈕。</div>
     </div>
+    ${unschedCard}
     ${renderAr_scheduled()}`;
-  $$('#ar-tab-review [data-match]').forEach(b => b.onclick = () => {
-    const app = ModuleA.applications.find(a => a.id === b.dataset.match);
-    const r = ModuleA.match(app);
-    const cls = r.ok ? 'ok' : 'warn';
-    const head = r.ok ? `✓ 已排入 ${r.shift.label}` : '⚠ 無法排入';
-    $('#ar-match-result').innerHTML = `
-      <div class="result ${cls}" style="margin-top:14px;">
-        <div class="r-head">${head}（${app.id}）</div>
-        ${r.ok ? `<div>到站約 <b>${r.arrival}</b>｜車輛 ${r.shift.vehicle}</div>` : `<div><b>${r.msg}</b></div>`}
-      </div>
-      <div class="trace">${r.trace.join('\n')}</div>`;
-    toast(r.ok ? `${app.id} 已排入 ${r.shift.label}` : r.msg, r.ok ? 'ok' : 'err');
-    renderAr_review(); renderAaList();
-  });
   // 已排定車次：調度/駕駛端確認交貨
   $$('#ar-tab-review [data-deliver]').forEach(b => b.onclick = () => {
     const a = ModuleA.applications.find(x => x.id === b.dataset.deliver);
@@ -610,7 +569,7 @@ function renderAr_review() {
 // 已排定車次一覽（被安排的車次 + 媒合狀況 + 接受/交貨狀態）
 function renderAr_scheduled() {
   const rows = ModuleA.applications.filter(a => ['matched', 'accepted', 'delivered'].includes(a.status));
-  const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。核准後執行媒合即會出現在此。</div>` : `
+  const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。使用者送出申請並自動媒合成功後即會出現在此。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
       <th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>車輛</th><th>到站</th>
       <th>接收人接受</th><th>交貨</th><th>操作</th></tr></thead><tbody>

@@ -78,51 +78,52 @@ group('共用裝載判定引擎（G01–G05 / T1-2〜T1-6）', () => {
 /* =================================================================
    模組 A：區域內物流（G10–G20）
    ================================================================= */
-group('模組 A 區域內物流（G10–G20 / T2-3〜T2-5）', () => {
-  function mkApp(H, over) {
-    return H.ModuleA.createApp(Object.assign({
+group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
+  function submit(H, over) {
+    return H.ModuleA.submit(Object.assign({
       applicant: '業務部-周雅婷', station: 'S3', building: '一號月台',
       items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15,
     }, over));
   }
 
-  test('G16 同站多單依審核通過時間累計時間額度，超額者跳過並順延下一班', () => {
+  test('送出即自動媒合：無需 approve/match 手動步驟，直接回傳班次與車號', () => {
     const H = fresh();
-    const a1 = mkApp(H), a2 = mkApp(H), a3 = mkApp(H); // 各 15 分，額度 40
-    [a1, a2, a3].forEach(a => H.ModuleA.approve(a));
-    eq([a1.approvedAt, a2.approvedAt, a3.approvedAt].join(','), '1,2,3', 'approvedAt 應遞增');
-    H.ModuleA.match(a1); H.ModuleA.match(a2); H.ModuleA.match(a3);
+    ok(typeof H.ModuleA.approve === 'undefined', '不應再有主管核准方法');
+    const { app, result } = submit(H);
+    ok(result.ok, '送出後應自動媒合成功');
+    eq(app.status, 'matched', '狀態應為已排班');
+    ok(app.assignedShift && result.shift.vehicle, '應告知班次與車號');
+    ok(/^\d{2}:\d{2}$/.test(result.arrival), '應告知到站時間');
+  });
+
+  test('G16 同站多單依「送出先後」累計時間額度，超額者順延下一班', () => {
+    const H = fresh();
+    const a1 = submit(H).app, a2 = submit(H).app, a3 = submit(H).app; // 各 15 分，額度 40
+    eq([a1.submitSeq, a2.submitSeq, a3.submitSeq].join(','), '1,2,3', '送出序應遞增');
     eq(a1.assignedShift, 'R-A1'); eq(a2.assignedShift, 'R-A1');
     eq(a3.assignedShift, 'R-A2', '第三單 45>40 應順延下一班（G16/G17）');
   });
 
-  test('G11/G12 當日最後一班仍裝不下 → 不留候補、提示改期', () => {
+  test('G11/G12 當日最後一班仍裝不下 → 不留候補、標記未排入·請改期', () => {
     const H = fresh();
-    // 造一件維度大到任何班次車輛皆放不下（六方向皆不過）
-    const big = mkApp(H, { items: [item({ name: '巨件', l: 999, w: 999, h: 999 })] });
-    H.ModuleA.approve(big);
-    const r = H.ModuleA.match(big);
-    ok(!r.ok, '應失敗');
-    eq(r.reason, 'full', '最後一班仍裝不下 → full');
-    ok(/請明天請早再試|改期/.test(r.msg), '訊息需提示改期，不寫候補');
-    eq(big.assignedShift, null, '失敗不得寫入班次（不留候補 G12）');
+    const { app, result } = submit(H, { items: [item({ name: '巨件', l: 999, w: 999, h: 999 })] });
+    ok(!result.ok, '應媒合失敗');
+    eq(result.reason, 'full', '最後一班仍裝不下 → full');
+    ok(/請明天請早再試|改期/.test(result.msg), '訊息需提示改期，不寫候補');
+    eq(app.assignedShift, null, '失敗不得寫入班次（不留候補 G12）');
+    eq(app.status, 'unscheduled', '失敗狀態應為未排入·請改期');
   });
 
   test('G19 越快越好：選最早出發班次', () => {
     const H = fresh();
-    const a = mkApp(H, { recvMode: 'asap' });
-    H.ModuleA.approve(a);
-    const r = H.ModuleA.match(a);
-    ok(r.ok, '應排入'); eq(r.shift.id, 'R-A1', 'asap 應排最早班次 R-A1（08:30）');
+    const { result } = submit(H, { recvMode: 'asap' });
+    ok(result.ok, '應排入'); eq(result.shift.id, 'R-A1', 'asap 應排最早班次 R-A1（08:30）');
   });
 
   test('G19 指定期望時間：選到站時間差最小的班次（早晚都比）', () => {
     const H = fresh();
-    // 期望非常晚 → 應偏好最末班 R-A3（16:30 出發，到站最晚）
-    const a = mkApp(H, { recvMode: 'exact', expectTime: '20:00' });
-    H.ModuleA.approve(a);
-    const r = H.ModuleA.match(a);
-    ok(r.ok); eq(r.shift.id, 'R-A3', '期望 20:00 應選最接近的末班');
+    const { result } = submit(H, { recvMode: 'exact', expectTime: '20:00' });
+    ok(result.ok); eq(result.shift.id, 'R-A3', '期望 20:00 應選最接近的末班');
   });
 });
 

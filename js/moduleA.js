@@ -10,7 +10,7 @@ const ModuleA = {
   approveSeq: 1,    // 審核通過時間序（G16 排序用）
 
   // 收貨時間模式 G19：exact=指定期望時間 / asap=越快越好
-  // 申請端只負責建立，狀態為「待審核」，不觸發媒合
+  // 區域內物流：不經主管核准、不需業務按鈕；送出後由 submit() 立即自動媒合
   createApp(data) {
     const app = {
       id: 'LA' + String(this.seq++).padStart(3, '0'),
@@ -21,18 +21,26 @@ const ModuleA = {
       recvMode: data.recvMode,       // 'exact' | 'asap'
       expectTime: data.expectTime,   // exact 模式的期望到站時間
       handleMin: data.handleMin,     // 上下貨自填分鐘（G15）
-      approvedAt: null,              // 審核通過時間（核准時填入，排序用 G16）
-      status: 'submitted',           // submitted → approved/rejected → matched
+      submitSeq: this.approveSeq++,  // 送出序（同站處理順序＝送出先後，取代原審核通過時間 G16）
+      status: 'submitted',           // submitted →（自動媒合）→ matched / unscheduled
       assignedShift: null,
+      note: '',
+      matchTrace: null,              // 自動媒合過程（供明細顯示）
       createdAt: new Date(),         // 建立時間（查詢/列表用）
     };
     this.applications.push(app);
     return app;
   },
 
-  // 業務/調度端：主管准駁（G63 兩層審批第一層）
-  approve(app) { app.status = 'approved'; app.approvedAt = this.approveSeq++; },
-  reject(app) { app.status = 'rejected'; app.approvedAt = null; },
+  // 送出即自動媒合（無主管核准、無業務按鈕）：建立後立即跑時間軸最近班次媒合
+  // 成功 → status='matched'、assignedShift/arrival 填入；失敗 → status='unscheduled'、note 記原因
+  submit(data) {
+    const app = this.createApp(data);
+    const r = this.match(app);
+    app.matchTrace = r.trace;
+    if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }
+    return { app, result: r };
+  },
 
   // 接收人確認接受排班（matched → accepted）
   acceptSchedule(app) { if (app.status === 'matched') { app.status = 'accepted'; app.acceptedAt = Date.now(); } },
