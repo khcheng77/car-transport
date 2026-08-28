@@ -43,6 +43,10 @@ function _swalClose(result) {
   const r = _swalResolve; _swalResolve = null;
   if (r) r(result);
 }
+/* 包裝任一動作：先跳確認視窗，按「確定」才執行 fn（取消則不動作）*/
+function confirmThen(opts, fn) {
+  return async function (ev) { if (await confirmDialog(opts)) return fn.call(this, ev); };
+}
 
 /* 通用狀態徽章（mod 用來區分同名狀態 matched 的顯示文字）*/
 function stBadge(s, mod) {
@@ -462,9 +466,9 @@ function renderAApplyDetail(p, id) {
     </div>`;
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   const acc = $(`#page-a_apply [data-accept]`);
-  if (acc) acc.onclick = () => { ModuleA.acceptSchedule(a); toast(`${a.id} 已確認接受排班`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); };
+  if (acc) acc.onclick = confirmThen({ title: '確認接受此排班？', text: '確認後即接受系統排定的班次與車輛。' }, () => { ModuleA.acceptSchedule(a); toast(`${a.id} 已確認接受排班`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
   const rcv = $(`#page-a_apply [data-recv]`);
-  if (rcv) rcv.onclick = () => { ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 已確認收到貨`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); };
+  if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此收貨申請將標記為已交貨。' }, () => { ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 已確認收到貨`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
 }
 
 /* ---------- 新增畫面 ---------- */
@@ -584,11 +588,11 @@ function renderAr_review() {
     ${unschedCard}
     ${renderAr_scheduled()}`;
   // 已排定車次：調度/駕駛端確認交貨
-  $$('#ar-tab-review [data-deliver]').forEach(b => b.onclick = () => {
+  $$('#ar-tab-review [data-deliver]').forEach(b => b.onclick = confirmThen({ title: '確認交貨？', text: '確認後此車次將標記為已交貨。' }, () => {
     const a = ModuleA.applications.find(x => x.id === b.dataset.deliver);
     ModuleA.confirmDelivery(a, '調度室'); toast(`${a.id} 已確認交貨`, 'ok');
     renderAr_review(); renderAaList();
-  });
+  }));
 }
 // 已排定車次一覽（被安排的車次 + 媒合狀況 + 接受/交貨狀態）
 function renderAr_scheduled() {
@@ -648,7 +652,7 @@ function renderA_incident() {
                 <button class="btn btn-ghost btn-sm" data-inc="${a.id}" data-t="noshow">標記沒出現</button></td></tr>`; }).join('')}
       </tbody></table></div>`}
     </div>`;
-  $$('#ar-tab-incident [data-inc]').forEach(b => b.onclick = () => {
+  $$('#ar-tab-incident [data-inc]').forEach(b => b.onclick = confirmThen({ title: '確認回報異常並寄信？', text: '確認後將記錄異常並立即自動寄信給申請人與直屬主管（G20）。' }, () => {
     const a = ModuleA.applications.find(x => x.id === b.dataset.inc);
     const reason = b.dataset.t === 'late' ? '使用者不準時' : '使用者沒出現';
     const mgr = DB.approvalMap[a.applicant] || '（查無對應主管）';
@@ -662,7 +666,7 @@ function renderA_incident() {
         內容：站點 ${DB.stations.find(s=>s.id===a.station).name}／原因 ${reason}／日期 2026-08-25<br>
         <span class="muted">※ 信件格式為「待後續設計」項，此為簡潔版 TODO。</span></div>`);
     toast(`${a.id} 異常已回報並寄信`, 'ok');
-  });
+  }));
 }
 
 /* ============================================================
@@ -807,9 +811,9 @@ function renderBApplyDetail(p, id) {
     </div>`;
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   const acc = $('#page-b_apply [data-baccept]');
-  if (acc) acc.onclick = () => { ModuleB.acceptDelivery(o); toast(`${o.id} 已確認接受`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); };
+  if (acc) acc.onclick = confirmThen({ title: '確認接受此派車？', text: '確認後即接受派定的車輛與來收時間。' }, () => { ModuleB.acceptDelivery(o); toast(`${o.id} 已確認接受`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
   const rcv = $('#page-b_apply [data-brecv]');
-  if (rcv) rcv.onclick = () => { ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); };
+  if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此託運單將標記為已交貨。' }, () => { ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
 }
 
 /* ---------- 新增畫面 ---------- */
@@ -911,9 +915,9 @@ RENDER.b_approve = function () {
       </tbody></table></div>`}
     </div>`;
   const all = $('#bap-approve-all');
-  if (all) all.onclick = () => { submitted.forEach(o => ModuleB.approve(o)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); };
-  $$('#page-b_approve [data-ap]').forEach(b => b.onclick = () => { ModuleB.approve(ModuleB.orders.find(o => o.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); });
-  $$('#page-b_approve [data-rj]').forEach(b => b.onclick = () => { ModuleB.reject(ModuleB.orders.find(o => o.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.b_approve(); renderBaList(); });
+  if (all) all.onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准所有待准駁託運單。' }, () => { submitted.forEach(o => ModuleB.approve(o)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); });
+  $$('#page-b_approve [data-ap]').forEach(b => b.onclick = confirmThen({ title: '確認核准此託運單？', text: '核准後進入業務單位派車調度。' }, () => { ModuleB.approve(ModuleB.orders.find(o => o.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.b_approve(); renderBaList(); if ($('#br-approved')) renderBr_approved(); }));
+  $$('#page-b_approve [data-rj]').forEach(b => b.onclick = confirmThen({ title: '確認駁回此託運單？', text: '駁回後保留紀錄但不進派車池。' }, () => { ModuleB.reject(ModuleB.orders.find(o => o.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.b_approve(); renderBaList(); }));
 };
 
 /* ============================================================
@@ -942,10 +946,10 @@ RENDER.b_review = function () {
       <div class="card-desc">顯示每張已派車託運單的車輛、派遣模式、終點，以及接收人接受與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
       <div id="br-tracking"></div>
     </div>`;
-  $('#br-dispatch-direct').onclick = () => dispatchB('direct');
-  $('#br-dispatch-greedy').onclick = () => dispatchB('greedy');
-  $('#br-dispatch-return').onclick = () => dispatchBReturn(false);
-  $('#br-dispatch-return-direct').onclick = () => dispatchBReturn(true);
+  $('#br-dispatch-direct').onclick = confirmThen({ title: '確認派直達車？', text: '確認後將對已核准直達單執行派車。' }, () => dispatchB('direct'));
+  $('#br-dispatch-greedy').onclick = confirmThen({ title: '確認派非直達車？', text: '確認後將以貪婪法對已核准託運單執行派車。' }, () => dispatchB('greedy'));
+  $('#br-dispatch-return').onclick = confirmThen({ title: '確認派回程車（非直達）？', text: '確認後將執行回程派車與全域直達鎖定檢查。' }, () => dispatchBReturn(false));
+  $('#br-dispatch-return-direct').onclick = confirmThen({ title: '確認派回程車（原為直達車）？', text: '確認後將以直達模式執行回程派車。' }, () => dispatchBReturn(true));
   renderBr_approved(); renderBr_tracking();
 };
 // 3.7 四／五模式決策矩陣（G44 顯示，供調度員覆核）
@@ -988,11 +992,11 @@ function renderBr_tracking() {
           <td>${modeBadge}</td><td>${veh ? veh.name : '—'}</td><td>${o.volume}L</td>
           <td>${acc}</td><td>${del}</td><td>${op}</td></tr>`; }).join('')}
     </tbody></table></div>`;
-  $$('#br-tracking [data-bdeliver]').forEach(b => b.onclick = () => {
+  $$('#br-tracking [data-bdeliver]').forEach(b => b.onclick = confirmThen({ title: '確認交貨？', text: '確認後此託運單將標記為已交貨。' }, () => {
     const o = ModuleB.orders.find(x => x.id === b.dataset.bdeliver);
     ModuleB.confirmDelivery(o, '調度室'); toast(`${o.id} 已確認交貨`, 'ok');
     renderBr_tracking(); renderBaList();
-  });
+  }));
 };
 function renderBr_approved() {
   if (!$('#br-approved')) return;
@@ -1199,9 +1203,9 @@ function renderCApplyDetail(p, id) {
     </div>` : ''}`;
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   const brd = $('#page-c_apply [data-board]');
-  if (brd) brd.onclick = () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); };
+  if (brd) brd.onclick = confirmThen({ title: '確認上車？', text: '確認後此趟共乘將標記為已上車。' }, () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
   const dn = $('#page-c_apply [data-done]');
-  if (dn) dn.onclick = () => { ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); };
+  if (dn) dn.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成。' }, () => { ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
   const find = $('#cd-find');
   if (find) find.onclick = () => {
     const cands = ModuleC.manualCandidates(a);
@@ -1213,12 +1217,12 @@ function renderCApplyDetail(p, id) {
           <td>${c.applicant}（${c.dept}/${c.ext}）</td><td>${c.loaded} / 剩 ${c.remain}</td>
           <td><button class="btn btn-primary btn-sm" data-merge="${c.app.id}" ${c.remain < a.pax ? 'disabled' : ''}>完成合併</button></td></tr>`).join('')}
       </tbody></table></div>`;
-    $$('#cd-candidates [data-merge]').forEach(b => b.onclick = () => {
+    $$('#cd-candidates [data-merge]').forEach(b => b.onclick = confirmThen({ title: '確認完成合併？', text: '請先聯繫對方確認同意，確認後即向該已派車單搭便車、合併成立。' }, () => {
       const target = ModuleC.applications.find(x => x.id === b.dataset.merge);
       ModuleC.doManualMerge(a, target);
       toast(`${a.id} 已搭 ${target.id} 便車，合併成立`, 'ok');
       RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track();
-    });
+    }));
   };
 }
 
@@ -1338,9 +1342,9 @@ RENDER.c_approve = function () {
       </tbody></table></div>`}
     </div>`;
   const all = $('#cap-approve-all');
-  if (all) all.onclick = () => { submitted.forEach(a => ModuleC.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.c_approve(); renderCaList(); };
-  $$('#page-c_approve [data-ap]').forEach(b => b.onclick = () => { ModuleC.approve(ModuleC.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.c_approve(); renderCaList(); });
-  $$('#page-c_approve [data-rj]').forEach(b => b.onclick = () => { ModuleC.reject(ModuleC.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.c_approve(); renderCaList(); });
+  if (all) all.onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准所有待准駁出差用車申請。' }, () => { submitted.forEach(a => ModuleC.approve(a)); toast(`已核准 ${submitted.length} 筆`, 'ok'); RENDER.c_approve(); renderCaList(); });
+  $$('#page-c_approve [data-ap]').forEach(b => b.onclick = confirmThen({ title: '確認核准此申請？', text: '核准後進入系統批次媒合。' }, () => { ModuleC.approve(ModuleC.applications.find(a => a.id === b.dataset.ap)); toast(`${b.dataset.ap} 已核准`, 'ok'); RENDER.c_approve(); renderCaList(); }));
+  $$('#page-c_approve [data-rj]').forEach(b => b.onclick = confirmThen({ title: '確認駁回此申請？', text: '駁回後保留紀錄但不進排班池。' }, () => { ModuleC.reject(ModuleC.applications.find(a => a.id === b.dataset.rj)); toast(`${b.dataset.rj} 已駁回`, 'err'); RENDER.c_approve(); renderCaList(); }));
 };
 
 /* ============================================================
@@ -1395,11 +1399,11 @@ function renderCr_track() {
             <td>${brd}</td><td>${cmp}</td><td>${op}</td></tr>`; }).join('')}
       </tbody></table></div>`}
     </div>`;
-  $$('#cr-tab-track [data-ccomplete]').forEach(b => b.onclick = () => {
+  $$('#cr-tab-track [data-ccomplete]').forEach(b => b.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成。' }, () => {
     const a = ModuleC.applications.find(x => x.id === b.dataset.ccomplete);
     ModuleC.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok');
     renderCr_track(); renderCaList();
-  });
+  }));
 }
 function renderCr_batch() {
   const approved = ModuleC.applications.filter(a => a.status === 'approved').length;
@@ -1428,7 +1432,7 @@ function renderCr_batch() {
           </tbody></table></div></div>
       </div>
     </div>`;
-  $('#cr-run-batch').onclick = () => {
+  $('#cr-run-batch').onclick = confirmThen({ title: '確認執行批次媒合？', text: '確認後將對 7 天範圍內待處理申請執行批次媒合（已成功單不重排）。' }, () => {
     const { batch, trace } = ModuleC.runBatch($('#cr-batch-date').value);
     $('#cr-batch-result').innerHTML = `
       <div class="result ok" style="margin-top:14px;">
@@ -1437,7 +1441,7 @@ function renderCr_batch() {
       </div>
       <div class="trace">${trace.join('\n')}</div>`;
     toast(`批次 ${batch.id} 完成`, 'ok'); renderCaList(); renderCr_track();
-  };
+  });
 }
 // 逾期自動作廢（調度端監控；手動併車已移至申請端）
 function renderCr_void() {
@@ -1455,7 +1459,7 @@ function renderCr_void() {
           <td><button class="btn btn-danger btn-sm" data-void="${a.id}">模擬逾期作廢</button></td></tr>`).join('')}
       </tbody></table></div>`}
     </div>`;
-  $$('#cr-tab-void [data-void]').forEach(b => b.onclick = () => {
+  $$('#cr-tab-void [data-void]').forEach(b => b.onclick = confirmThen({ title: '確認逾期作廢？', text: '確認後將作廢此申請並通知申請人，紀錄保留、不轉待人工協調（G57）。' }, () => {
     const a = ModuleC.applications.find(x => x.id === b.dataset.void);
     const r = ModuleC.voidOverdue(a);
     openModal('逾期自動作廢（示意）', `
@@ -1464,7 +1468,7 @@ function renderCr_void() {
       <div class="callout" style="margin-top:12px;">紀錄保留供媒合失敗率統計（G57），不轉待人工協調。作廢即最終結局。</div>`);
     toast(`${a.id} 逾期作廢並通知申請人`, 'err');
     renderCr_void(); renderCaList();
-  });
+  }));
 }
 function statusText(s) {
   return ({ submitted: '待審核', approved: '已核准', rejected: '已駁回', matched: '已媒合', boarded: '已上車', completed: '行程完成', coordinate: '待人工協調', manual: '手動併車', void: '作廢' })[s] || s;
