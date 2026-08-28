@@ -176,6 +176,18 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     approx(H.ModuleB.effVolume(o), 1650, 1, '1000L × 1.65 = 1650L');
   });
 
+  test('多筆貨物項目：volume/weight 加總、有效體積逐項套係數（G34）', () => {
+    const H = fresh();
+    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false, handleMin: 20,
+      items: [ { name: 'a', volume: 1000, weight: 100, category: 'BOX' },    // 1000×1.10=1100
+               { name: 'b', volume: 2000, weight: 300, category: 'IRREG' } ] }); // 2000×1.65=3300
+    eq(o.volume, 3000, 'volume 應為各項加總');
+    eq(o.weight, 400, 'weight 應為各項加總');
+    approx(H.ModuleB.effVolume(o), 1100 + 3300, 1, '有效體積＝逐項 volume×類別係數 加總');
+    H.ModuleB.recompute(Object.assign(o, { items: [{ name: 'a', volume: 500, weight: 50, category: 'BOX' }] }));
+    eq(o.volume, 500, '編輯後 recompute 應更新加總'); approx(H.ModuleB.effVolume(o), 550, 1);
+  });
+
   test('G32/G33 非直達貪婪：容量或時間先觸頂即終點，動態淨值計容量', () => {
     const H = fresh();
     // 三張沿線單，體積足以在中途觸容量頂

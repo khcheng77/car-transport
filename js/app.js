@@ -360,6 +360,53 @@ function renderCargoGrid(sel, items, editable, onChange) {
   }
 }
 
+/* ---- 幹線貨物編輯彈窗（以整批貨量/重量申報，無單品尺寸 G34）---- */
+function openTrunkCargoEditor(item, onSave) {
+  const it = Object.assign({ name: '', volume: '', weight: '', category: 'BOX' }, item || {});
+  const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
+  openModal(item ? '編輯貨物內容' : '新增貨物', `
+    <div class="field"><label>品名</label><input type="text" id="te-name" value="${it.name}"></div>
+    <div class="row">
+      <div class="field"><label>貨量 (L)</label><input type="number" id="te-vol" value="${it.volume}"></div>
+      <div class="field"><label>重量 (kg)</label><input type="number" id="te-wt" value="${it.weight}"></div>
+    </div>
+    <div class="field"><label>類別 <span class="hint">浪費係數查表 G03</span></label><select id="te-cat">${catOpts}</select></div>
+    <div style="text-align:center;margin-top:20px;">
+      <button class="btn btn-primary" id="te-ok">▶ 送出</button>
+      <button class="btn btn-ghost" id="te-cancel">取消</button>
+    </div>`);
+  $('#te-cancel').onclick = closeModal;
+  $('#te-ok').onclick = () => {
+    const name = $('#te-name').value.trim();
+    const volume = +$('#te-vol').value, weight = +$('#te-wt').value;
+    if (!name) { toast('請填品名', 'err'); return; }
+    if (!(volume > 0)) { toast('貨量需為正數', 'err'); return; }
+    if (!(weight > 0)) { toast('重量需為正數', 'err'); return; }
+    onSave({ name, volume, weight, category: $('#te-cat').value });
+    closeModal();
+  };
+}
+
+/* ---- 幹線貨物項目唯讀 grid；editable 時最左欄加「編輯／刪除」---- */
+function renderTrunkCargoGrid(sel, items, editable, onChange) {
+  const box = $(sel);
+  if (!box) return;
+  const catName = (c) => (DB.wasteFactors.find(f => f.code === c) || {}).name || c;
+  const head = `${editable ? '<th></th>' : ''}<th>品名</th><th>貨量(L)</th><th>重量(kg)</th><th>類別</th><th>有效體積(L)</th>`;
+  const body = items.length === 0
+    ? `<tr><td colspan="${editable ? 6 : 5}" class="muted" style="text-align:center;padding:16px;">尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。</td></tr>`
+    : items.map((it, i) => {
+        const eff = (+it.volume || 0) * WasteFactorProvider.get(it.category);
+        return `<tr>
+        ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-tedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-tdel="${i}">刪除</button></td>` : ''}
+        <td>${it.name}</td><td>${it.volume}</td><td>${it.weight}</td><td>${catName(it.category)}</td><td>${eff.toFixed(0)}</td></tr>`; }).join('');
+  box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  if (editable) {
+    $$(sel + ' [data-tedit]').forEach(b => b.onclick = () => openTrunkCargoEditor(items[+b.dataset.tedit], upd => { items[+b.dataset.tedit] = upd; onChange(); }));
+    $$(sel + ' [data-tdel]').forEach(b => b.onclick = () => { items.splice(+b.dataset.tdel, 1); onChange(); });
+  }
+}
+
 /* ============================================================
    模組 A · 申請端（使用者）
    ============================================================ */
@@ -835,6 +882,7 @@ function renderBApplyDetail(p, id) {
   const o = ModuleB.orders.find(x => x.id === id);
   if (!o) { bApply.view = 'list'; return RENDER.b_apply(); }
   const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
+  const bCanEdit = ['submitted', 'approved'].includes(o.status); // 派車(loaded)後不可編輯貨物
   let action = '';
   if (o.status === 'loaded') action = `<button class="btn btn-primary" data-baccept="${o.id}">確認接受</button>`;
   else if (o.status === 'accepted') action = `<button class="btn btn-accent" data-brecv="${o.id}">確認已收到貨</button>`;
@@ -849,11 +897,16 @@ function renderBApplyDetail(p, id) {
         <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
-        <div class="field"><label>貨物類別（浪費係數 G03）</label><div>${(DB.wasteFactors.find(f => f.code === o.category) || {}).name || o.category}　係數 ${WasteFactorProvider.get(o.category)}</div></div>
         <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
         <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
+        ${bCanEdit ? `<button class="btn btn-accent btn-sm" id="bd-add">＋ 新增</button>` : ''}</div>
+      <div id="bd-items"></div>
+      ${bCanEdit ? `<div class="muted" style="margin-top:6px;">此單尚未派車，可新增／編輯／刪除貨物項目。</div>` : ''}
     </div>
     <div class="card">
       <div class="card-title">派車資訊</div>
@@ -864,6 +917,11 @@ function renderBApplyDetail(p, id) {
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>
     ${backBar('bd-back')}`;
+  renderTrunkCargoGrid('#bd-items', o.items, bCanEdit, () => { ModuleB.recompute(o); RENDER.b_apply(); });
+  if (bCanEdit) {
+    const add = $('#bd-add');
+    if (add) add.onclick = () => openTrunkCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); });
+  }
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   const acc = $('#page-b_apply [data-baccept]');
   if (acc) acc.onclick = confirmThen({ title: '確認接受此派車？', text: '確認後即接受派定的車輛與來收時間。' }, () => { ModuleB.acceptDelivery(o); toast(`${o.id} 已確認接受`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
@@ -872,6 +930,8 @@ function renderBApplyDetail(p, id) {
 }
 
 /* ---------- 新增畫面 ---------- */
+let baItems = []; // 幹線新增表單的貨物項目暫存
+function renderBaCargo() { renderTrunkCargoGrid('#ba-items', baItems, true, renderBaCargo); }
 function renderBApplyNew(p) {
   const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   p.innerHTML = `
@@ -892,13 +952,12 @@ function renderBApplyNew(p) {
           <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
         </div>
       </div>
-      <div class="row">
-        <div class="field"><label>貨量 (L)</label><input type="number" id="ba-vol" value="2000"></div>
-        <div class="field"><label>重量 (kg)</label><input type="number" id="ba-wt" value="800"></div>
-        <div class="field"><label>裝卸(分)</label><input type="number" id="ba-handle" value="30"></div>
-      </div>
-      <div class="field" style="max-width:280px;"><label>貨物類別 <span class="hint">供浪費係數查表 G03</span></label>
-        <select id="ba-cat">${DB.wasteFactors.map(f => `<option value="${f.code}">${f.name}（係數 ${f.factor}）</option>`).join('')}</select></div>
+      <div class="field" style="max-width:200px;"><label>裝卸時間 (分)</label><input type="number" id="ba-handle" value="30"></div>
+      <div class="divider"></div>
+      <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
+        <button class="btn btn-accent btn-sm" id="ba-add">＋ 新增</button></div>
+      <div id="ba-items"></div>
+      <div class="divider"></div>
       <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待業務審核）</button>
       <button class="btn btn-ghost" id="ba-cancel">取消</button>
     </div>
@@ -916,8 +975,11 @@ function renderBApplyNew(p) {
     $('#ba-site-label').textContent = ret ? '收貨（上車）據點' : '收貨據點';
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
+  renderBaCargo(); // 一開始顯示空白清單
+  $('#ba-add').onclick = () => openTrunkCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   $('#ba-submit').onclick = async () => {
+    if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
     const ok = await confirmDialog({ title: '確認送出幹線託運單？',
       text: '送出後將等待主管准駁，再由業務單位派車。' });
     if (!ok) return;
@@ -926,9 +988,10 @@ function renderBApplyNew(p) {
       leg: $('#page-b_apply input[name=ba-leg]:checked').value,
       site: $('#ba-site').value,
       direct: $('#page-b_apply input[value="1"]').checked,
-      volume: +$('#ba-vol').value, weight: +$('#ba-wt').value, handleMin: +$('#ba-handle').value,
-      category: $('#ba-cat').value,
+      handleMin: +$('#ba-handle').value,
+      items: baItems.map(x => ({ ...x })),
     });
+    baItems = [];
     toast(`${o.id} 已送出，等待業務審核`, 'ok');
     bApply.resultIds = null; bApply.view = 'detail'; bApply.detailId = o.id;
     RENDER.b_apply();
@@ -1022,11 +1085,15 @@ function renderBApproveDetail(p, id) {
         <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
-        <div class="field"><label>貨物類別（浪費係數 G03）</label><div>${(DB.wasteFactors.find(f => f.code === o.category) || {}).name || o.category}　係數 ${WasteFactorProvider.get(o.category)}</div></div>
+        <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
         <div class="field"><label>裝卸時間</label><div>${o.handleMin} 分</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
         ${o.reviewNote ? `<div class="field"><label>審核備註</label><div>${o.reviewNote}</div></div>` : ''}
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title">貨物項目</div>
+      <div id="bap-detail-items"></div>
     </div>
     ${pending ? `
     <div class="card">
@@ -1044,6 +1111,7 @@ function renderBApproveDetail(p, id) {
         <button class="btn btn-ghost" id="bsv-cancel">取消</button>
       </div>
     </div>` : backBar('bsv-back')}`;
+  renderTrunkCargoGrid('#bap-detail-items', o.items, false); // 審核端唯讀
   if (pending) {
     const syncReq = () => {
       const no = $('#page-b_approve input[name=bsv-agree][value=no]').checked;

@@ -12,8 +12,13 @@ const ModuleB = {
   // origin/dest 用 site id；direct: true/false；volume 公升；weight kg；handleMin 裝卸分鐘
   // leg: 'outbound' 去程（D10→南下據點）| 'return' 回程（南部據點→D10 出發據點）
   // 申請端只負責建立，狀態為「待審核」
+  // 幹線貨物可多筆項目（每筆：品名/貨量L/重量kg/類別）；整張表單為裝載最小單位（G34）
+  // 相容：若未帶 items，則以單筆 volume/weight/category 包成一項
   createOrder(data) {
     const leg = data.leg || 'outbound';
+    const items = (data.items && data.items.length)
+      ? data.items.map(x => ({ name: x.name || '貨物', volume: +x.volume || 0, weight: +x.weight || 0, category: x.category || 'BOX' }))
+      : [{ name: '貨物', volume: +data.volume || 0, weight: +data.weight || 0, category: data.category || 'BOX' }];
     const o = {
       id: 'LB' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
@@ -23,16 +28,23 @@ const ModuleB = {
       dest: leg === 'return' ? 'D10' : data.site,
       pickupSite: leg === 'return' ? data.site : null,
       direct: data.direct,
-      volume: data.volume,
-      category: data.category || 'BOX',   // 貨物類別（浪費係數查表 G03，A/B 共用）
-      weight: data.weight,
+      items,                 // 貨物項目清單
       handleMin: data.handleMin,
       approvedAt: null,
       status: 'submitted',  // submitted → approved/rejected → loaded
       createdAt: new Date(),
     };
+    this.recompute(o);      // 由 items 加總 volume/weight/有效體積
     this.orders.push(o);
     return o;
+  },
+
+  // 由貨物項目清單重算整單彙總值（新增或編輯後呼叫）
+  recompute(o) {
+    o.volume = o.items.reduce((s, it) => s + (+it.volume || 0), 0);           // 申報總貨量（L）
+    o.weight = o.items.reduce((s, it) => s + (+it.weight || 0), 0);           // 總重量（kg）
+    o.effVol = o.items.reduce((s, it) => s + (+it.volume || 0) * WasteFactorProvider.get(it.category), 0); // 有效體積（逐項套係數 G03）
+    o.category = o.items.length === 1 ? o.items[0].category : null;           // 單項時保留類別供顯示
   },
 
   // 主管准駁：核准時填入審核通過時間（G34 排序用）；note＝審核備註（選填/駁回必填）
@@ -47,9 +59,9 @@ const ModuleB = {
   TIME_LIMIT: 8 * 60, // 總計時間上限（分鐘），示意 = 一日行車 8 小時
   siteById(id) { return DB.sites.find(s => s.id === id); },
 
-  /* 有效體積＝申報貨量 × 類別浪費係數（沿用共用係數 Provider，G01/G03，A/B 共用）
+  /* 有效體積＝各項貨量 × 該項類別浪費係數 加總（沿用共用係數 Provider，G01/G03，A/B 共用）
      幹線單以整批貨量申報（非逐件尺寸），故套用 Level 1 係數修正，不做 Level 2 維度檢查 */
-  effVolume(o) { return o.volume * WasteFactorProvider.get(o.category); },
+  effVolume(o) { return o.effVol != null ? o.effVol : o.volume * WasteFactorProvider.get(o.category); },
 
   /* 依出發據點南下方向排序（order 大→小；台北D10→屏東D1）*/
   southboundFrom(originId) {
@@ -84,7 +96,7 @@ const ModuleB = {
           load += ev; wt += o.weight; carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
           o.pickupTime = directEta;     // 幾點來收（顯示給申請人）
-          trace.push(`  <span class="ok">✓ 載入 ${o.id}（${o.volume}L × 係數 ${WasteFactorProvider.get(o.category)} = ${ev.toFixed(0)}L）累計 ${load.toFixed(0)}L</span>`);
+          trace.push(`  <span class="ok">✓ 載入 ${o.id}（申報 ${o.volume}L → 有效 ${ev.toFixed(0)}L）累計 ${load.toFixed(0)}L</span>`);
         } else {
           trace.push(`  <span class="no">✗ ${o.id} 超出容量 → 留下一班直達車（G39）</span>`);
         }
