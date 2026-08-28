@@ -360,53 +360,6 @@ function renderCargoGrid(sel, items, editable, onChange) {
   }
 }
 
-/* ---- 幹線貨物編輯彈窗（以整批貨量/重量申報，無單品尺寸 G34）---- */
-function openTrunkCargoEditor(item, onSave) {
-  const it = Object.assign({ name: '', volume: '', weight: '', category: 'BOX' }, item || {});
-  const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
-  openModal(item ? '編輯貨物內容' : '新增貨物', `
-    <div class="field"><label>品名</label><input type="text" id="te-name" value="${it.name}"></div>
-    <div class="row">
-      <div class="field"><label>貨量 (L)</label><input type="number" id="te-vol" value="${it.volume}"></div>
-      <div class="field"><label>重量 (kg)</label><input type="number" id="te-wt" value="${it.weight}"></div>
-    </div>
-    <div class="field"><label>類別 <span class="hint">浪費係數查表 G03</span></label><select id="te-cat">${catOpts}</select></div>
-    <div style="text-align:center;margin-top:20px;">
-      <button class="btn btn-primary" id="te-ok">▶ 送出</button>
-      <button class="btn btn-ghost" id="te-cancel">取消</button>
-    </div>`);
-  $('#te-cancel').onclick = closeModal;
-  $('#te-ok').onclick = () => {
-    const name = $('#te-name').value.trim();
-    const volume = +$('#te-vol').value, weight = +$('#te-wt').value;
-    if (!name) { toast('請填品名', 'err'); return; }
-    if (!(volume > 0)) { toast('貨量需為正數', 'err'); return; }
-    if (!(weight > 0)) { toast('重量需為正數', 'err'); return; }
-    onSave({ name, volume, weight, category: $('#te-cat').value });
-    closeModal();
-  };
-}
-
-/* ---- 幹線貨物項目唯讀 grid；editable 時最左欄加「編輯／刪除」---- */
-function renderTrunkCargoGrid(sel, items, editable, onChange) {
-  const box = $(sel);
-  if (!box) return;
-  const catName = (c) => (DB.wasteFactors.find(f => f.code === c) || {}).name || c;
-  const head = `${editable ? '<th></th>' : ''}<th>品名</th><th>貨量(L)</th><th>重量(kg)</th><th>類別</th><th>有效體積(L)</th>`;
-  const body = items.length === 0
-    ? `<tr><td colspan="${editable ? 6 : 5}" class="muted" style="text-align:center;padding:16px;">尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。</td></tr>`
-    : items.map((it, i) => {
-        const eff = (+it.volume || 0) * WasteFactorProvider.get(it.category);
-        return `<tr>
-        ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-tedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-tdel="${i}">刪除</button></td>` : ''}
-        <td>${it.name}</td><td>${it.volume}</td><td>${it.weight}</td><td>${catName(it.category)}</td><td>${eff.toFixed(0)}</td></tr>`; }).join('');
-  box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-  if (editable) {
-    $$(sel + ' [data-tedit]').forEach(b => b.onclick = () => openTrunkCargoEditor(items[+b.dataset.tedit], upd => { items[+b.dataset.tedit] = upd; onChange(); }));
-    $$(sel + ' [data-tdel]').forEach(b => b.onclick = () => { items.splice(+b.dataset.tdel, 1); onChange(); });
-  }
-}
-
 /* ============================================================
    模組 A · 申請端（使用者）
    ============================================================ */
@@ -825,14 +778,21 @@ function renderBApplyList(p) {
   $('#bq-search').onclick = () => runBQuery();
   $('#bq-new').onclick = () => { bApply.view = 'new'; RENDER.b_apply(); };
   $('#bq-demo').onclick = () => {
-    [['D3', false, 1500, 600, 25, 'BOX'], ['D2', false, 1800, 700, 30, 'PALLET'], ['D6', false, 1200, 500, 20, 'BOX'],
-     ['D1', true, 2500, 900, 40, 'DRUM'], ['D5', false, 2200, 800, 30, 'LONG']].forEach(([site, direct, v, w, h, c]) =>
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, volume: v, weight: w, handleMin: h, category: c }));
+    [['D3', false, 25, [{ name: '棧板料', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
+     ['D2', false, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 10, category: 'BOX', weight: 15 }, { name: '長管', l: 300, w: 20, h: 20, qty: 2, category: 'LONG', weight: 25 }]],
+     ['D6', false, 20, [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 8, category: 'BOX', weight: 10 }]],
+     ['D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }]],
+     ['D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
+    ].forEach(([site, direct, handleMin, items]) =>
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, handleMin, items }));
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
-    [['D2', true, 2000, 700, 30, 'BOX'], ['D3', false, 1200, 500, 20, 'FRAG'], ['D5', false, 900, 400, 15, 'BOX']].forEach(([site, direct, v, w, h, c]) =>
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, volume: v, weight: w, handleMin: h, category: c }));
+    [['D2', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }]],
+     ['D3', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }]],
+     ['D5', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }]]
+    ].forEach(([site, direct, handleMin, items]) =>
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, handleMin, items }));
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -917,10 +877,10 @@ function renderBApplyDetail(p, id) {
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>
     ${backBar('bd-back')}`;
-  renderTrunkCargoGrid('#bd-items', o.items, bCanEdit, () => { ModuleB.recompute(o); RENDER.b_apply(); });
+  renderCargoGrid('#bd-items', o.items, bCanEdit, () => { ModuleB.recompute(o); RENDER.b_apply(); });
   if (bCanEdit) {
     const add = $('#bd-add');
-    if (add) add.onclick = () => openTrunkCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); });
+    if (add) add.onclick = () => openCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); });
   }
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   const acc = $('#page-b_apply [data-baccept]');
@@ -930,8 +890,8 @@ function renderBApplyDetail(p, id) {
 }
 
 /* ---------- 新增畫面 ---------- */
-let baItems = []; // 幹線新增表單的貨物項目暫存
-function renderBaCargo() { renderTrunkCargoGrid('#ba-items', baItems, true, renderBaCargo); }
+let baItems = []; // 幹線新增表單的貨物項目暫存（每筆含獨立尺寸與重量，比照 A）
+function renderBaCargo() { renderCargoGrid('#ba-items', baItems, true, renderBaCargo); }
 function renderBApplyNew(p) {
   const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   p.innerHTML = `
@@ -976,7 +936,7 @@ function renderBApplyNew(p) {
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
   renderBaCargo(); // 一開始顯示空白清單
-  $('#ba-add').onclick = () => openTrunkCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
+  $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   $('#ba-submit').onclick = async () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
@@ -1111,7 +1071,7 @@ function renderBApproveDetail(p, id) {
         <button class="btn btn-ghost" id="bsv-cancel">取消</button>
       </div>
     </div>` : backBar('bsv-back')}`;
-  renderTrunkCargoGrid('#bap-detail-items', o.items, false); // 審核端唯讀
+  renderCargoGrid('#bap-detail-items', o.items, false); // 審核端唯讀
   if (pending) {
     const syncReq = () => {
       const no = $('#page-b_approve input[name=bsv-agree][value=no]').checked;

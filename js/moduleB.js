@@ -12,12 +12,12 @@ const ModuleB = {
   // origin/dest 用 site id；direct: true/false；volume 公升；weight kg；handleMin 裝卸分鐘
   // leg: 'outbound' 去程（D10→南下據點）| 'return' 回程（南部據點→D10 出發據點）
   // 申請端只負責建立，狀態為「待審核」
-  // 幹線貨物可多筆項目（每筆：品名/貨量L/重量kg/類別）；整張表單為裝載最小單位（G34）
-  // 相容：若未帶 items，則以單筆 volume/weight/category 包成一項
+  // 幹線貨物多筆項目，每筆填獨立尺寸與重量（品名/長寬高/類別/數量/單件重），比照模組 A（G13）
+  // 整張表單為裝載最小單位（G34）；相容：若帶 volume 而無尺寸則以整批貨量計（demo/測試）
   createOrder(data) {
     const leg = data.leg || 'outbound';
     const items = (data.items && data.items.length)
-      ? data.items.map(x => ({ name: x.name || '貨物', volume: +x.volume || 0, weight: +x.weight || 0, category: x.category || 'BOX' }))
+      ? data.items.map(x => ({ ...x, name: x.name || '貨物', qty: x.qty || 1, category: x.category || 'BOX', weight: +x.weight || 0 }))
       : [{ name: '貨物', volume: +data.volume || 0, weight: +data.weight || 0, category: data.category || 'BOX' }];
     const o = {
       id: 'LB' + String(this.seq++).padStart(3, '0'),
@@ -40,11 +40,24 @@ const ModuleB = {
   },
 
   // 由貨物項目清單重算整單彙總值（新增或編輯後呼叫）
+  // 有尺寸的項目沿用共用引擎 itemEffective（體積×類別係數×形狀懲罰，比照 A）；
+  // 僅帶整批貨量者以 volume×類別係數計（相容 demo/測試）
   recompute(o) {
-    o.volume = o.items.reduce((s, it) => s + (+it.volume || 0), 0);           // 申報總貨量（L）
-    o.weight = o.items.reduce((s, it) => s + (+it.weight || 0), 0);           // 總重量（kg）
-    o.effVol = o.items.reduce((s, it) => s + (+it.volume || 0) * WasteFactorProvider.get(it.category), 0); // 有效體積（逐項套係數 G03）
-    o.category = o.items.length === 1 ? o.items[0].category : null;           // 單項時保留類別供顯示
+    let raw = 0, eff = 0, wt = 0;
+    for (const it of o.items) {
+      if (it.l != null && it.w != null && it.h != null) {
+        const e = itemEffective(it);           // { vol(單件L), eff(含qty), weight(含qty), qty }
+        raw += e.vol * e.qty; eff += e.eff; wt += e.weight;
+      } else {
+        raw += (+it.volume || 0);
+        eff += (+it.volume || 0) * WasteFactorProvider.get(it.category);
+        wt += (+it.weight || 0);
+      }
+    }
+    o.volume = Math.round(raw);  // 申報總貨量（L）
+    o.weight = wt;               // 總重量（kg）
+    o.effVol = eff;              // 有效體積（容量計算用）
+    o.category = o.items.length === 1 ? o.items[0].category : null; // 單項時保留類別供顯示
   },
 
   // 主管准駁：核准時填入審核通過時間（G34 排序用）；note＝審核備註（選填/駁回必填）
