@@ -490,8 +490,8 @@ function renderAApplyDetail(p, id) {
       <div class="grid-2">
         <div class="field"><label>單號</label><div>${a.id}</div></div>
         <div class="field"><label>申請人</label><div>${a.applicant}</div></div>
-        <div class="field"><label>收貨地點</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>目的地</label><div>${st.name} / ${a.building}</div></div>
+        <div class="field"><label>收貨地點（起）</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>送貨地點（迄）</label><div>${st.name} / ${a.building}</div></div>
         <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間 ' + a.expectTime : '越快越好'}</div></div>
         <div class="field"><label>交貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>上貨 / 下貨時間</label><div>${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）</div></div>
@@ -542,9 +542,9 @@ function renderAApplyNew(p) {
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
-      <div class="field"><label>收貨地點</label><input type="text" id="aa-pickuploc" placeholder="例：五股廠 原料倉 3 號門"></div>
+      <div class="field"><label>收貨地點（起）</label><select id="aa-pickuploc">${stOpts}</select></div>
       <div class="row">
-        <div class="field"><label>目的地站點</label><select id="aa-station">${stOpts}</select></div>
+        <div class="field"><label>送貨地點站點（迄）</label><select id="aa-station">${stOpts}</select></div>
         <div class="field"><label>建物</label><select id="aa-building"></select></div>
       </div>
       <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
@@ -593,9 +593,10 @@ function renderAApplyNew(p) {
     if (!ok) return;
     const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
     // 送出即自動媒合（G10–G12/G16/G19）
+    const pickSt = DB.stations.find(s => s.id === $('#aa-pickuploc').value);
     const { app, result } = ModuleA.submit({
       applicant: $('#aa-applicant').value, station: $('#aa-station').value, building: $('#aa-building').value,
-      pickupLoc: $('#aa-pickuploc').value, deliverTime: $('#aa-deliver').value,
+      pickupLoc: pickSt ? pickSt.name : '', deliverTime: $('#aa-deliver').value,
       items: aaItems.map(x => ({ ...x })), recvMode: mode, expectTime: $('#aa-expect').value,
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
@@ -788,23 +789,25 @@ function renderBApplyList(p) {
   $('#bq-search').onclick = () => runBQuery();
   $('#bq-new').onclick = () => { bApply.view = 'new'; RENDER.b_apply(); };
   $('#bq-demo').onclick = () => {
-    [['D3', false, 25, [{ name: '棧板料', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
-     ['D2', false, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 10, category: 'BOX', weight: 15 }, { name: '長管', l: 300, w: 20, h: 20, qty: 2, category: 'LONG', weight: 25 }]],
-     ['D6', false, 20, [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 8, category: 'BOX', weight: 10 }]],
-     ['D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }]],
-     ['D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
-    ].forEach(([site, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site, direct, items,
-        pickupLoc: ModuleB.siteById(site).name + ' 月台', deliverTime: '15:00', loadMin: lm, unloadMin: handleMin - lm }); });
+    // [收貨據點(起), 送貨據點(迄), 直達?, 裝卸分, 貨物]（去程南下：起北於迄）
+    [['D9', 'D3', false, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 10, category: 'BOX', weight: 15 }, { name: '長管', l: 300, w: 20, h: 20, qty: 2, category: 'LONG', weight: 25 }]],
+     ['D9', 'D2', false, 25, [{ name: '棧板料', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }]],
+     ['D6', 'D2', false, 20, [{ name: '文件箱', l: 40, w: 30, h: 30, qty: 8, category: 'BOX', weight: 10 }]],
+     ['D6', 'D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }]],
+     ['D9', 'D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }]]
+    ].forEach(([pick, drop, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site: pick, destSite: drop, direct, items,
+        pickupLoc: ModuleB.siteById(pick).name + ' 月台', deliverTime: '15:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
-    [['D2', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }]],
-     ['D3', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }]],
-     ['D5', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }]]
-    ].forEach(([site, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site, direct, items,
-        pickupLoc: ModuleB.siteById(site).name + ' 月台', deliverTime: '17:00', loadMin: lm, unloadMin: handleMin - lm }); });
+    // 回程北上：收貨南部據點 → 送回基地 D10
+    [['D2', 'D10', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }]],
+     ['D3', 'D10', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }]],
+     ['D5', 'D10', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }]]
+    ].forEach(([pick, drop, direct, handleMin, items]) => { const lm = Math.round(handleMin * 0.6);
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site: pick, destSite: drop, direct, items,
+        pickupLoc: ModuleB.siteById(pick).name + ' 月台', deliverTime: '17:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -818,7 +821,7 @@ function runBQuery() {
   const res = ModuleB.orders.filter(o =>
     (!q.applicant || o.applicant.includes(q.applicant)) &&
     (!q.leg || o.leg === q.leg) &&
-    (!q.site || o.origin === q.site || o.dest === q.site) &&
+    (!q.site || o.pickSite === q.site || o.dropSite === q.site) &&
     (!q.direct || String(o.direct ? 1 : 0) === q.direct) &&
     (!q.status || o.status === q.status));
   bApply.resultIds = res.map(o => o.id);
@@ -832,11 +835,11 @@ function renderBGrid() {
   $('#bq-count').textContent = `${rows.length} 筆`;
   $('#bq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的託運紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>單號</th><th>申請人</th><th>收貨據點</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
+      <th></th><th>單號</th><th>申請人</th><th>收貨→送貨據點</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
       ${rows.map(o => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-detail="${o.id}">細節</button></td>
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
-        <td>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</td>
+        <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td>
         <td>${o.dispatchVehicle ? '<b>' + o.dispatchVehicle + '</b>' : '<span class="muted">—</span>'}</td>
@@ -866,7 +869,8 @@ function renderBApplyDetail(p, id) {
       <div class="grid-2">
         <div class="field"><label>單號</label><div>${o.id}</div></div>
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
-        <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
+        <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
+        <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span></div></div>
         <div class="field"><label>收貨地點</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
@@ -886,7 +890,7 @@ function renderBApplyDetail(p, id) {
       <div class="card-title">派車資訊</div>
       <div class="grid-2">
         <div class="field"><label>指派車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '<span class="muted">尚未派車</span>'}</div></div>
-        <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>　<span class="hint">幹線車抵達「${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}」收貨的時間</span>` : '<span class="muted">待派車</span>'}</div></div>
+        <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>　<span class="hint">幹線車抵達「${ModuleB.siteById(o.pickSite).name}」收貨的時間</span>` : '<span class="muted">待派車</span>'}</div></div>
       </div>
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>
@@ -919,8 +923,11 @@ function renderBApplyNew(p) {
           <label class="radio-pill" id="ba-ret"><input type="radio" name="ba-leg" value="return">回程（北上回 D10）</label>
         </div>
       </div>
-      <div class="field"><label id="ba-site-label">收貨據點</label><span class="hint">幹線車沿南北路線到此據點收貨</span><select id="ba-site">${siteOpts}</select></div>
-      <div class="field"><label>收貨地點 <span class="hint">據點內建物/位置</span></label><input type="text" id="ba-pickuploc" placeholder="例：台中據點 A 棟月台"></div>
+      <div class="row">
+        <div class="field"><label id="ba-site-label">收貨據點（起）</label><select id="ba-site">${siteOpts}</select></div>
+        <div class="field"><label>送貨據點（迄）</label><select id="ba-dest">${siteOpts}</select></div>
+      </div>
+      <div class="field"><label>收貨地點 <span class="hint">收貨據點內建物/位置</span></label><input type="text" id="ba-pickuploc" placeholder="例：台中據點 A 棟月台"></div>
       <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
         <div class="radio-group">
           <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
@@ -951,14 +958,18 @@ function renderBApplyNew(p) {
     const ret = $('#page-b_apply input[value=return]').checked;
     $('#ba-out').classList.toggle('sel', !ret);
     $('#ba-ret').classList.toggle('sel', ret);
-    $('#ba-site-label').textContent = ret ? '收貨（上車）據點' : '收貨據點';
+    // 送貨據點預設：去程→最南端 D1、回程→回基地 D10（仍可自行改）
+    $('#ba-dest').value = ret ? 'D10' : 'D1';
+    $('#ba-site').value = ret ? 'D1' : 'D6';
   };
   $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
+  setLeg();
   renderBaCargo(); // 一開始顯示空白清單
   $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   $('#ba-submit').onclick = async () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
+    if ($('#ba-site').value === $('#ba-dest').value) { toast('收貨據點與送貨據點不可相同', 'err'); return; }
     const ok = await confirmDialog({ title: '確認送出幹線託運單？',
       text: '送出後將等待主管准駁，再由業務單位派車。' });
     if (!ok) return;
@@ -966,6 +977,7 @@ function renderBApplyNew(p) {
       applicant: $('#ba-applicant').value,
       leg: $('#page-b_apply input[name=ba-leg]:checked').value,
       site: $('#ba-site').value,
+      destSite: $('#ba-dest').value,
       pickupLoc: $('#ba-pickuploc').value, deliverTime: $('#ba-deliver').value,
       direct: $('#page-b_apply input[value="1"]').checked,
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
@@ -1039,12 +1051,12 @@ function renderBApproveGrid() {
   const rows = bApproveRows();
   $('#bap-grid').innerHTML = rows.length === 0 ? `<div class="empty">查無符合條件的託運單。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>單號</th><th>申請人</th><th>方向</th><th>收貨據點</th><th>型態</th><th>貨量</th><th>狀態</th></tr></thead><tbody>
+      <th></th><th>單號</th><th>申請人</th><th>方向</th><th>收貨→送貨據點</th><th>型態</th><th>貨量</th><th>狀態</th></tr></thead><tbody>
       ${rows.map(o => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-bvdetail="${o.id}">細節</button></td>
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
         <td>${o.leg === 'return' ? '回程' : '去程'}</td>
-        <td>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</td>
+        <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td><td>${stBadge(o.status)}</td></tr>`).join('')}
     </tbody></table></div>`;
@@ -1062,7 +1074,8 @@ function renderBApproveDetail(p, id) {
         <div class="field"><label>單號</label><div>${o.id}</div></div>
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
         <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
-        <div class="field"><label>收貨據點</label><div>${ModuleB.siteById(o.leg === 'return' ? o.pickupSite : o.dest).name}</div></div>
+        <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}</div></div>
+        <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}</div></div>
         <div class="field"><label>收貨地點</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
         <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>

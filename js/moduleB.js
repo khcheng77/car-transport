@@ -24,14 +24,19 @@ const ModuleB = {
     const loadMin = +(data.loadMin || 0);
     const unloadMin = +(data.unloadMin || 0);
     const handleMin = split ? (loadMin + unloadMin) : (+data.handleMin || 0);
+    // 起迄兩點：pickSite＝收貨據點（起）、dropSite＝送貨據點（迄）
+    const pickSite = data.site;
+    const dropSite = data.destSite || (leg === 'return' ? 'D10' : data.site);
     const o = {
       id: 'LB' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
       leg,
-      // 去程：origin=D10、dest=南下據點；回程：pickupSite=南部收貨據點、dest=D10
+      // 去程：origin=D10、dest=南下據點；回程：pickupSite=南部收貨據點、dest=D10（沿用既有派車欄位）
       origin: leg === 'return' ? data.site : 'D10',
       dest: leg === 'return' ? 'D10' : data.site,
       pickupSite: leg === 'return' ? data.site : null,
+      pickSite,                            // 收貨據點（起）
+      dropSite,                            // 送貨據點（迄）
       pickupLoc: data.pickupLoc || '',     // 收貨地點（據點內建物/位置，示意）
       deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨（示意）HH:MM
       direct: data.direct,
@@ -103,9 +108,9 @@ const ModuleB = {
     if (mode === 'direct') {
       const directs = pending.filter(o => o.direct);
       if (directs.length === 0) return { trace: ['<span class="dim">目前無直達單。</span>'], mode };
-      // 一台直達車只服務單一目的地（G38）→ 取最早核准的直達單目的地
-      const targetDest = directs[0].dest;
-      const sameDest = directs.filter(o => o.dest === targetDest);
+      // 一台直達車只服務單一送貨據點（G38）→ 取最早核准的直達單送貨據點（迄）
+      const targetDest = directs[0].dropSite;
+      const sameDest = directs.filter(o => o.dropSite === targetDest);
       trace.push(`<span class="hl">直達車</span>：鎖定單一目的地 ${this.siteById(targetDest).name}（G38 不湊單、不論貨量）`);
       trace.push(`終點 = 申請單目的地｜純容量加總、不跑貪婪法（G39）`);
       // 預計來收時間：車輛自出發據點直達，抵達目的地據點的時間（示意，08:00 出發）

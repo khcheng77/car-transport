@@ -201,6 +201,21 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     eq(o.volume, 100, '編輯後 recompute 應更新加總'); approx(H.ModuleB.effVolume(o), 110, 1);
   });
 
+  test('起迄兩點：pickSite（起）/dropSite（迄）皆記錄；直達以送貨據點分流（G38）', () => {
+    const H = fresh();
+    // 去程 D9→D3
+    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
+      items: [{ name: 'a', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
+    eq(o.pickSite, 'D9', '收貨據點（起）'); eq(o.dropSite, 'D3', '送貨據點（迄）');
+    // 兩張直達：送貨據點不同 → 一台直達車只服務單一送貨據點
+    const d1 = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D9', destSite: 'D2', direct: true, handleMin: 20, items: [{ name: 'x', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
+    const d2 = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D9', destSite: 'D1', direct: true, handleMin: 20, items: [{ name: 'y', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
+    [d1, d2].forEach(x => H.ModuleB.approve(x));
+    const r = H.ModuleB.dispatch('V-T01', 'direct');
+    eq(r.endpoint, 'D2', '直達終點＝最早核准直達單的送貨據點（G38）');
+    ok(r.carried.some(o => o.id === d1.id) && !r.carried.some(o => o.id === d2.id), '不同送貨據點不得同車（G38）');
+  });
+
   test('G32/G33 非直達貪婪：容量或時間先觸頂即終點，動態淨值計容量', () => {
     const H = fresh();
     // 三張沿線單，體積足以在中途觸容量頂
