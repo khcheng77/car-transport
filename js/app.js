@@ -716,6 +716,7 @@ RENDER.a_review = function () {
   p.innerHTML = `
     <div class="section-h">車次追蹤（業務單位）</div>
     <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合；供業務單位追蹤已排定車次與交貨狀態、維護路線班次、進行駕駛異常回報。</div>
+    <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="ar-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
     <div class="pill-tabs">
       <div class="pill-tab active" data-tab="review">① 已排定車次</div>
       <div class="pill-tab" data-tab="route">② 路線與班次</div>
@@ -728,6 +729,7 @@ RENDER.a_review = function () {
     $$('#page-a_review .pill-tab').forEach(x => x.classList.toggle('active', x === t));
     ['review', 'route', 'incident'].forEach(k => $('#ar-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
   });
+  $('#ar-goto-driver').onclick = () => goto('a_driver');
   renderAr_review(); renderA_route(); renderA_incident();
 };
 function renderAr_review() {
@@ -1250,6 +1252,7 @@ RENDER.b_review = function () {
   p.innerHTML = `
     <div class="section-h">派車調度（業務單位）</div>
     <div class="section-sub">對已核准託運單依核准時間排序派車：貪婪終點判斷 / 直達獨立派車 / 回程全域直達鎖定，並顯示派遣模式與觸發原因。主管准駁為獨立單元。</div>
+    <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="br-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
     <div class="card">
       <div class="card-title">派車決策（調度室）<span class="g-tag">G32/G40/G44</span></div>
       <div class="card-desc">僅對已核准託運單派車，依核准時間排序逐張檢查。系統顯示每台車派遣模式與觸發原因。</div>
@@ -1272,6 +1275,7 @@ RENDER.b_review = function () {
   $('#br-dispatch-greedy').onclick = confirmThen({ title: '確認派非直達車？', text: '確認後將以貪婪法對已核准託運單執行派車。' }, () => dispatchB('greedy'));
   $('#br-dispatch-return').onclick = confirmThen({ title: '確認派回程車（非直達）？', text: '確認後將執行回程派車與全域直達鎖定檢查。' }, () => dispatchBReturn(false));
   $('#br-dispatch-return-direct').onclick = confirmThen({ title: '確認派回程車（原為直達車）？', text: '確認後將以直達模式執行回程派車。' }, () => dispatchBReturn(true));
+  $('#br-goto-driver').onclick = () => goto('b_driver');
   renderBr_approved(); renderBr_tracking();
 };
 // 3.7 四／五模式決策矩陣（G44 顯示，供調度員覆核）
@@ -1771,6 +1775,7 @@ RENDER.c_review = function () {
   p.innerHTML = `
     <div class="section-h">媒合調度（業務單位）</div>
     <div class="section-sub">對已核准申請執行批次媒合（未來 7 天）、資源檢核、逾期作廢與派車追蹤。手動併車由申請人於申請端自行處理、主管准駁為獨立單元。</div>
+    <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="cr-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
     <div class="pill-tabs">
       <div class="pill-tab active" data-tab="batch">① 批次媒合</div>
       <div class="pill-tab" data-tab="void">② 逾期作廢</div>
@@ -1786,6 +1791,7 @@ RENDER.c_review = function () {
     if (t.dataset.tab === 'void') renderCr_void();
     if (t.dataset.tab === 'track') renderCr_track();
   });
+  $('#cr-goto-driver').onclick = () => goto('c_driver');
   renderCr_batch(); renderCr_void(); renderCr_track();
 };
 // 派車追蹤：被安排的車次 · 司機 · 乘客上車/行程完成
