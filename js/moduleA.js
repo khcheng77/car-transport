@@ -2,6 +2,7 @@
    moduleA.js — 模組 A：區域內物流貨運
    PLAN.md Phase 2 / Guardrails G10–G20
    固定 10 站、時間軸最近班次媒合、站內時間額度、順延
+   容量採「站區間淨值」：收貨站上貨佔用 → 送貨站卸貨釋放（先卸後裝 3.4/3.5）
    ============================================================ */
 
 const ModuleA = {
@@ -20,13 +21,14 @@ const ModuleA = {
     const app = {
       id: 'LA' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
-      station: data.station,
+      station: data.station,            // 送貨站（迄）
       building: data.building,
-      pickupLoc: data.pickupLoc || '',  // 收貨地點（示意）
-      deliverTime: data.deliverTime || '', // 交貨時間 幾點交貨 HH:MM（接進媒合：到站須不晚於此）
+      pickStation: data.pickStation || null, // 收貨站（起）站 id；未帶＝自路線起點載運（相容）
+      pickupLoc: data.pickupLoc || '',  // 收貨地點顯示字串
+      deliverTime: data.deliverTime || '', // 期望收貨時間 HH:MM（exact 模式僅用於挑班次，非硬性截止 4.1）
       recipient: data.recipient || {},  // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
       items: data.items,
-      recvMode: data.recvMode,       // 'exact'（以交貨時間為目標）| 'asap'（越快越好）
+      recvMode: data.recvMode,       // 'exact'（依期望收貨時間挑最近班次）| 'asap'（越快越好）
       loadMin, unloadMin,            // 上貨/下貨時間（分）
       handleMin,                     // 站內佔用時間＝上貨＋下貨（G15）
       submitSeq: this.approveSeq++,  // 送出序（同站處理順序＝送出先後，取代原審核通過時間 G16）
@@ -52,7 +54,7 @@ const ModuleA = {
 
   // 重新媒合（僅限尚未媒合成功者，例如編輯貨物後再試）：清掉舊排班再跑一次
   rematch(app) {
-    app.assignedShift = null; app.arrival = null;
+    app.assignedShift = null; app.arrival = null; app.expectDiffMin = null;
     const r = this.match(app);   // 成功時 match 內已設 status='matched'
     app.matchTrace = r.trace;
     app.status = r.ok ? 'matched' : 'unscheduled';
@@ -72,38 +74,79 @@ const ModuleA = {
   /* 站內時間額度（分鐘）：每站每班次固定額度，示意 */
   STATION_QUOTA: 40,
 
-  /* 媒合迴圈（G10/G11/G12/G19）— 回傳 trace 與結果 */
+  /* 貨物在路線上的佔用站區間 [from, to)：收貨站序上貨 → 送貨站序抵達即卸（先卸後裝）
+     未帶收貨站或順序不合（收貨站不在送貨站之前）→ 自路線起點(0)載運，抵送貨站卸（相容） */
+  segmentOf(a) {
+    const drop = DB.stations.find(s => s.id === a.station).order;
+    const pickSt = a.pickStation ? DB.stations.find(s => s.id === a.pickStation) : null;
+    const pick = pickSt ? pickSt.order : 0;
+    return (pick < drop) ? { from: pick, to: drop } : { from: 0, to: drop };
+  },
+
+  /* 某班次於站序 s（駛離該站時）的車上淨負載：有效體積／重量／地板投影
+     只累計「佔用區間涵蓋 s」的已排入單 → 卸貨後容量、重量、地板同步釋放（3.4/3.5） */
+  netLoadAt(shiftId, s) {
+    return this.applications
+      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status))
+      .reduce((acc, a) => {
+        const seg = this.segmentOf(a);
+        if (s >= seg.from && s < seg.to) {
+          const e = effectiveLoad(a.items);
+          acc.volume += e.volume; acc.weight += e.weight; acc.floor += e.floor;
+        }
+        return acc;
+      }, { volume: 0, weight: 0, floor: 0 });
+  },
+
+  /* 某班次於某站的時間額度已用量：卸貨（送貨站）與上貨（收貨站）的 handleMin 都計入該站佔用 */
+  quotaUsedAt(shiftId, stationId) {
+    return this.applications
+      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status))
+      .reduce((sum, a) => {
+        const split = (a.loadMin || a.unloadMin) > 0;
+        let t = 0;
+        if (a.station === stationId) t += split ? a.unloadMin : a.handleMin; // 卸貨佔用
+        if (a.pickStation === stationId) t += a.loadMin || 0;               // 上貨佔用
+        return sum + t;
+      }, 0);
+  },
+
+  /* 媒合迴圈（G10/G11/G12/G19）— 回傳 trace 與結果
+     A-1：期望收貨時間只影響班次排序（|到站−期望| 最小優先，早晚都比），非硬性截止；
+          失敗原因只分 toobig（空車都放不下）與 full（容量或站內額度皆滿）。
+     A-2：容量採站區間淨值——先卸後裝，體積/重量/地板到送貨站即釋放。 */
   match(app) {
     const trace = [];
-    const station = DB.stations.find(s => s.id === app.station);
+    const station = DB.stations.find(s => s.id === app.station); // 送貨站（迄）
     const vehiclePool = {}; // 各班次車輛容量
     DB.regionalShifts.forEach(sh => {
       vehiclePool[sh.id] = DB.vehicles.find(v => v.id === sh.vehicle);
     });
 
-    // 交貨時間（幾點交貨）：兩種模式共用之目標／截止時間；空值＝不設限（相容既有）
-    const deadline = app.deliverTime ? hhmmToMin(app.deliverTime) : null;
+    // 期望收貨時間：exact 模式的排序目標（不作硬性限制 4.1）
+    const expect = (app.recvMode === 'exact' && app.deliverTime) ? hhmmToMin(app.deliverTime) : null;
 
     // 依收貨模式決定嘗試班次順序（G19）
     let shifts = [...DB.regionalShifts];
-    if (app.recvMode === 'exact' && deadline != null) {
-      // 指定期望時間：以「交貨時間」為目標，選到站時間差最小者（早晚都比 G19）
+    if (expect != null) {
       shifts.sort((a, b) => {
-        const da = Math.abs(this.shiftArrivalAtStation(a, station.order) - deadline);
-        const db = Math.abs(this.shiftArrivalAtStation(b, station.order) - deadline);
+        const da = Math.abs(this.shiftArrivalAtStation(a, station.order) - expect);
+        const db = Math.abs(this.shiftArrivalAtStation(b, station.order) - expect);
         return da - db;
       });
-      trace.push(`<span class="dim">收貨模式：指定期望｜以交貨時間 ${app.deliverTime} 為目標，依到站時間差最小排序班次</span>`);
+      trace.push(`<span class="dim">收貨模式：指定期望 ${app.deliverTime}｜依到站時間差最小排序班次（早晚都比，非硬性截止）</span>`);
     } else {
       // 越快越好：離現在最近、最早排得進去的班次（依出發時間 G19）
       shifts.sort((a, b) => hhmmToMin(a.depart) - hhmmToMin(b.depart));
       trace.push(`<span class="dim">收貨模式：越快越好｜依最早（離現在最近）班次排序</span>`);
     }
 
+    const seg = this.segmentOf(app);
+    const segFrom = DB.stations.find(s => s.order === seg.from);
+    trace.push(`<span class="dim">佔用站區間：${segFrom ? segFrom.name + ' 上貨' : '路線起點載運'} → ${station.name} 卸貨（先卸後裝，體積/重量/地板到站釋放）</span>`);
+
     // 逐班次嘗試（時間軸最近的下一班 G10）
     let fitsSomeEmpty = false; // 是否存在「空車放得下」的班次（用來區分太大 vs 今天已滿）
-    let anyOnTime = false;     // 是否存在能在交貨時間前到站的班次（用來區分 late vs full）
-    if (deadline != null) trace.push(`<span class="dim">交貨時間：須於 ${app.deliverTime} 前到站，晚到班次不採計</span>`);
     for (let i = 0; i < shifts.length; i++) {
       const sh = shifts[i];
       const veh = vehiclePool[sh.id];
@@ -115,54 +158,61 @@ const ModuleA = {
       if (emptyRes.ok) fitsSomeEmpty = true;
       else trace.push(`  <span class="no">✗ 本班車即使空車也放不下（尺寸／容量太大）</span>`);
 
-      // --- 交貨時間檢核：到站晚於交貨時間 → 此班不符，順延下一班 ---
-      if (deadline != null && arr > deadline) {
-        trace.push(`  <span class="no">✗ 到站約 ${minToHHMM(arr)} 晚於交貨時間 ${app.deliverTime} → 不符交貨時間，跳過此班</span>`);
-        continue;
+      // --- 站內時間額度（G16）：上貨站與卸貨站各自累計（卸與裝都計入該站佔用）---
+      const split = (app.loadMin || app.unloadMin) > 0;
+      const dropDemand = split ? app.unloadMin : app.handleMin;
+      const dropUsed = this.quotaUsedAt(sh.id, app.station);
+      let quotaFail = null;
+      if (dropDemand > this.STATION_QUOTA - dropUsed) {
+        quotaFail = `送貨站 ${station.name} 額度不足：已用 ${dropUsed} 分、剩 ${this.STATION_QUOTA - dropUsed} 分 < 本單卸貨 ${dropDemand} 分`;
       }
-      anyOnTime = true;
-
-      // --- 站內時間額度（G16）：同站已排入單 + 本單 handleMin 是否超額 ---
-      const sameStation = this.applications.filter(a =>
-        a.assignedShift === sh.id && a.station === app.station
-      );
-      const usedQuota = sameStation.reduce((s, a) => s + a.handleMin, 0);
-      const remainQuota = this.STATION_QUOTA - usedQuota;
-      if (app.handleMin > remainQuota) {
-        trace.push(`  <span class="no">✗ 站內時間額度不足：已用 ${usedQuota} 分、剩 ${remainQuota} 分 < 本單 ${app.handleMin} 分 → 跳過此班（G16/G17）</span>`);
+      if (!quotaFail && app.pickStation && (app.loadMin || 0) > 0) {
+        const pickUsed = this.quotaUsedAt(sh.id, app.pickStation);
+        if (app.loadMin > this.STATION_QUOTA - pickUsed) {
+          const ps = DB.stations.find(s => s.id === app.pickStation);
+          quotaFail = `收貨站 ${ps ? ps.name : app.pickStation} 額度不足：已用 ${pickUsed} 分、剩 ${this.STATION_QUOTA - pickUsed} 分 < 本單上貨 ${app.loadMin} 分`;
+        }
+      }
+      if (quotaFail) {
+        trace.push(`  <span class="no">✗ 站內時間額度：${quotaFail} → 跳過此班（G16/G17）</span>`);
         continue; // 順延下一班（G17）
       }
 
-      // --- 裝載判定（LoadFeasibilityService）---
-      // 既有負載：該班次車上已排入的所有申請單，逐張累計有效體積與重量（G01/G05）
-      const onBoard = this.applications.filter(a =>
-        a.assignedShift === sh.id && ['matched', 'delivered'].includes(a.status));
-      const startLoad = onBoard.reduce((acc, a) => {
-        const e = effectiveLoad(a.items);
-        return { volume: acc.volume + e.volume, weight: acc.weight + e.weight };
-      }, { volume: 0, weight: 0 });
-      trace.push(`  <span class="dim">本班次已排入 ${onBoard.length} 單，車上既有 ${startLoad.volume.toFixed(0)}L / ${startLoad.weight.toFixed(0)}kg</span>`);
-      const res = checkLoad(app.items, veh, startLoad);
+      // --- 裝載判定（LoadFeasibilityService）：站區間逐站淨值檢查（A-2）---
+      // 貨物佔用區間 [seg.from, seg.to) 內每一站，車上淨負載（僅涵蓋該站的單）＋本單須通過 checkLoad
+      let res = null, failStation = null, peak = { volume: -1 };
+      for (let s = seg.from; s < seg.to; s++) {
+        const base = this.netLoadAt(sh.id, s);
+        const r = checkLoad(app.items, veh, base);
+        if (base.volume > peak.volume) { peak = base; peak.at = s; res = r; }
+        if (!r.ok) { res = r; failStation = s; break; }
+      }
+      if (res == null) { // 退化區間（理論上不會發生）：以空車判定
+        res = emptyRes;
+      }
+      trace.push(`  <span class="dim">區間內峰值淨負載 ${Math.max(peak.volume, 0).toFixed(0)}L / ${(peak.weight || 0).toFixed(0)}kg（站序 ${peak.at != null ? peak.at : '—'}，卸貨後即釋放）</span>`);
       res.trace.forEach(t => trace.push('  ' + t));
 
       if (res.ok) {
+        const diff = expect != null ? (arr - expect) : null;
+        if (diff != null && diff !== 0) {
+          trace.push(`  <span class="dim">到站較期望時間${diff > 0 ? '晚' : '早'} ${Math.abs(diff)} 分（僅提示，不影響排班）</span>`);
+        }
         trace.push(`\n<span class="ok">✓ 裝得下 → 排入 ${sh.label}（媒合完成，免確認接受 G11）</span>`);
         app.status = 'matched';
         app.assignedShift = sh.id;
         app.arrival = minToHHMM(arr);
-        return { ok: true, shift: sh, trace, arrival: minToHHMM(arr) };
+        app.expectDiffMin = diff; // 與期望收貨時間的差（分，正=晚、負=早、null=未指定）
+        return { ok: true, shift: sh, trace, arrival: minToHHMM(arr), expectDiffMin: diff };
       }
-      trace.push(`  <span class="no">✗ 裝不下 → pass 下一班（G11）</span>`);
+      const fs = failStation != null ? DB.stations.find(x => x.order === failStation) : null;
+      trace.push(`  <span class="no">✗ 裝不下${fs ? `（於 ${fs.name} 前區段容量不足）` : ''} → pass 下一班（G11）</span>`);
     }
 
     // 全部班次皆無法排入：區分「太大」與「今天已滿」（G12 不留候補、不排隔日）
     if (!fitsSomeEmpty) {
       trace.push(`\n<span class="no">✗ 任何一班車空車都放不下 → 貨物太大</span>`);
       return { ok: false, reason: 'toobig', trace, msg: '貨物太大：超過任何一班車輛的尺寸或容量，無法承運。' };
-    }
-    if (deadline != null && !anyOnTime) {
-      trace.push(`\n<span class="no">✗ 無班次可於交貨時間 ${app.deliverTime} 前送達</span>`);
-      return { ok: false, reason: 'late', trace, msg: `交貨時間過早：今日無班次可在 ${app.deliverTime} 前送達，請放寬交貨時間或改期。` };
     }
     trace.push(`\n<span class="no">✗ 今日各班次容量／時間額度皆已滿</span>`);
     return { ok: false, reason: 'full', trace, msg: '今天已滿：各班次容量或時間額度皆不足，請改期。' };

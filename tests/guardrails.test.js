@@ -152,7 +152,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.handleMin, 30, 'handleMin 應為上貨＋下貨加總');
     eq(app.assignedShift, 'R-A1', '30 分在額度內應排首班');
     // 幹線同樣加總
-    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+    const o = H.ModuleB.createOrder({ applicant: 'X', site: 'D3', destSite: 'D1', direct: false,
       loadMin: 20, unloadMin: 15, items: [{ name: 'a', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
     eq(o.handleMin, 35, '幹線 handleMin 應為上貨＋下貨加總（G35）');
   });
@@ -183,28 +183,56 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(result.shift.id, 'R-A1', '無截止 → 排最早班次 R-A1');
   });
 
-  test('交貨時間接進媒合：到站晚於交貨時間之班次不採計', () => {
+  test('A-1 期望時間非硬性截止：期望早於首班到站仍排入首班並回報時間差', () => {
     const H = fresh();
-    // S3 到站：R-A1≈09:06、R-A2≈13:36、R-A3≈17:06；交貨時間 12:00 → 只剩 R-A1 可用
-    const { result } = submit(H, { recvMode: 'asap', deliverTime: '12:00' });
-    ok(result.ok, '應可媒合到能準時到站的班次');
-    eq(result.shift.id, 'R-A1', '只有 R-A1 能於 12:00 前到站');
+    // S3 到站：R-A1≈09:06；期望 08:00 早於任何班次 → 仍應排入最接近的 R-A1，不得退件
+    const { app, result } = submit(H, { recvMode: 'exact', deliverTime: '08:00' });
+    ok(result.ok, '不得因期望時間過早而失敗（無 late 退件）');
+    eq(result.shift.id, 'R-A1', '應選到站時間差最小的 R-A1');
+    ok(result.expectDiffMin > 0, '應回報較期望時間晚的分鐘數，實得 ' + result.expectDiffMin);
+    eq(app.expectDiffMin, result.expectDiffMin, '差值應存於申請單供顯示');
   });
 
-  test('交貨時間過早：無班次可在交貨時間前到站 → reason=late', () => {
+  test('A-1 失敗原因只剩 toobig 與 full（無 late 原因碼）', () => {
     const H = fresh();
-    // S3 最早班次到站 ≈09:06；交貨時間 08:00 → 無班次可準時
-    const { app, result } = submit(H, { recvMode: 'asap', deliverTime: '08:00' });
-    ok(!result.ok, '應媒合失敗');
-    eq(result.reason, 'late', '無班次可準時到站 → late');
-    ok(/交貨時間/.test(result.msg), '訊息需點出交貨時間');
-    eq(app.status, 'unscheduled', '不得寫入班次');
+    const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
+    for (let i = 0; i < 8; i++) submit(H, { items: [big()], handleMin: 1 });
+    const r1 = submit(H, { items: [big()], handleMin: 1, recvMode: 'exact', deliverTime: '08:00' }).result;
+    ok(!r1.ok && r1.reason === 'full', '排滿後即使期望極早也應回 full 而非 late，實得 ' + r1.reason);
   });
 
-  test('交貨時間空值＝不設限：行為與既有相容（放寬則排最早班）', () => {
+  test('期望時間空值：asap 排最早班；asap 不受期望時間影響', () => {
     const H = fresh();
-    eq(submit(H, { deliverTime: '' }).result.shift.id, 'R-A1', '空值不設限應排最早班');
-    eq(submit(fresh(), { deliverTime: '23:59' }).result.shift.id, 'R-A1', '寬鬆截止仍排最早班');
+    eq(submit(H, { deliverTime: '' }).result.shift.id, 'R-A1', '空值應排最早班');
+    eq(submit(fresh(), { recvMode: 'asap', deliverTime: '23:59' }).result.shift.id, 'R-A1', 'asap 模式不用期望時間');
+  });
+
+  test('A-2 先卸後裝：站區間不重疊的兩張大單可同班次（卸貨釋放容量）', () => {
+    const H = fresh();
+    // 每張有效體積 ≈8886L（V-L01 容量 ≈14364L 的 62%）：舊邏輯兩張累計必爆
+    const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
+    const a1 = submit(H, { pickStation: 'S1', station: 'S3', items: [big()], handleMin: 1 }).app; // 佔 [1,3)
+    const a2 = submit(H, { pickStation: 'S5', station: 'S8', items: [big()], handleMin: 1 }).app; // 佔 [5,8)
+    eq(a1.assignedShift, 'R-A1', '第一張排首班');
+    eq(a2.assignedShift, 'R-A1', '區間不重疊 → 第二張也應排同一班（容量已於 S3 釋放）');
+  });
+
+  test('A-2 區間重疊仍受容量限制：跨越整段的大單須順延', () => {
+    const H = fresh();
+    const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
+    submit(H, { pickStation: 'S1', station: 'S3', items: [big()], handleMin: 1 });
+    submit(H, { pickStation: 'S5', station: 'S8', items: [big()], handleMin: 1 });
+    const a3 = submit(H, { pickStation: 'S1', station: 'S9', items: [big()], handleMin: 1 }).app; // 佔 [1,9) 與兩張皆重疊
+    ok(a3.assignedShift !== 'R-A1', '與既有單重疊區間容量不足 → 不得排首班，實得 ' + a3.assignedShift);
+  });
+
+  test('A-2 額度計於各自站點：上貨計收貨站、卸貨計送貨站', () => {
+    const H = fresh();
+    // 兩張同收貨站 S4、上貨各 30 分：S4 上貨額度 30+30>40 → 第二張順延班次
+    const a1 = submit(H, { pickStation: 'S4', station: 'S7', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
+    const a2 = submit(H, { pickStation: 'S4', station: 'S8', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
+    eq(a1.assignedShift, 'R-A1', '第一張排首班');
+    ok(a2.assignedShift !== 'R-A1', '收貨站 S4 上貨額度不足 → 第二張應順延，實得 ' + a2.assignedShift);
   });
 
   test('接收人資訊（單位/姓名/電話/代理人）隨申請單保存', () => {
@@ -229,7 +257,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   function mkOrder(H, over) {
     return H.ModuleB.createOrder(Object.assign({
-      applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+      applicant: 'X', site: 'D3', destSite: 'D1', direct: false,
       volume: 3000, category: 'BOX', weight: 300, handleMin: 30,
     }, over));
   }
@@ -242,7 +270,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('多筆貨物項目（各填獨立尺寸/重量）：raw 體積與有效體積逐項加總（G13/G34）', () => {
     const H = fresh();
-    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false, handleMin: 20,
+    const o = H.ModuleB.createOrder({ applicant: 'X', site: 'D3', destSite: 'D1', direct: false, handleMin: 20,
       items: [ { name: 'a', l: 100, w: 100, h: 100, qty: 1, category: 'BOX', weight: 100 },    // 1000L×1.10=1100
                { name: 'b', l: 200, w: 100, h: 100, qty: 1, category: 'IRREG', weight: 300 } ] }); // 2000L×1.65=3300
     eq(o.volume, 3000, 'raw 體積應為各項尺寸加總');
@@ -257,12 +285,12 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   test('起迄兩點：pickSite（起）/dropSite（迄）皆記錄；直達以送貨據點分流（G38）', () => {
     const H = fresh();
     // 去程 D9→D3
-    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
+    const o = H.ModuleB.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
       items: [{ name: 'a', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
     eq(o.pickSite, 'D9', '收貨據點（起）'); eq(o.dropSite, 'D3', '送貨據點（迄）');
     // 兩張直達：送貨據點不同 → 一台直達車只服務單一送貨據點
-    const d1 = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D9', destSite: 'D2', direct: true, handleMin: 20, items: [{ name: 'x', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
-    const d2 = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D9', destSite: 'D1', direct: true, handleMin: 20, items: [{ name: 'y', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
+    const d1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D2', direct: true, handleMin: 20, items: [{ name: 'x', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
+    const d2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D1', direct: true, handleMin: 20, items: [{ name: 'y', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
     [d1, d2].forEach(x => H.ModuleB.approve(x));
     const r = H.ModuleB.dispatch('V-T01', 'direct');
     eq(r.endpoint, 'D2', '直達終點＝最早核准直達單的送貨據點（G38）');
@@ -286,8 +314,8 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     const H = fresh();
     // V-T02 容量 20160L。兩單各 ≈13200L 有效，同時在車上會爆（26400>20160）
     const big = () => [{ name: '大箱', l: 200, w: 200, h: 300, qty: 1, category: 'BOX', weight: 100 }]; // 12000L×1.1=13200
-    const o1 = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D9', destSite: 'D6', direct: false, handleMin: 20, items: big() });
-    const o2 = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D6', destSite: 'D3', direct: false, handleMin: 20, items: big() });
+    const o1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D6', direct: false, handleMin: 20, items: big() });
+    const o2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D3', direct: false, handleMin: 20, items: big() });
     [o1, o2].forEach(o => H.ModuleB.approve(o));
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
     ok(r.carried.some(o => o.id === o1.id) && r.carried.some(o => o.id === o2.id),
@@ -309,10 +337,10 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('G38/G39 直達：獨立派車、單一目的地、純容量加總、超量留下一班', () => {
     const H = fresh();
-    const d1 = mkOrder(H, { site: 'D2', direct: true, volume: 15000, weight: 1000 });
-    const d2 = mkOrder(H, { site: 'D2', direct: true, volume: 15000, weight: 1000 }); // V-T01 容量 34560L，兩張=33000 尚可
-    const d3 = mkOrder(H, { site: 'D2', direct: true, volume: 15000, weight: 1000 }); // 第三張超量
-    const other = mkOrder(H, { site: 'D3', direct: true, volume: 1000 }); // 不同目的地，不同車
+    const d1 = mkOrder(H, { site: 'D9', destSite: 'D2', direct: true, volume: 15000, weight: 1000 });
+    const d2 = mkOrder(H, { site: 'D9', destSite: 'D2', direct: true, volume: 15000, weight: 1000 }); // V-T01 容量 34560L，兩張=33000 尚可
+    const d3 = mkOrder(H, { site: 'D9', destSite: 'D2', direct: true, volume: 15000, weight: 1000 }); // 第三張超量
+    const other = mkOrder(H, { site: 'D9', destSite: 'D3', direct: true, volume: 1000 }); // 不同目的地，不同車
     [d1, d2, d3, other].forEach(o => H.ModuleB.approve(o));
     const r = H.ModuleB.dispatch('V-T01', 'direct');
     eq(r.mode, 'direct');
@@ -324,8 +352,8 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('G40/G41/G42 回程撞期直達 → 鎖定直達、延續動態淨值、排擠非直達順延', () => {
     const H = fresh();
-    const rd = H.ModuleB.createOrder({ applicant: 'A', leg: 'return', site: 'D3', direct: true, volume: 2000, weight: 200, handleMin: 20 });
-    const rn = H.ModuleB.createOrder({ applicant: 'B', leg: 'return', site: 'D6', direct: false, volume: 2000, weight: 200, handleMin: 20 });
+    const rd = H.ModuleB.createOrder({ applicant: 'A', site: 'D3', direct: true, volume: 2000, weight: 200, handleMin: 20 });
+    const rn = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', direct: false, volume: 2000, weight: 200, handleMin: 20 });
     [rd, rn].forEach(o => H.ModuleB.approve(o));
     const r = H.ModuleB.dispatchReturn('V-T02', 'D3', false, 500);
     eq(r.matrixRow, 4, '應為矩陣第 4 列（回程・被迫鎖定直達）');
@@ -336,7 +364,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('G40 回程無撞期直達 → 動態淨值沿路收送（矩陣第 3 列）', () => {
     const H = fresh();
-    const rn = H.ModuleB.createOrder({ applicant: 'B', leg: 'return', site: 'D6', direct: false, volume: 2000, weight: 200, handleMin: 20 });
+    const rn = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', direct: false, volume: 2000, weight: 200, handleMin: 20 });
     H.ModuleB.approve(rn);
     const r = H.ModuleB.dispatchReturn('V-T02', 'D3', false, 0);
     eq(r.matrixRow, 3, '無撞期直達 → 第 3 列');
@@ -352,9 +380,9 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   test('派車後每張已載單標記「幾點來收」（車號＋來收時間，顯示給申請人）', () => {
     const H = fresh();
     // 去程非直達 + 直達各一，及一張回程單
-    const g = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', direct: false, volume: 2000, category: 'BOX', weight: 300, handleMin: 30 });
-    const d = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D3', direct: true, volume: 2000, category: 'BOX', weight: 300, handleMin: 20 });
-    const rn = H.ModuleB.createOrder({ applicant: 'C', leg: 'return', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 200, handleMin: 20 });
+    const g = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false, volume: 2000, category: 'BOX', weight: 300, handleMin: 30 });
+    const d = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D3', direct: true, volume: 2000, category: 'BOX', weight: 300, handleMin: 20 });
+    const rn = H.ModuleB.createOrder({ applicant: 'C', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 200, handleMin: 20 }); // 北上（→ homeSite）
     [g, d, rn].forEach(o => H.ModuleB.approve(o));
     H.ModuleB.dispatch('V-T02', 'greedy');
     H.ModuleB.dispatch('V-T01', 'direct');
@@ -368,9 +396,9 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   test('來收時間依收貨據點：同據點同車相同、不同據點不同（沿線現場收）', () => {
     const H = fresh();
     // 同一收貨據點 D6 兩張 + 另一據點 D3 一張，皆非直達、同車貪婪
-    const a = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
-    const b = H.ModuleB.createOrder({ applicant: 'B', leg: 'outbound', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
-    const c = H.ModuleB.createOrder({ applicant: 'C', leg: 'outbound', site: 'D3', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    const a = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D1', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    const b = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D1', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    const c = H.ModuleB.createOrder({ applicant: 'C', site: 'D3', destSite: 'D1', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
     [a, b, c].forEach(o => H.ModuleB.approve(o));
     H.ModuleB.dispatch('V-T02', 'greedy');
     eq(a.pickupTime, b.pickupTime, '同一收貨據點、同車 → 來收時間應相同');
@@ -381,7 +409,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   test('交貨時間接進派車：估算送達晚於交貨時間 → 該單不排（留下一班）', () => {
     const H = fresh();
     // D6 上車（≈11:40 到）、送 D2；D6→D2 再走 220 分 → 送達 ≈15:40，晚於 12:00
-    const late = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', destSite: 'D2', direct: false,
+    const late = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
       volume: 1000, category: 'BOX', weight: 100, handleMin: 20, deliverTime: '12:00' });
     H.ModuleB.approve(late);
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
@@ -391,7 +419,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('交貨時間寬鬆：估算可於交貨時間前送達 → 正常排入', () => {
     const H = fresh();
-    const good = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', destSite: 'D2', direct: false,
+    const good = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
       volume: 1000, category: 'BOX', weight: 100, handleMin: 20, deliverTime: '17:00' });
     H.ModuleB.approve(good);
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
@@ -401,21 +429,113 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('交貨時間空值＝不設限：派車行為與既有相容', () => {
     const H = fresh();
-    const o = H.ModuleB.createOrder({ applicant: 'A', leg: 'outbound', site: 'D6', destSite: 'D2', direct: false,
+    const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
       volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }); // 無 deliverTime
     H.ModuleB.approve(o);
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
     ok(r.carried.includes(o), '未設交貨時間應照常排入');
   });
 
+  test('B-1 出發據點走主檔 homeSite，不寫死 D10（改中段基地仍正確）', () => {
+    const H = fresh();
+    H.DB.homeSite = 'D8'; // 基地移到中段
+    // D6→D3 南下單：基地 D8 以南，應被 D8 出發的貪婪車收到
+    const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
+    H.ModuleB.approve(o);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.includes(o), '中段基地 D8 出發仍應收到 D6→D3 的南下單');
+    // 回程終點應為 homeSite 而非硬編 D10
+    const rn = H.ModuleB.createOrder({ applicant: 'B', site: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    eq(rn.dropSite, 'D8', '未指定迄點應預設回主檔 homeSite');
+    H.ModuleB.approve(rn);
+    eq(H.ModuleB.dispatchReturn('V-T01', 'D3', false, 0).endpoint, 'D8', '回程終點＝homeSite');
+  });
+
+  test('B-2 狀態機無 accepted：loaded 直接可 delivered，且無 acceptDelivery', () => {
+    const H = fresh();
+    ok(typeof H.ModuleB.acceptDelivery === 'undefined', '不應再有接收人確認接受方法');
+    const o = mkOrder(H, { site: 'D9', destSite: 'D3' });
+    H.ModuleB.approve(o); H.ModuleB.dispatch('V-T02', 'greedy');
+    eq(o.status, 'loaded', '派車後為 loaded');
+    H.ModuleB.confirmDelivery(o, '調度室');
+    eq(o.status, 'delivered', 'loaded 應可直接進入 delivered');
+  });
+
+  test('B-2 無 leg 欄位：方向由 pickSite/dropSite 相對順序推導', () => {
+    const H = fresh();
+    const south = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false, volume: 100, handleMin: 5 });
+    const north = H.ModuleB.createOrder({ applicant: 'B', site: 'D3', destSite: 'D9', direct: false, volume: 100, handleMin: 5 });
+    eq(south.leg, undefined, '不應保存 leg 欄位');
+    ok(H.ModuleB.isSouthbound(south), '迄點較南 → 南下');
+    ok(!H.ModuleB.isSouthbound(north), '迄點較北 → 北上');
+  });
+
+  test('B-3 時間上限依天數對照表動態決定（非固定 3 天）', () => {
+    const H = fresh();
+    // D9 停靠 1 天 → 1×480；D3 停靠 3 天 → 3×480
+    eq(H.ModuleB.timeLimitFor('D9', false), 1 * H.DB.workdayMin, 'D9 非直達 1 天');
+    eq(H.ModuleB.timeLimitFor('D3', false), 3 * H.DB.workdayMin, 'D3 非直達 3 天');
+    eq(H.ModuleB.timeLimitFor('D3', true), 2 * H.DB.workdayMin, 'D3 直達查直達表 2 天');
+    // 查無終點 → 全域最大天數保險
+    eq(H.ModuleB.timeLimitFor('D7', false), H.DB.maxTripDays * H.DB.workdayMin, '查無 → 全域上限');
+  });
+
+  test('B-4 五列決策矩陣為單一決策表，去程兩列齊備', () => {
+    const H = fresh();
+    eq(H.ModuleB.DECISION_MATRIX.length, 5, '應為完整五列');
+    eq(H.ModuleB.matrixRowInfo(1).mode, '去程・非直達');
+    eq(H.ModuleB.matrixRowInfo(2).mode, '去程・直達');
+    // 派車結果的 modeLabel 應取自決策表
+    const o = mkOrder(H, { site: 'D9', destSite: 'D3' });
+    H.ModuleB.approve(o);
+    eq(H.ModuleB.dispatch('V-T02', 'greedy').modeLabel, H.ModuleB.matrixRowInfo(1).mode, '去程非直達＝第 1 列');
+  });
+
+  test('B-5 撞期判定三條件：路線重疊＋已核准未載＋時間窗', () => {
+    const H = fresh();
+    // ① 路線不重疊：直達單在回程路徑之外（D2→D1 皆南於折返點 D3）
+    const off = H.ModuleB.createOrder({ applicant: 'A', site: 'D2', destSite: 'D1', direct: true, volume: 100, handleMin: 5 });
+    eq(H.ModuleB.collidesReturnDirect(off, 'D3').hit, false, '路線區間不重疊 → 不撞期');
+    // ③ 時間窗外：交貨時間極早，行經時間遠超窗寬
+    const late = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', direct: true, volume: 100, handleMin: 5, deliverTime: '00:10' });
+    eq(H.ModuleB.collidesReturnDirect(late, 'D1').hit, false, '超出時間窗 → 不撞期');
+    // 三條件成立
+    const hit = H.ModuleB.createOrder({ applicant: 'C', site: 'D6', direct: true, volume: 100, handleMin: 5 });
+    ok(H.ModuleB.collidesReturnDirect(hit, 'D3').hit, '路線重疊且無時間限制 → 撞期成立');
+    // 未核准者不進入判定（呼叫端以 approved 過濾）
+    H.ModuleB.approve(hit);
+    eq(H.ModuleB.dispatchReturn('V-T02', 'D3', false, 0).matrixRow, 4, '撞期 → 鎖定直達第 4 列');
+  });
+
+  test('B-6 派車後記錄每車派遣模式、觸發原因與終點判定依據', () => {
+    const H = fresh();
+    const o = mkOrder(H, { site: 'D9', destSite: 'D3' });
+    H.ModuleB.approve(o);
+    H.ModuleB.dispatch('V-T02', 'greedy');
+    const s = H.ModuleB.vehicleStatus['V-T02'];
+    ok(s, '應記錄車輛派遣狀態');
+    eq(s.matrixRow, 1); eq(s.modeLabel, '去程・非直達');
+    ok(s.reason && s.reason.length > 0, '應有觸發原因');
+    eq(s.endpointBasis, '已載單最南送貨據點', '應說明終點判定依據');
+    // 直達車的原因需點名觸發的單號
+    const d = mkOrder(H, { site: 'D9', destSite: 'D2', direct: true });
+    H.ModuleB.approve(d); H.ModuleB.dispatch('V-T01', 'direct');
+    const sd = H.ModuleB.vehicleStatus['V-T01'];
+    eq(sd.matrixRow, 2);
+    ok(sd.reason.includes(d.id), '直達觸發原因應點名申請單號，實得 ' + sd.reason);
+    eq(sd.endpointBasis, '申請單指定目的地');
+  });
+
   test('接收人資訊（單位/姓名/電話/代理人）隨幹線託運單保存', () => {
     const H = fresh();
-    const o = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+    const o = H.ModuleB.createOrder({ applicant: 'X', site: 'D3', destSite: 'D1', direct: false,
       volume: 1000, category: 'BOX', weight: 100, handleMin: 20,
       recipient: { unit: '台南營業所', name: '鄭文彬', phone: '06-2223344', agentName: '周雅琳', agentPhone: '0933-556-677' } });
     eq(o.recipient.name, '鄭文彬'); eq(o.recipient.unit, '台南營業所');
     eq(o.recipient.agentName, '周雅琳'); eq(o.recipient.agentPhone, '0933-556-677');
-    const o2 = H.ModuleB.createOrder({ applicant: 'X', leg: 'outbound', site: 'D3', direct: false,
+    const o2 = H.ModuleB.createOrder({ applicant: 'X', site: 'D3', destSite: 'D1', direct: false,
       volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
     eq(Object.keys(o2.recipient).length, 0, '未帶接收人 → 空物件');
   });
@@ -534,6 +654,120 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     ok(cands.some(c => c.app.id === carried.id), '不同目的地的已派車單仍應列入候選（G56）');
     const c0 = cands.find(c => c.app.id === carried.id);
     ok('loaded' in c0 && 'remain' in c0, '候選需顯示已載/剩餘容量');
+  });
+
+  test('C-1 空車移動最小化：候選車依空駛時間升冪，優先取空駛最小者', () => {
+    const H = fresh();
+    H.DB.allowCrossSiteDeadhead = true; // 允許跨據點調度時，排序才有意義
+    // 出發地台中辦公室(D6)：V-B03 當前位置 D6（空駛 0）、其餘在 D10（空駛 4×55=220）
+    const a = H.ModuleC.createApp({ type: 'round', origin: '台中辦公室', dest: '桃園機場T1',
+      departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '15:00', pax: 2,
+      applicant: 'X', dept: 'D', ext: '1' });
+    const cands = H.ModuleC.findResourceCandidates(a, 480, 600, null);
+    ok(cands.length > 1, '應有多個候選');
+    eq(cands[0].deadhead, 0, '第一個候選空駛應為 0（車與司機都已在出發地）');
+    eq(cands[0].vehicle.id, 'V-B03', '空駛 0 的 V-B03 應排最前');
+    for (let i = 1; i < cands.length; i++) ok(cands[i].deadhead >= cands[i - 1].deadhead, '候選須依空駛升冪');
+  });
+
+  test('C-1 空駛量測：以當前位置到出發地對應據點的車程計算', () => {
+    const H = fresh();
+    const a = H.ModuleC.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '16:00', pax: 1,
+      applicant: 'X', dept: 'D', ext: '1' });
+    const atHome = H.DB.vehicles.find(v => v.id === 'V-B01');   // currentSite D10 ＝出發地
+    const away = H.DB.vehicles.find(v => v.id === 'V-B03');     // currentSite D6
+    eq(H.ModuleC.deadheadMin(atHome, a), 0, '同據點空駛 0');
+    eq(H.ModuleC.deadheadMin(away, a), 4 * H.DB.legMinutes, 'D6→D10 相隔 4 段');
+  });
+
+  test('C-2 歸屬據點 homeSite 與當前位置分離；行程完成後回歸屬據點', () => {
+    const H = fresh();
+    H.DB.vehicles.filter(v => v.pool === 'BIZ').forEach(v => ok(v.homeSite, '車輛應有 homeSite'));
+    H.DB.drivers.filter(d => d.pool === 'BIZ').forEach(d => ok(d.homeSite, '司機應有 homeSite'));
+    const a = round(H); H.ModuleC.approve(a); H.ModuleC.runBatch(D);
+    eq(a.status, 'matched');
+    const v = H.DB.vehicles.find(x => x.id === a.vehicle);
+    v.currentSite = 'D1'; // 模擬外派中
+    H.ModuleC.confirmBoard(a); H.ModuleC.completeTrip(a, '調度室');
+    eq(v.currentSite, v.homeSite, '行程完成後當前位置應回復歸屬據點');
+  });
+
+  test('C-3 多天任務最後一天回程終點強制為該車歸屬據點', () => {
+    const H = fresh();
+    const D2 = new Date(new Date(D).getTime() + 86400000).toISOString().slice(0, 10);
+    const a = H.ModuleC.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2,
+      applicant: 'X', dept: 'D', ext: '1' });
+    H.ModuleC.approve(a); H.ModuleC.runBatch(D);
+    eq(a.status, 'matched', '應媒合成功');
+    const v = H.DB.vehicles.find(x => x.id === a.vehicle);
+    eq(a.returnTerminal, H.DB.bizSiteOrigin[v.homeSite], '回程終點＝該車歸屬據點對應地點');
+    eq(a.forcedReturn, true, '多天任務應標記強制回歸');
+  });
+
+  test('C-3 強制回程仍納入工時檢核（超時轉待人工協調）', () => {
+    const H = fresh();
+    const D2 = new Date(new Date(D).getTime() + 86400000).toISOString().slice(0, 10);
+    // 回程 19:30 出發 + 台中→台北 130+15 分 → 遠超 20:30
+    const a = H.ModuleC.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '19:30', pax: 2,
+      applicant: 'X', dept: 'D', ext: '1' });
+    H.ModuleC.approve(a); H.ModuleC.runBatch(D);
+    eq(a.status, 'coordinate', '含強制回程超過工時應轉待人工協調');
+    ok(/工時/.test(a.note), '原因需標示工時，實得 ' + a.note);
+  });
+
+  test('C-4 人工覆寫：記錄調整人/時間/前後內容，且不被下批次重排', () => {
+    const H = fresh();
+    const a = round(H); H.ModuleC.approve(a); H.ModuleC.runBatch(D);
+    const before = a.vehicle;
+    const other = H.DB.vehicles.find(v => v.pool === 'BIZ' && v.id !== before);
+    const rec = H.ModuleC.overrideAssign(a, { vehicle: other.id, note: '原車故障' }, '調度室-王小明');
+    eq(a.vehicle, other.id, '應改派為新車');
+    eq(a.overridden, true, '應標記人工覆寫');
+    eq(rec.by, '調度室-王小明'); eq(rec.before.vehicle, before); eq(rec.after.vehicle, other.id);
+    eq(rec.note, '原車故障'); ok(rec.at, '應記錄調整時間');
+    // 下一次批次不得重排（狀態已 matched，不在 approved 池）
+    H.ModuleC.runBatch(D);
+    eq(a.vehicle, other.id, '覆寫後不得被批次改回');
+  });
+
+  test('C-4 待人工協調單可由調度室直接手動指派（不退回員工重申請）', () => {
+    const H = fresh();
+    const a = H.ModuleC.createApp({ type: 'oneway', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 2,
+      applicant: 'X', dept: 'D', ext: '1' });
+    H.ModuleC.approve(a); H.ModuleC.runBatch(D);
+    eq(a.status, 'coordinate', '目的地非轉運點 → 待人工協調');
+    H.ModuleC.overrideAssign(a, { vehicle: 'V-B01', driver: 'DR3' }, '調度室');
+    eq(a.status, 'matched', '手動指派後應成為已媒合');
+    eq(a.overridden, true);
+  });
+
+  test('C-5 批次稽核紀錄：觸發時間/觸發人/範圍/統計，單上記錄批次與結果', () => {
+    const H = fresh();
+    const a = round(H); H.ModuleC.approve(a);
+    const { batch } = H.ModuleC.runBatch(D, '調度室-李四');
+    eq(batch.triggeredBy, '調度室-李四', '應記錄觸發人');
+    ok(batch.triggeredAt, '應記錄觸發時間戳記');
+    eq(batch.from, D, '應記錄處理範圍起'); ok(batch.to, '應記錄處理範圍迄');
+    eq(batch.processed, 1, '應記錄處理單數');
+    eq(batch.matched, 1); eq(batch.coordinate, 0);
+    eq(a.lastBatch, batch.id, '申請單應記錄最後處理批次');
+    eq(a.lastBatchResult, 'matched', '申請單應記錄該批次結果');
+    eq(H.ModuleC.batches.length, 1, '批次應存檔');
+  });
+
+  test('C-5 待人工協調單同樣記錄批次與結果（供失敗率統計）', () => {
+    const H = fresh();
+    const a = H.ModuleC.createApp({ type: 'oneway', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 2,
+      applicant: 'X', dept: 'D', ext: '1' });
+    H.ModuleC.approve(a);
+    const { batch } = H.ModuleC.runBatch(D, '調度室');
+    eq(a.lastBatch, batch.id); eq(a.lastBatchResult, 'coordinate');
+    eq(batch.coordinate, 1, '統計應計入待人工協調數');
   });
 });
 

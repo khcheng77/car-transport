@@ -55,12 +55,12 @@ function itemEffective(it) {
   };
 }
 
-/* ---- 一批貨物的有效體積／重量（供逐站累計使用 G05）---- */
+/* ---- 一批貨物的有效體積／重量／地板投影（供逐站淨值累計使用 G05／3.4）---- */
 function effectiveLoad(items) {
   return (items || []).reduce((a, it) => {
     const e = itemEffective(it);
-    return { volume: a.volume + e.eff, weight: a.weight + e.weight };
-  }, { volume: 0, weight: 0 });
+    return { volume: a.volume + e.eff, weight: a.weight + e.weight, floor: a.floor + e.floor };
+  }, { volume: 0, weight: 0, floor: 0 });
 }
 
 /* ---- 主入口：LoadFeasibilityService.Check（T1-6）----
@@ -100,9 +100,11 @@ function checkLoad(items, vehicle, startLoad) {
     trace.push(`  <span class="ok">✓ 累計有效體積 ${usedVol.toFixed(0)}L ≤ 容量 ${capVol.toFixed(0)}L</span>`);
   }
 
-  // --- 地板面積瓶頸法（G02）---
+  // --- 地板面積瓶頸法（G02）：含既有負載地板投影（卸貨後由呼叫端自淨值中釋放）---
+  const startFloor = startLoad.floor || 0;
+  floorArea += startFloor;
   const floorUsePct = (floorArea / capFloor) * 100;
-  trace.push(`地板面積瓶頸：占用 ${floorArea.toFixed(0)}cm² / ${capFloor.toFixed(0)}cm²（${floorUsePct.toFixed(0)}%）`);
+  trace.push(`地板面積瓶頸（含既有 ${startFloor.toFixed(0)}cm²）：占用 ${floorArea.toFixed(0)}cm² / ${capFloor.toFixed(0)}cm²（${floorUsePct.toFixed(0)}%）`);
   if (floorArea > capFloor) {
     reasons.push({ code: 'FLOOR', msg: `地板投影面積 ${floorArea.toFixed(0)}cm² 超過車廂地板 ${capFloor.toFixed(0)}cm²` });
     trace.push(`  <span class="no">✗ 地板面積不足（易造成堆疊失敗）</span>`);

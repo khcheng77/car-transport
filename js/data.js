@@ -54,39 +54,50 @@ const DB = {
   /* ---- 據點間行駛分鐘數（相鄰站，示意）---- */
   legMinutes: 55, // 相鄰兩據點固定行駛時間（示意，不分尖離峰 G62）
 
+  /* ---- 幹線出發（基地）據點：主檔參數，不寫死於程式（B-1）----
+     規格背景為桃園龍潭一類中間位置；基地在中段時北側據點排班方式待業務確認（TODO B-2）。 */
+  homeSite: 'D10',
+
+  /* ---- 幹線時間參數（B-3，示意值走主檔）---- */
+  workdayMin: 8 * 60,       // 每日工時（分）
+  maxTripDays: 3,           // 全域最大出勤天數上限（保險）
+  /* ---- 回程全域直達鎖定：撞期判定時間窗寬（分，示意；窗寬待業務確認 B-5）---- */
+  directLockWindowMin: 240,
+
   /* ---- 天數對照表（示意，P1 待業務確認）---- */
-  //  key = 出發據點 -> 終點據點；此處以「出發台北D10、南下」示意
+  //  key = 終點據點；天數為整台車屬性，決定該趟時間上限（B-3）
   dayCountDirect:   { 'D9': 1, 'D6': 1, 'D3': 2, 'D2': 2, 'D1': 2 }, // 直達
   dayCountStopover: { 'D9': 1, 'D6': 2, 'D3': 3, 'D2': 3, 'D1': 3 }, // 有停靠
 
-  /* ---- 車輛主檔（含資源池別 G05/G60）---- */
+  /* ---- 車輛主檔（含資源池別 G05/G60）----
+     homeSite＝歸屬據點：行政與資產管理上固定隸屬（保養、常駐、鑰匙管理），不因單次出差改變（C-2）
+     currentSite＝當前位置：排班可用性判斷依據（G59）；無進行中多天任務時兩者相同 */
   vehicles: [
     // 物流池（模組 A/B）
-    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', home: 'S1',
+    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', homeSite: 'S1', currentSite: 'S1',
       dims: { l: 420, w: 180, h: 190 }, volume: 420*180*190/1000, weight: 3000 },
-    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', home: 'S1',
+    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'S1', currentSite: 'S1',
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
-    { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', home: 'D10',
+    { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 600, w: 240, h: 240 }, volume: 600*240*240/1000, weight: 8000 },
-    { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', home: 'D10',
+    { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
     // 商務共乘池（模組 C）— 完全分開（資源池原則）
-    // home＝歸屬據點（固定行政屬性）；currentSite＝當前位置（排班可用性判斷依據 G59）
-    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', home: 'D10', currentSite: 'D10', seats: 7 },
-    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', home: 'D10', currentSite: 'D10', seats: 4 },
-    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', home: 'D6',  currentSite: 'D6',  seats: 9 },
-    { id: 'V-B04', name: '商務廂車 04', pool: 'BIZ', home: 'D10', currentSite: 'D10', seats: 5 },
+    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7 },
+    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 4 },
+    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9 },
+    { id: 'V-B04', name: '商務廂車 04', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 5 },
   ],
 
   /* ---- 司機主檔（獨立資源 G61）---- */
-  // home＝歸屬據點；currentSite＝當前位置（G59）
+  // homeSite＝歸屬據點（C-2）；currentSite＝當前位置（G59）
   drivers: [
-    { id: 'DR1', name: '陳大文', pool: 'LOGI', home: 'S1',  currentSite: 'S1' },
-    { id: 'DR2', name: '林志明', pool: 'LOGI', home: 'D10', currentSite: 'D10' },
-    { id: 'DR3', name: '王建國', pool: 'BIZ',  home: 'D10', currentSite: 'D10' },
-    { id: 'DR4', name: '張美華', pool: 'BIZ',  home: 'D10', currentSite: 'D10' },
-    { id: 'DR5', name: '李俊宏', pool: 'BIZ',  home: 'D6',  currentSite: 'D6' },
-    { id: 'DR6', name: '許雅雯', pool: 'BIZ',  home: 'D10', currentSite: 'D10' },
+    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'S1',  currentSite: 'S1' },
+    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10' },
+    { id: 'DR3', name: '王建國', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
+    { id: 'DR4', name: '張美華', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
+    { id: 'DR5', name: '李俊宏', pool: 'BIZ',  homeSite: 'D6',  currentSite: 'D6' },
+    { id: 'DR6', name: '許雅雯', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
   ],
 
   /* ---- 車輛保修排程（G60）示意 ---- */
@@ -113,6 +124,11 @@ const DB = {
 
   /* ---- 共乘出發地對應據點（供當前位置比對 G59）---- */
   bizOriginSite: { '台北總部': 'D10', '台中辦公室': 'D6' },
+  /* ---- 據點對應共乘地點名（供多天任務強制回歸屬據點 C-3）---- */
+  bizSiteOrigin: { 'D10': '台北總部', 'D6': '台中辦公室' },
+  /* ---- 是否允許跨據點空車調度（C-1 待業務確認）----
+     false＝維持 G59「當前位置須與出發地相符」；true＝允許調度，改以空駛時間最小者優先 */
+  allowCrossSiteDeadhead: false,
 
   /* ---- 共乘出發地 / 目的地選單（無地址 G62）---- */
   bizOrigins: ['台北總部', '台中辦公室'],

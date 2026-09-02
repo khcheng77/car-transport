@@ -59,7 +59,6 @@ function stBadge(s, mod) {
     approved: ['已核准待排', 'b-navy'],
     unscheduled: ['未排入·請改期', 'b-amber'],
     rejected: ['已駁回', 'b-red'],
-    accepted: ['已接受待交貨', 'b-amber'],
     delivered: ['已交貨', 'b-green'],
     loaded: ['已派車待接受', 'b-navy'],
     coordinate: ['待人工協調', 'b-amber'],
@@ -143,7 +142,7 @@ const RENDER = {};
 RENDER.dashboard = function () {
   const p = $('#page-dashboard');
   const aMatched = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status)).length;
-  const bLoaded = ModuleB.orders.filter(o => ['loaded', 'accepted', 'delivered'].includes(o.status)).length;
+  const bLoaded = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status)).length;
   const cMatched = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status)).length;
   const pendReview = ModuleA.applications.filter(a => a.status === 'submitted').length
     + ModuleB.orders.filter(o => o.status === 'submitted').length
@@ -501,12 +500,15 @@ function renderAApplyList(p) {
   $('#aq-search').onclick = () => { runAQuery(); };
   $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
   $('#aq-demo').onclick = () => {
-    [['S3', 'asap', 10, 5, '五股廠 原料倉', [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
-     ['S6', 'exact', 12, 8, '中壢據點 北棟', [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
-     ['S3', 'asap', 15, 10, '林口物流中心 一號月台', [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
-    ].forEach(([s, mode, lm, um, loc, items, recipient]) => ModuleA.submit({
-      applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
-      pickupLoc: loc, deliverTime: mode === 'exact' ? '14:00' : '', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }));
+    // [收貨站(起), 送貨站(迄), 模式, 上貨分, 下貨分, 貨物, 接收人]（收貨站須在送貨站之前）
+    [['S2', 'S3', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
+     ['S2', 'S6', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
+     ['S3', 'S9', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
+    ].forEach(([pick, s, mode, lm, um, items, recipient]) => { const pSt = DB.stations.find(x => x.id === pick);
+      ModuleA.submit({
+        applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
+        pickStation: pick, pickupLoc: pSt.name + ' / ' + pSt.buildings[0],
+        deliverTime: mode === 'exact' ? '14:00' : '', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }); });
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
@@ -575,8 +577,8 @@ function renderAApplyDetail(p, id) {
         <div class="field"><label>申請人</label><div>${a.applicant}</div></div>
         <div class="field"><label>收貨地點（起）</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>送貨地點（迄）</label><div>${st.name} / ${a.building}</div></div>
-        <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間（依交貨時間）' : '越快越好（離現在最近）'}</div></div>
-        <div class="field"><label>交貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
+        <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'}</div></div>
+        <div class="field"><label>期望收貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>上貨 / 下貨時間</label><div>${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
       </div>
@@ -600,6 +602,9 @@ function renderAApplyDetail(p, id) {
         <div class="field"><label>排定班次</label><div>${sh ? sh.label : '<span class="muted">尚未排班</span>'}</div></div>
         <div class="field"><label>車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '—'}</div></div>
         <div class="field"><label>預計到站時間</label><div>${a.arrival ? `<b style="color:var(--navy);">${a.arrival}</b>` : '—'}</div></div>
+        <div class="field"><label>與期望時間差</label><div>${a.expectDiffMin == null ? '<span class="muted">—（未指定期望）</span>'
+          : a.expectDiffMin === 0 ? '準時'
+          : `較期望時間${a.expectDiffMin > 0 ? '晚' : '早'} ${Math.abs(a.expectDiffMin)} 分（僅提示）`}</div></div>
         <div class="field"><label>異常回報</label><div>${a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'}</div></div>
       </div>`}
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
@@ -640,11 +645,11 @@ function renderAApplyNew(p) {
       <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
         <div class="radio-group">
           <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好（離現在最近）</label>
-          <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間（依交貨時間）</label>
+          <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
         </div>
       </div>
       <div class="row" id="aa-deliver-wrap" style="display:none;">
-        <div class="field"><label>交貨時間（幾點交貨）<span class="hint">指定期望時間才需填</span></label><input type="time" id="aa-deliver" value="14:00"></div>
+        <div class="field"><label>期望收貨時間 <span class="hint">僅用於挑選最接近的班次，非硬性截止（4.1）</span></label><input type="time" id="aa-deliver" value="14:00"></div>
       </div>
       <div class="row">
         <div class="field"><label>上貨時間（分，自填 G15）</label><input type="number" id="aa-load" value="10"></div>
@@ -681,11 +686,16 @@ function renderAApplyNew(p) {
     const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
     // 送出即自動媒合（G10–G12/G16/G19）
     const pickSt = DB.stations.find(s => s.id === $('#aa-pickuploc').value);
+    const dropSt = DB.stations.find(s => s.id === $('#aa-station').value);
+    if (pickSt && dropSt && pickSt.order >= dropSt.order) {
+      toast('收貨站須在送貨站之前（路線行進方向）', 'err'); return;
+    }
     const { app, result } = ModuleA.submit({
       applicant: $('#aa-applicant').value, station: $('#aa-station').value,
       building: bldgVal('aa-building', 'aa-destother'),
+      pickStation: $('#aa-pickuploc').value,
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
-      deliverTime: mode === 'exact' ? $('#aa-deliver').value : '', // 越快越好不用交貨時間
+      deliverTime: mode === 'exact' ? $('#aa-deliver').value : '', // 期望收貨時間（僅 exact 用於排序）
 
       recipient: recipientVal('aa'),
       items: aaItems.map(x => ({ ...x })), recvMode: mode,
@@ -849,8 +859,8 @@ function renderBApplyList(p) {
     DB.sites.map(s => `<option value="${s.id}" ${q.site === s.id ? 'selected' : ''}>${s.name}</option>`)).join('');
   const dirOpts = [['', '全部型態'], ['1', '直達'], ['0', '非直達']]
     .map(([v, t]) => `<option value="${v}" ${q.direct === v ? 'selected' : ''}>${t}</option>`).join('');
-  const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准待排'], ['loaded', '已派車待接受'],
-    ['accepted', '已接受待交貨'], ['delivered', '已交貨'], ['rejected', '已駁回']]
+  const statusOpts = [['', '全部狀態'], ['submitted', '待審核'], ['approved', '已核准待排'], ['loaded', '已派車'],
+    ['delivered', '已交貨'], ['rejected', '已駁回']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">幹線託運申請（使用者）</div>
@@ -889,7 +899,7 @@ function renderBApplyList(p) {
      ['D6', 'D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }], { unit: '屏東廠', name: '潘俊傑', phone: '08-7778899#33' }],
      ['D9', 'D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '雲林倉儲', name: '簡淑芬', phone: '05-5556677#14', agentName: '許志偉', agentPhone: '0966-345-678' }]
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', leg: 'outbound', site: pick, destSite: drop, direct, items, recipient,
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
         deliverTime: '18:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
@@ -900,7 +910,7 @@ function renderBApplyList(p) {
      ['D3', 'D10', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }], { unit: '研發部', name: '吳承恩', phone: '02-27005678#412' }],
      ['D5', 'D10', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }], { unit: '中央倉', name: '林曉琪', phone: '02-27009999#601', agentName: '陳柏宇', agentPhone: '0988-567-890' }]
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', leg: 'return', site: pick, destSite: drop, direct, items, recipient,
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
         deliverTime: '19:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
@@ -909,13 +919,12 @@ function renderBApplyList(p) {
 }
 function runBQuery() {
   bApply.query = {
-    applicant: $('#bq-applicant').value.trim(), leg: '',
+    applicant: $('#bq-applicant').value.trim(),
     site: $('#bq-site').value, direct: $('#bq-direct').value, status: $('#bq-status').value,
   };
   const q = bApply.query;
   const res = ModuleB.orders.filter(o =>
     (!q.applicant || o.applicant.includes(q.applicant)) &&
-    (!q.leg || o.leg === q.leg) &&
     (!q.site || o.pickSite === q.site || o.dropSite === q.site) &&
     (!q.direct || String(o.direct ? 1 : 0) === q.direct) &&
     (!q.status || o.status === q.status));
@@ -954,8 +963,7 @@ function renderBApplyDetail(p, id) {
   const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
   const bCanEdit = ['submitted', 'approved'].includes(o.status); // 派車(loaded)後不可編輯貨物
   let action = '';
-  if (o.status === 'loaded') action = `<button class="btn btn-primary" data-baccept="${o.id}">確認接受</button>`;
-  else if (o.status === 'accepted') action = `<button class="btn btn-accent" data-brecv="${o.id}">確認已收到貨</button>`;
+  if (o.status === 'loaded') action = `<button class="btn btn-accent" data-brecv="${o.id}">確認已收到貨</button>`;
   else if (o.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
     <div class="section-h">幹線託運單明細 · ${o.id}</div>
@@ -1001,8 +1009,6 @@ function renderBApplyDetail(p, id) {
     if (add) add.onclick = () => openCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); });
   }
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
-  const acc = $('#page-b_apply [data-baccept]');
-  if (acc) acc.onclick = confirmThen({ title: '確認接受此派車？', text: '確認後即接受派定的車輛與來收時間。' }, () => { ModuleB.acceptDelivery(o); toast(`${o.id} 已確認接受`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
   const rcv = $('#page-b_apply [data-brecv]');
   if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此託運單將標記為已交貨。' }, () => { ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
 }
@@ -1017,12 +1023,7 @@ function renderBApplyNew(p) {
     <div class="card">
       <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
       <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
-      <div class="field"><label>行程方向</label>
-        <div class="radio-group">
-          <label class="radio-pill sel" id="ba-out"><input type="radio" name="ba-leg" value="outbound" checked>去程（南下）</label>
-          <label class="radio-pill" id="ba-ret"><input type="radio" name="ba-leg" value="return">回程（北上回 D10）</label>
-        </div>
-      </div>
+      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。</div>
       <div class="row">
         <div class="field"><label id="ba-site-label">收貨據點（起）</label><select id="ba-site">${siteOpts}</select></div>
         ${bldgFieldHtml('收貨建物', 'ba-pickbldg', 'ba-pickother')}
@@ -1060,17 +1061,9 @@ function renderBApplyNew(p) {
   $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
   wireBldg('ba-site', 'ba-pickbldg', 'ba-pickother', siteBuildings); // 收貨建物
   wireBldg('ba-dest', 'ba-dropbldg', 'ba-dropother', siteBuildings); // 送貨建物
-  const setLeg = () => {
-    const ret = $('#page-b_apply input[value=return]').checked;
-    $('#ba-out').classList.toggle('sel', !ret);
-    $('#ba-ret').classList.toggle('sel', ret);
-    // 送貨據點預設：去程→最南端 D1、回程→回基地 D10（仍可自行改）
-    $('#ba-dest').value = ret ? 'D10' : 'D1';
-    $('#ba-site').value = ret ? 'D1' : 'D6';
-    $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依新據點重填建物選單
-  };
-  $$('#page-b_apply input[name=ba-leg]').forEach(r => r.onchange = setLeg);
-  setLeg();
+  // 預設：自基地北端收貨、送往南部（可自行改；方向由起迄自動判斷 B-2）
+  $('#ba-site').value = 'D6'; $('#ba-dest').value = 'D3';
+  $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填建物選單
   renderBaCargo(); // 一開始顯示空白清單
   $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
@@ -1082,7 +1075,6 @@ function renderBApplyNew(p) {
     if (!ok) return;
     const o = ModuleB.createOrder({
       applicant: $('#ba-applicant').value,
-      leg: $('#page-b_apply input[name=ba-leg]:checked').value,
       site: $('#ba-site').value,
       destSite: $('#ba-dest').value,
       pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),
@@ -1116,7 +1108,7 @@ function bApproveRows() {
   const q = bApprove.query;
   return ModuleB.orders.filter(o =>
     (!q.applicant || o.applicant.includes(q.applicant)) &&
-    (!q.leg || o.leg === q.leg) &&
+    (!q.leg || (q.leg === 'return' ? !ModuleB.isSouthbound(o) : ModuleB.isSouthbound(o))) && // 方向由起迄推導（B-2）
     (!q.status || o.status === q.status));
 }
 function renderBApproveList(p) {
@@ -1165,7 +1157,7 @@ function renderBApproveGrid() {
       ${rows.map(o => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-bvdetail="${o.id}">細節</button></td>
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
-        <td>${o.leg === 'return' ? '回程' : '去程'}</td>
+        <td>${ModuleB.isSouthbound(o) ? '去程（南下）' : '回程（北上）'}</td>
         <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td><td>${stBadge(o.status)}</td></tr>`).join('')}
@@ -1183,7 +1175,7 @@ function renderBApproveDetail(p, id) {
       <div class="grid-2">
         <div class="field"><label>單號</label><div>${o.id}</div></div>
         <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
-        <div class="field"><label>行程方向</label><div>${o.leg === 'return' ? '回程（北上回 D10）' : '去程（南下）'}</div></div>
+        <div class="field"><label>行程方向 <span class="hint">由起迄自動判斷</span></label><div>${ModuleB.isSouthbound(o) ? '去程（南下）' : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`}</div></div>
         <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}</div></div>
         <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}</div></div>
         <div class="field"><label>收貨地點（建物）</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
@@ -1265,10 +1257,11 @@ RENDER.b_review = function () {
       <div id="br-approved" style="margin-top:14px;"></div>
       <div id="br-dispatch-result"></div>
     </div>
+    <div id="br-vehstatus">${renderB_vehicleStatus()}</div>
     <div id="br-matrix">${renderB_matrix()}</div>
     <div class="card">
-      <div class="card-title">已派車貨況一覽（被安排車次 · 派遣模式 · 接受/交貨追蹤）</div>
-      <div class="card-desc">顯示每張已派車託運單的車輛、派遣模式、終點，以及接收人接受與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
+      <div class="card-title">已派車貨況一覽（被安排車次 · 派遣模式 · 交貨追蹤）</div>
+      <div class="card-desc">顯示每張已派車託運單的車輛、派遣模式、終點與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
       <div id="br-tracking"></div>
     </div>`;
   $('#br-dispatch-direct').onclick = confirmThen({ title: '確認派直達車？', text: '確認後將對已核准直達單執行派車。' }, () => dispatchB('direct'));
@@ -1278,45 +1271,55 @@ RENDER.b_review = function () {
   $('#br-goto-driver').onclick = () => goto('b_driver');
   renderBr_approved(); renderBr_tracking();
 };
-// 3.7 四／五模式決策矩陣（G44 顯示，供調度員覆核）
+// 3.7 五列決策矩陣（G44 顯示，供調度員覆核）— 資料來源＝ModuleB.DECISION_MATRIX 單一決策表（B-4）
 function renderB_matrix(activeRow) {
-  const rows = [
-    ['1', '去程・非直達', '動態淨值（2.4）', '貪婪法自動判斷（2.3）', '逐站收送非直達貨'],
-    ['2', '去程・直達', '純容量加總（3.3）', '申請單目的地', '不停靠'],
-    ['3', '回程・非直達且無撞期', '動態淨值', '出發據點（2.7）', '逐站收送非直達貨'],
-    ['4', '回程・被迫鎖定直達', '動態淨值（延續，3.6）', '出發據點（3.6）', '不收新非直達貨，仍依序經過'],
-    ['5', '回程・原本就是直達車', '純容量加總', '出發據點', '不停靠'],
-  ];
   return `<div class="card">
     <div class="card-title">派遣模式決策矩陣（3.7 · G44）</div>
-    <div class="card-desc">五種情境的容量計算、終點與中途停靠規則，供調度員一眼覆核。派車後會標示本趟落在哪一列。</div>
+    <div class="card-desc">五種情境的容量計算、終點與中途停靠規則（單一決策表驅動 B-4），供調度員一眼覆核。派車後會標示本趟落在哪一列。</div>
     <div class="table-wrap"><table class="dt"><thead><tr><th>#</th><th>情境</th><th>容量計算</th><th>終點</th><th>中途停靠</th></tr></thead><tbody>
-      ${rows.map(r => `<tr${activeRow && +r[0] === activeRow ? ' style="outline:2px solid var(--accent);outline-offset:-2px;"' : ''}>
-        <td>${r[0]}</td><td>${activeRow && +r[0] === activeRow ? '<b>' + r[1] + '</b> <span class="badge b-amber">本趟</span>' : r[1]}</td>
-        <td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('')}
+      ${ModuleB.DECISION_MATRIX.map(m => `<tr${activeRow && m.row === activeRow ? ' style="outline:2px solid var(--accent);outline-offset:-2px;"' : ''}>
+        <td>${m.row}</td><td>${activeRow && m.row === activeRow ? '<b>' + m.mode + '</b> <span class="badge b-amber">本趟</span>' : m.mode}</td>
+        <td>${m.capacity}</td><td>${m.endpoint}</td><td>${m.stops}</td></tr>`).join('')}
     </tbody></table></div></div>`;
+}
+// B-6：每台車目前的派遣模式與觸發原因（維持 2.3「可解釋、調度員一眼看懂」）
+function renderB_vehicleStatus() {
+  const entries = Object.entries(ModuleB.vehicleStatus);
+  const body = entries.length === 0
+    ? `<div class="empty">尚無派車紀錄。執行派車後，此處顯示每台車的目前模式、觸發原因與終點判定依據。</div>`
+    : `<div class="table-wrap"><table class="dt"><thead><tr>
+        <th>車輛</th><th>目前模式</th><th>觸發原因</th><th>終點</th><th>終點判定依據</th></tr></thead><tbody>
+        ${entries.map(([vid, s]) => { const veh = DB.vehicles.find(v => v.id === vid);
+          const amber = s.matrixRow === 2 || s.matrixRow === 4 || s.matrixRow === 5;
+          return `<tr><td><b style="color:var(--navy);">${vid}</b>${veh ? '（' + veh.name + '）' : ''}</td>
+            <td><span class="badge ${amber ? 'b-amber' : 'b-navy'}">${s.modeLabel}</span> <span class="hint">矩陣第 ${s.matrixRow} 列</span></td>
+            <td style="text-align:left;">${s.reason}</td>
+            <td>${ModuleB.siteById(s.endpoint) ? ModuleB.siteById(s.endpoint).name : s.endpoint}</td>
+            <td>${s.endpointBasis}</td></tr>`; }).join('')}
+      </tbody></table></div>`;
+  return `<div class="card">
+    <div class="card-title">車輛派遣狀態（模式與觸發原因）<span class="g-tag">3.8 / B-6</span></div>
+    <div class="card-desc">疊加直達分流與回程鎖定後，光看貪婪法已無法判斷車輛狀態；此表顯示每台車目前的派遣模式（五列之一）、觸發原因與終點判定依據。</div>
+    ${body}</div>`;
 }
 function renderBr_tracking() {
   if (!$('#br-tracking')) return;
-  const rows = ModuleB.orders.filter(o => ['loaded', 'accepted', 'delivered'].includes(o.status));
+  const rows = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status));
   $('#br-tracking').innerHTML = rows.length === 0 ? `<div class="empty">尚無已派車託運單。核准後派車即會出現在此。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
       <th>單號</th><th>申請人</th><th>路線</th><th>派遣模式</th><th>車輛</th><th>貨量</th>
-      <th>接收人接受</th><th>交貨</th><th>操作</th></tr></thead><tbody>
+      <th>交貨</th><th>操作</th></tr></thead><tbody>
       ${rows.map(o => {
         const veh = o.dispatchVehicle ? DB.vehicles.find(v => v.id === o.dispatchVehicle) : null;
-        const acc = (o.status === 'accepted' || o.status === 'delivered')
-          ? '<span class="badge b-green">已接受</span>' : '<span class="badge b-gray">待接受</span>';
         const del = o.status === 'delivered' ? '<span class="badge b-green">已交貨</span>' : '<span class="badge b-gray">未交貨</span>';
         let op = '<span class="muted">—</span>';
-        if (o.status === 'accepted') op = `<button class="btn btn-accent btn-sm" data-bdeliver="${o.id}">確認交貨</button>`;
-        else if (o.status === 'loaded') op = '<span class="muted">待接收人接受</span>';
+        if (o.status === 'loaded') op = `<button class="btn btn-accent btn-sm" data-bdeliver="${o.id}">確認交貨</button>`;
         else if (o.status === 'delivered') op = `<span class="muted">${o.deliveredBy || ''} 完成</span>`;
         const modeBadge = o.dispatchMode === '直達' ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>';
-        const route = `${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}`;
+        const route = `${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}`;
         return `<tr><td>${o.id}</td><td>${o.applicant}</td><td>${route}</td>
           <td>${modeBadge}</td><td>${veh ? veh.name : '—'}</td><td>${o.volume}L</td>
-          <td>${acc}</td><td>${del}</td><td>${op}</td></tr>`; }).join('')}
+          <td>${del}</td><td>${op}</td></tr>`; }).join('')}
     </tbody></table></div>`;
   $$('#br-tracking [data-bdeliver]').forEach(b => b.onclick = confirmThen({ title: '確認交貨？', text: '確認後此託運單將標記為已交貨。' }, () => {
     const o = ModuleB.orders.find(x => x.id === b.dataset.bdeliver);
@@ -1330,13 +1333,16 @@ function renderBr_approved() {
   $('#br-approved').innerHTML = rows.length === 0 ? `<div class="muted">尚無已核准待派車託運單。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>裝卸</th></tr></thead><tbody>
       ${rows.map(o => `<tr><td>${o.id}</td>
-        <td>${o.leg === 'return' ? '<span class="badge b-gray">回程</span>' : '<span class="badge b-navy">去程</span>'}</td>
-        <td>${ModuleB.siteById(o.origin).name} → ${ModuleB.siteById(o.dest).name}</td>
+        <td>${ModuleB.isSouthbound(o) ? '<span class="badge b-navy">南下</span>' : '<span class="badge b-gray">北上</span>'}</td>
+        <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td><td>${o.handleMin}分</td></tr>`).join('')}
     </tbody></table></div>`;
 }
-function updateBMatrix(row) { const m = $('#br-matrix'); if (m) m.innerHTML = renderB_matrix(row); }
+function updateBMatrix(row) {
+  const m = $('#br-matrix'); if (m) m.innerHTML = renderB_matrix(row);
+  const vs = $('#br-vehstatus'); if (vs) vs.innerHTML = renderB_vehicleStatus(); // B-6 同步更新
+}
 // 共用派車結果渲染（去程/回程通用）
 function renderBDispatchResult(r, startLabel) {
   const endpoint = r.endpoint ? ModuleB.siteById(r.endpoint).name : '—';
@@ -1348,7 +1354,7 @@ function renderBDispatchResult(r, startLabel) {
     const startStop = `<div class="stop hit"><div class="s-name">${startLabel}</div><div class="s-meta">${back ? '折返起點' : '出發'}</div></div>`;
     const stopHtml = r.stops.map(s => `<div class="stop ${s.site.id === r.endpoint ? 'end' : ((s.count || s.unloaded) ? 'hit' : 'skip')}">
         <div class="s-name">${s.site.name}</div><div class="s-meta">${[s.count ? '收 ' + s.count + ' 單' : '', s.unloaded ? '卸 ' + s.unloaded + 'L' : ''].filter(Boolean).join('／') || '無貨'}｜車上 ${s.cumVol}L</div></div>`).join('');
-    const endStop = back ? `<div class="stop end"><div class="s-name">${ModuleB.siteById('D10').name}</div><div class="s-meta">回到出發據點</div></div>` : '';
+    const endStop = back ? `<div class="stop end"><div class="s-name">${ModuleB.siteById(DB.homeSite).name}</div><div class="s-meta">回到出發據點</div></div>` : '';
     routeViz = `<div class="route" style="margin-top:12px;">${back ? '' : startStop}${stopHtml}${back ? endStop : ''}</div>`;
   }
   const deferredHtml = (r.deferred && r.deferred.length)
@@ -1368,17 +1374,18 @@ function renderBDispatchResult(r, startLabel) {
 function dispatchB(mode) {
   const veh = mode === 'direct' ? 'V-T02' : 'V-T01';
   const r = ModuleB.dispatch(veh, mode);
-  renderBDispatchResult(r, '台北據點');
+  renderBDispatchResult(r, ModuleB.siteById(DB.homeSite).name);
   toast(`${r.modeLabel || ''} 派車完成`, 'ok');
   renderBr_approved(); renderBaList(); renderBr_tracking();
 }
 function dispatchBReturn(originallyDirect) {
-  const rets = ModuleB.orders.filter(o => o.status === 'approved' && o.leg === 'return');
-  if (!originallyDirect && rets.length === 0) { toast('無已核准回程託運單，請先核准回程單', 'err'); return; }
-  // 折返起點＝最南端的已核准回程收貨據點（涵蓋所有回程收貨），無則預設 D1
-  let turnaround = 'D1';
+  // 回程＝北上貨（方向由起迄推導 B-2）
+  const rets = ModuleB.orders.filter(o => o.status === 'approved' && !ModuleB.isSouthbound(o));
+  if (!originallyDirect && rets.length === 0) { toast('無已核准北上（回程）託運單，請先核准回程單', 'err'); return; }
+  // 折返起點＝最南端的已核准回程收貨據點（涵蓋所有回程收貨），無則取最南據點
+  let turnaround = DB.sites.reduce((m, s) => s.order < m.order ? s : m, DB.sites[0]).id;
   if (rets.length) turnaround = rets.reduce((min, o) =>
-    ModuleB.siteById(o.pickupSite).order < ModuleB.siteById(min).order ? o.pickupSite : min, rets[0].pickupSite);
+    ModuleB.siteById(o.pickSite).order < ModuleB.siteById(min).order ? o.pickSite : min, rets[0].pickSite);
   const r = ModuleB.dispatchReturn('V-T02', turnaround, originallyDirect, 0);
   renderBDispatchResult(r, ModuleB.siteById(turnaround).name);
   toast(`${r.modeLabel} 派車完成`, 'ok');
@@ -1797,35 +1804,41 @@ RENDER.c_review = function () {
 // 派車追蹤：被安排的車次 · 司機 · 乘客上車/行程完成
 function renderCr_track() {
   if (!$('#cr-tab-track')) return;
-  const rows = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status));
+  // 調度室確認/調整範圍：已媒合與待人工協調單皆可手動指派（C-4，不退回員工重新申請）
+  const rows = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed', 'coordinate'].includes(a.status));
   $('#cr-tab-track').innerHTML = `
     <div class="card">
-      <div class="card-title">派車追蹤（被安排車次 · 乘客上車/行程完成）</div>
-      <div class="card-desc">顯示每張已媒合申請的車輛、司機、併車群組，以及乘客上車與行程完成狀態。乘客可於申請端確認上車/完成，或由調度室在此回報完成。</div>
+      <div class="card-title">派車追蹤與調度室確認 <span class="g-tag">STEP4 / C-4</span></div>
+      <div class="card-desc">顯示每張申請的車輛、司機、併車群組、空駛時間與上車/完成狀態。調度室可<b>直接手動改派</b>（含待人工協調單），不退回員工重新申請；每次調整都留下<b>人工覆寫紀錄</b>，且覆寫後不再被下一次批次重排。</div>
       ${rows.length === 0 ? `<div class="empty">尚無已媒合車次。核准後執行批次媒合即會出現在此。</div>` : `
       <div class="table-wrap"><table class="dt"><thead><tr>
         <th>單號</th><th>申請人</th><th>路線</th><th>人</th><th>車輛</th><th>司機</th><th>群組</th>
-        <th>上車</th><th>行程</th><th>操作</th></tr></thead><tbody>
+        <th>空駛</th><th>批次</th><th>上車</th><th>行程</th><th>操作</th></tr></thead><tbody>
         ${rows.map(a => {
           const veh = a.vehicle ? DB.vehicles.find(v => v.id === a.vehicle) : null;
           const drv = a.driver ? DB.drivers.find(d => d.id === a.driver) : null;
           const brd = (a.status === 'boarded' || a.status === 'completed')
             ? '<span class="badge b-green">已上車</span>' : '<span class="badge b-gray">待上車</span>';
           const cmp = a.status === 'completed' ? '<span class="badge b-green">已完成</span>' : '<span class="badge b-gray">進行中</span>';
-          let op = '<span class="muted">—</span>';
+          let op = '';
           if (a.status === 'boarded') op = `<button class="btn btn-accent btn-sm" data-ccomplete="${a.id}">確認完成</button>`;
-          else if (a.status === 'matched') op = '<span class="muted">待乘客上車</span>';
           else if (a.status === 'completed') op = `<span class="muted">${a.completedBy || ''} 完成</span>`;
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td><td>${a.pax}</td>
-            <td>${veh ? veh.name : '—'}</td><td>${drv ? drv.name : '—'}</td><td>${a.groupId || '—'}</td>
-            <td>${brd}</td><td>${cmp}</td><td>${op}</td></tr>`; }).join('')}
-      </tbody></table></div>`}
+          if (a.status !== 'completed') op += ` <button class="btn btn-ghost btn-sm" data-coverride="${a.id}">改派</button>`;
+          const ovr = a.overridden ? ` <span class="badge b-amber" title="人工覆寫">覆寫</span>` : '';
+          return `<tr><td>${a.id}${ovr}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td><td>${a.pax}</td>
+            <td>${veh ? veh.name : '<span class="muted">—</span>'}</td><td>${drv ? drv.name : '<span class="muted">—</span>'}</td><td>${a.groupId || '—'}</td>
+            <td>${a.deadheadMin != null ? a.deadheadMin + ' 分' : '—'}</td>
+            <td>${a.lastBatch || '—'}</td>
+            <td>${brd}</td><td>${cmp}</td><td>${op || '<span class="muted">—</span>'}</td></tr>`; }).join('')}
+      </tbody></table></div>
+      ${renderC_overrideLog()}`}
     </div>`;
-  $$('#cr-tab-track [data-ccomplete]').forEach(b => b.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成。' }, () => {
+  $$('#cr-tab-track [data-ccomplete]').forEach(b => b.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成，車輛與司機當前位置回復歸屬據點。' }, () => {
     const a = ModuleC.applications.find(x => x.id === b.dataset.ccomplete);
     ModuleC.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok');
     renderCr_track(); renderCaList();
   }));
+  $$('#cr-tab-track [data-coverride]').forEach(b => b.onclick = () => openOverrideDialog(b.dataset.coverride));
 }
 function renderCr_batch() {
   const approved = ModuleC.applications.filter(a => a.status === 'approved').length;
@@ -1837,9 +1850,13 @@ function renderCr_batch() {
         <div class="field"><label>批次起算日期</label><input type="date" id="cr-batch-date" value="2026-08-25"></div>
         <div class="field" style="flex:0 0 auto;"><button class="btn btn-accent" id="cr-run-batch">▶ 執行批次媒合</button></div>
       </div>
+      <div class="row" style="max-width:420px;align-items:end;">
+        <div class="field"><label>觸發人</label><input type="text" id="cr-batch-by" value="調度室-值班人員"></div>
+      </div>
       <div class="muted">目前已核准待媒合：${approved} 筆</div>
       <div id="cr-batch-result"></div>
     </div>
+    <div id="cr-batch-log">${renderC_batchLog()}</div>
     <div class="card">
       <div class="card-title">資源可用性檢核狀態 <span class="g-tag">G60/G61</span></div>
       <div class="grid-2">
@@ -1855,15 +1872,90 @@ function renderCr_batch() {
       </div>
     </div>`;
   $('#cr-run-batch').onclick = confirmThen({ title: '確認執行批次媒合？', text: '確認後將對 7 天範圍內待處理申請執行批次媒合（已成功單不重排）。' }, () => {
-    const { batch, trace } = ModuleC.runBatch($('#cr-batch-date').value);
+    const by = ($('#cr-batch-by') && $('#cr-batch-by').value.trim()) || '調度室';
+    const { batch, trace } = ModuleC.runBatch($('#cr-batch-date').value, by);
     $('#cr-batch-result').innerHTML = `
       <div class="result ok" style="margin-top:14px;">
-        <div class="r-head">✓ 批次 ${batch.id} 完成</div>
-        <div>成功 ${batch.items.filter(i => i.result === 'matched').length} 筆｜待人工協調 ${batch.items.filter(i => i.result === 'coordinate').length} 筆</div>
+        <div class="r-head">✓ 批次 ${batch.id} 完成（觸發人 ${batch.triggeredBy}）</div>
+        <div>處理 ${batch.processed} 筆｜成功 ${batch.matched} 筆｜待人工協調 ${batch.coordinate} 筆</div>
       </div>
       <div class="trace">${trace.join('\n')}</div>`;
+    const log = $('#cr-batch-log'); if (log) log.innerHTML = renderC_batchLog();
     toast(`批次 ${batch.id} 完成`, 'ok'); renderCaList(); renderCr_track();
   });
+}
+/* C-4 人工覆寫：調度室手動改派車輛/司機 */
+function openOverrideDialog(id) {
+  const a = ModuleC.applications.find(x => x.id === id);
+  if (!a) return;
+  const vOpts = DB.vehicles.filter(v => v.pool === 'BIZ')
+    .map(v => `<option value="${v.id}" ${a.vehicle === v.id ? 'selected' : ''}>${v.id}（${v.name}｜${v.seats} 座｜歸屬 ${v.homeSite}）</option>`).join('');
+  const dOpts = DB.drivers.filter(d => d.pool === 'BIZ')
+    .map(d => `<option value="${d.id}" ${a.driver === d.id ? 'selected' : ''}>${d.id}（${d.name}｜歸屬 ${d.homeSite}）</option>`).join('');
+  openModal(`調度室手動改派 · ${a.id}`, `
+    <div class="callout info" style="margin-bottom:12px;">
+      ${a.origin} → ${a.dest}｜${a.pax} 人｜${a.departDate} ${a.earliestPickup}<br>
+      調度室可直接調整，<b>不退回員工重新申請</b>；調整將留下人工覆寫紀錄，且此單不再被下一次批次重排。
+    </div>
+    <div class="field"><label>指派車輛</label><select id="ovr-veh">${vOpts}</select></div>
+    <div class="field"><label>指派司機</label><select id="ovr-drv">${dOpts}</select></div>
+    <div class="field"><label>調整人</label><input type="text" id="ovr-by" value="調度室-值班人員"></div>
+    <div class="field"><label>調整原因（選填）</label><input type="text" id="ovr-note" placeholder="例：原車輛臨時故障，改派備用車"></div>
+    <div style="text-align:center;margin-top:18px;">
+      <button class="btn btn-primary" id="ovr-ok">▶ 確認改派</button>
+      <button class="btn btn-ghost" id="ovr-cancel">取消</button>
+    </div>`);
+  $('#ovr-cancel').onclick = closeModal;
+  $('#ovr-ok').onclick = async () => {
+    const ok = await confirmDialog({ title: '確認手動改派？', text: '此調整將記錄為人工覆寫，且不再被批次媒合重排。' });
+    if (!ok) return;
+    const rec = ModuleC.overrideAssign(a,
+      { vehicle: $('#ovr-veh').value, driver: $('#ovr-drv').value, note: $('#ovr-note').value.trim() },
+      $('#ovr-by').value.trim() || '調度室');
+    closeModal();
+    toast(`${a.id} 已人工改派（覆寫紀錄已留存）`, 'ok');
+    renderCr_track(); renderCaList();
+    return rec;
+  };
+}
+/* C-4 人工覆寫紀錄一覽（調整人、時間、調整前後內容）*/
+function renderC_overrideLog() {
+  const list = [];
+  ModuleC.applications.forEach(a => (a.overrides || []).forEach(o => list.push({ app: a, o })));
+  if (list.length === 0) return '';
+  const nameOf = (id, arr) => { const x = arr.find(y => y.id === id); return x ? x.name : (id || '—'); };
+  return `<div class="divider"></div>
+    <div class="card-title" style="margin-top:4px;">人工覆寫紀錄 <span class="g-tag">C-4</span></div>
+    <div class="card-desc">每筆調度室手動調整的紀錄標記：調整人、時間與調整前後內容。覆寫過的排班不會被下一次批次媒合重排。</div>
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>調整人</th><th>時間</th><th>調整前</th><th>調整後</th><th>原因</th></tr></thead><tbody>
+      ${list.slice().reverse().map(({ app, o }) => `<tr>
+        <td><b style="color:var(--navy);">${app.id}</b></td><td>${o.by}</td><td>${fmtTime(o.at)}</td>
+        <td class="muted">車 ${nameOf(o.before.vehicle, DB.vehicles)} / 司機 ${nameOf(o.before.driver, DB.drivers)}<br>（${statusText(o.before.status)}）</td>
+        <td>車 <b>${nameOf(o.after.vehicle, DB.vehicles)}</b> / 司機 <b>${nameOf(o.after.driver, DB.drivers)}</b><br>（${statusText(o.after.status)}）</td>
+        <td>${o.note || '<span class="muted">—</span>'}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+/* C-5 批次媒合稽核紀錄（媒合失敗率統計基礎；依 Q45 不做保底偵測／自動補跑）*/
+function renderC_batchLog() {
+  const bs = ModuleC.batches;
+  const body = bs.length === 0
+    ? `<div class="empty">尚無批次紀錄。執行批次媒合後，每次觸發的時間、觸發人、處理範圍與結果統計都會記錄於此。</div>`
+    : `<div class="table-wrap"><table class="dt"><thead><tr>
+        <th>批次</th><th>觸發時間</th><th>觸發人</th><th>處理範圍</th><th>處理單數</th><th>成功</th><th>待人工協調</th><th>失敗率</th>
+      </tr></thead><tbody>
+      ${bs.slice().reverse().map(b => {
+        const rate = b.processed ? ((b.coordinate / b.processed) * 100).toFixed(0) + '%' : '—';
+        return `<tr><td><b style="color:var(--navy);">${b.id}</b></td><td>${b.at}</td><td>${b.triggeredBy}</td>
+          <td>${b.from} ~ ${b.to}</td><td>${b.processed}</td>
+          <td><span class="badge b-green">${b.matched}</span></td>
+          <td>${b.coordinate ? '<span class="badge b-amber">' + b.coordinate + '</span>' : '0'}</td>
+          <td>${rate}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  return `<div class="card">
+    <div class="card-title">批次媒合稽核紀錄 <span class="g-tag">03B / C-5</span></div>
+    <div class="card-desc">記錄每次批次的觸發時間戳記、觸發人、處理範圍與結果，並於申請單上標記最後處理批次——作為媒合失敗率統計基礎。依規格 Q45，系統<b>不做</b>保底偵測或自動補跑。</div>
+    ${body}</div>`;
 }
 // 逾期自動作廢（調度端監控；手動併車已移至申請端）
 function renderCr_void() {
@@ -1905,16 +1997,19 @@ RENDER.master = function () {
     <div class="section-h">主檔資料</div>
     <div class="section-sub">示範主檔（記憶體）。正式版對應 VD_ 前綴資料表。類別與天數對照表為示意值，待業務盤點。</div>
     <div class="grid-2">
-      <div class="card"><div class="card-title">車輛主檔（含資源池別）</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬</th><th>容量/座位</th></tr></thead><tbody>
+      <div class="card"><div class="card-title">車輛主檔（含資源池別）<span class="g-tag">C-2</span></div>
+        <div class="card-desc">歸屬據點＝行政/資產固定隸屬（不因出差改變）；當前位置＝排班可用性判斷依據（G59）。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th><th>容量/座位</th></tr></thead><tbody>
         ${DB.vehicles.map(v => `<tr><td>${v.id}</td><td>${v.name}</td>
           <td>${v.pool === 'LOGI' ? '<span class="badge b-navy">物流</span>' : '<span class="badge b-green">商務</span>'}</td>
-          <td>${v.home}</td><td>${v.pool === 'BIZ' ? v.seats + ' 座' : v.volume.toFixed(0) + 'L/' + v.weight + 'kg'}</td></tr>`).join('')}
+          <td>${v.homeSite}</td><td>${v.currentSite}${v.currentSite !== v.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td>
+          <td>${v.pool === 'BIZ' ? v.seats + ' 座' : v.volume.toFixed(0) + 'L/' + v.weight + 'kg'}</td></tr>`).join('')}
         </tbody></table></div></div>
-      <div class="card"><div class="card-title">司機主檔（獨立資源）</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>姓名</th><th>資源池</th><th>歸屬</th></tr></thead><tbody>
+      <div class="card"><div class="card-title">司機主檔（獨立資源）<span class="g-tag">C-2</span></div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>姓名</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th></tr></thead><tbody>
         ${DB.drivers.map(d => `<tr><td>${d.id}</td><td>${d.name}</td>
-          <td>${d.pool === 'LOGI' ? '物流' : '商務'}</td><td>${d.home}</td></tr>`).join('')}
+          <td>${d.pool === 'LOGI' ? '物流' : '商務'}</td><td>${d.homeSite}</td>
+          <td>${d.currentSite}${d.currentSite !== d.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td></tr>`).join('')}
         </tbody></table></div></div>
       <div class="card"><div class="card-title">南北據點順序（G30）</div>
         <div class="route">${DB.sites.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">序 ${s.order}</div></div>`).join('')}</div></div>
@@ -1975,7 +2070,7 @@ RENDER.a_driver = function () {
 /* 模組 B · 司機任務單：以「車輛」為單位，這一趟停靠哪些據點、各站取貨／卸貨 */
 RENDER.b_driver = function () {
   const p = $('#page-b_driver');
-  const rows = ModuleB.orders.filter(o => ['loaded', 'accepted', 'delivered'].includes(o.status) && o.dispatchVehicle);
+  const rows = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status) && o.dispatchVehicle);
   const byVeh = {};
   rows.forEach(o => { (byVeh[o.dispatchVehicle] = byVeh[o.dispatchVehicle] || []).push(o); });
   let cards = Object.keys(byVeh).map(vid => {
