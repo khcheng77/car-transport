@@ -2029,13 +2029,13 @@ RENDER.master = function () {
 
   /* 2.9 據點相互路程表（測試資料）：大車、小車各一張完整矩陣，對角線＝0（同車型內對稱） */
   const matIds = [...DB.sites.map(s => s.id), ...DB.restHouses.map(r => r.id)];
-  const matHead = '<th>起＼迄</th>' + matIds.map(id => `<th title="${nodeName(id)}">${id}</th>`).join('');
+  const matHead = '<th>起＼迄</th>' + matIds.map(id => `<th>${id} ${nodeName(id)}</th>`).join('');
   const fullMatrix = (type, cellCls) => {
     const body = matIds.map(ri => {
       const cells = matIds.map(ci => ri === ci
         ? '<td class="diag">0</td>'
         : `<td class="${cellCls}">${DB.siteTravel[type][ri + '|' + ci]}</td>`).join('');
-      return `<tr><th title="${nodeName(ri)}">${ri}</th>${cells}</tr>`;
+      return `<tr><th>${ri} ${nodeName(ri)}</th>${cells}</tr>`;
     }).join('');
     return `<div class="table-wrap"><table class="dt matrix"><thead><tr>${matHead}</tr></thead><tbody>${body}</tbody></table></div>`;
   };
