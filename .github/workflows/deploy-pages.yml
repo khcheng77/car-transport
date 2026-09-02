@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - claude/car-dispatch-prototype-caehbt
       - claude/initial-prototype-dev-pj1ucb
   workflow_dispatch:
 
