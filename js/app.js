@@ -1264,6 +1264,10 @@ RENDER.b_review = function () {
     <div class="card">
       <div class="card-title">派車決策（調度室）<span class="g-tag">G32/G40/G44</span></div>
       <div class="card-desc">僅對已核准託運單派車，依核准時間排序逐張檢查。系統顯示每台車派遣模式與觸發原因。</div>
+      <div class="row" style="max-width:420px;align-items:end;margin-bottom:10px;">
+        <div class="field"><label>派車日 <span class="hint">媒合截止＝前 ${DB.matchCutoffDaysBefore} 天 ${DB.matchCutoffTime}（2.14）</span></label>
+          <input type="date" id="br-dispatch-date"></div>
+      </div>
       <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;">去程</div>
       <button class="btn btn-accent" id="br-dispatch-direct">派直達車</button>
       <button class="btn btn-primary" id="br-dispatch-greedy">派非直達車（貪婪）</button>
@@ -1285,6 +1289,9 @@ RENDER.b_review = function () {
   $('#br-dispatch-return').onclick = confirmThen({ title: '確認派回程車（非直達）？', text: '確認後將執行回程派車與全域直達鎖定檢查。' }, () => dispatchBReturn(false));
   $('#br-dispatch-return-direct').onclick = confirmThen({ title: '確認派回程車（原為直達車）？', text: '確認後將以直達模式執行回程派車。' }, () => dispatchBReturn(true));
   $('#br-goto-driver').onclick = () => goto('b_driver');
+  // 派車日預設為「今天＋前置天數＋1」，確保預設情境下既有單皆趕得上媒合截止
+  const _d = new Date(); _d.setDate(_d.getDate() + DB.matchCutoffDaysBefore + 1);
+  $('#br-dispatch-date').value = `${_d.getFullYear()}-${pad2(_d.getMonth() + 1)}-${pad2(_d.getDate())}`;
   renderBr_approved(); renderBr_tracking();
 };
 // 3.7 五列決策矩陣（G44 顯示，供調度員覆核）— 資料來源＝ModuleB.DECISION_MATRIX 單一決策表（B-4）
@@ -1378,7 +1385,15 @@ function renderBDispatchResult(r, startLabel) {
   $('#br-dispatch-result').innerHTML = `
     <div class="result ${r.carried && r.carried.length ? 'ok' : 'warn'}" style="margin-top:16px;">
       <div class="r-head">派車模式：${modeBadge}　終點：${endpoint}${r.days && r.days !== '—' ? `　出勤天數：${r.days} 天 <span class="g-tag">G37</span>` : ''}</div>
-      <div>觸發原因：${r.reason || '—'}｜容量使用 <b>${r.capUsed || 0}L</b> / ${r.capTotal || 0}L${r.timeUsed != null ? `｜時間 <b>${r.timeUsed}分</b> / ${r.timeTotal}分` : ''}</div>
+      <div>觸發原因：${r.reason || '—'}｜容量使用 <b>${r.capUsed || 0}L</b> / ${r.capTotal || 0}L${
+        r.timeUsed != null ? `｜當日在勤 <b>${r.timeUsed}分</b> / ${r.timeTotal}分（12.5h，2.13）` : ''}${
+        r.dutyDays ? `｜精算出勤 <b>${r.dutyDays}</b> 天` : ''}</div>
+      ${r.breaks && r.breaks.length ? `<div style="margin-top:6px;">司機休息用餐（2.12）：${r.breaks.join('、')}</div>` : ''}
+      ${r.refDays != null ? `<div style="margin-top:6px;">最短天數表參考（3.1，不參與運算）：<b>${r.refDays} 天</b>${
+        r.daysOver ? ' <span class="badge b-amber">▲ 本趟預估天數超出表定值，以精算為準照常派車</span>' : ''}</div>` : ''}
+      ${r.naturalDirect ? `<div style="margin-top:6px;"><span class="badge b-gray">自然直達</span> 時間額度不足以順路停靠，屬排程結果，不觸發獨立派車或回程鎖定（3.2）</div>` : ''}
+      ${r.stopReason ? `<div style="margin-top:6px;" class="muted">終點停止延伸原因：${r.stopReason}</div>` : ''}
+      ${r.lateOrders && r.lateOrders.length ? `<div style="margin-top:6px;">逾媒合截止自動順延（2.14）：${r.lateOrders.map(o => o.id + (o.deferredToDate ? '→' + o.deferredToDate : '')).join('、')}</div>` : ''}
       ${r.carried ? `<div style="margin-top:6px;">載運：${r.carried.map(o => o.id).join(', ') || '（無）'}</div>` : ''}
       ${r.delivered && r.delivered.length ? `<div style="margin-top:6px;">沿線卸貨送達（G33）：${r.delivered.map(o => o.id + '→' + ModuleB.siteById(o.dropSite).name).join('、')}</div>` : ''}
       ${deferredHtml}
@@ -1389,7 +1404,8 @@ function renderBDispatchResult(r, startLabel) {
 }
 function dispatchB(mode) {
   const veh = mode === 'direct' ? 'V-T02' : 'V-T01';
-  const r = ModuleB.dispatch(veh, mode);
+  const dateEl = $('#br-dispatch-date');
+  const r = ModuleB.dispatch(veh, mode, dateEl && dateEl.value ? dateEl.value : null);
   renderBDispatchResult(r, ModuleB.siteById(DB.homeSite).name);
   toast(`${r.modeLabel || ''} 派車完成`, 'ok');
   renderBr_approved(); renderBaList(); renderBr_tracking();
@@ -2027,12 +2043,30 @@ RENDER.master = function () {
           <td>${d.pool === 'LOGI' ? '物流' : '商務'}</td><td>${d.homeSite}</td>
           <td>${d.currentSite}${d.currentSite !== d.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td></tr>`).join('')}
         </tbody></table></div></div>
+      <div class="card"><div class="card-title">幹線時間參數（2.9 / 2.12 / 2.13 / 2.14）<span class="g-tag">示意</span></div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>項目</th><th>值</th><th>依據</th></tr></thead><tbody>
+          <tr><td>每日在勤上限</td><td><b>${(DB.dailyDutyMin / 60).toFixed(1)} 小時</b>（${DB.dailyDutyMin} 分）</td><td>2.13 含待勤/前後緩衝/裝卸/行駛/休息用餐</td></tr>
+          <tr><td>排班基準上班時間</td><td>${DB.shiftStartDefault}</td><td>2.14 表定（實際到班 07:30–08:30 屬事後例外）</td></tr>
+          <tr><td>出勤前緩衝</td><td>${DB.prepMin} 分 ★</td><td>2.13 車輛檢查＋前往報到（待業務 Q2）</td></tr>
+          <tr><td>收工後緩衝</td><td>${DB.closeMin} 分 ★＋返回休息地（查表）</td><td>2.13（待業務 Q2）</td></tr>
+          <tr><td>媒合截止</td><td>派車日前 ${DB.matchCutoffDaysBefore} 天 ${DB.matchCutoffTime}</td><td>2.14 逾時自動順延下一車次</td></tr>
+          <tr><td>行駛時間</td><td>查「據點相互路程表」★</td><td>2.9（不再用單一常數×段數）</td></tr>
+        </tbody></table></div>
+        <div class="card-title" style="margin-top:14px;">司機休息與用餐（2.12）</div>
+        <div class="card-desc">依<b>純累積行駛時間</b>觸發（不含休息/用餐/裝卸）；五門檻共用不歸零時數線，<b>每日出勤重新歸零</b>；耗時計入 12.5 小時上限。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>累積行駛門檻</th><th>觸發項目</th><th>耗時</th></tr></thead><tbody>
+          ${DB.driverBreaks.map(b => `<tr><td>超過 ${(b.afterDriveMin / 60)} 小時</td><td>${b.kind}</td><td>${b.costMin} 分</td></tr>`).join('')}
+        </tbody></table></div>
+        <div class="card-title" style="margin-top:14px;">休息會館（返回休息地計算用）</div>
+        <div class="muted">${DB.restHouses.map(r => r.name).join('、')}</div>
+      </div>
       <div class="card"><div class="card-title">南北據點順序（G30）</div>
         <div class="route">${DB.sites.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">序 ${s.order}</div></div>`).join('')}</div></div>
-      <div class="card"><div class="card-title">天數對照表（示意 · P1 待確認）</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>終點</th><th>直達</th><th>有停靠</th></tr></thead><tbody>
-        ${DB.sites.filter(s => DB.dayCountStopover[s.id]).map(s =>
-          `<tr><td>${s.name}</td><td>${DB.dayCountDirect[s.id] || '—'} 天</td><td>${DB.dayCountStopover[s.id]} 天</td></tr>`).join('')}
+      <div class="card"><div class="card-title">最短天數表（3.1 · 車型 × 目的地）<span class="g-tag">參考值</span></div>
+        <div class="card-desc">停靠與否<b>不影響天數</b>；此表為寬鬆估計值，<b>僅供排班參考、不參與運算</b>，也不限制 12.5 小時精算結果。★數值待業務提供（Q1）。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>目的地</th><th>大車</th><th>小車</th></tr></thead><tbody>
+        ${DB.sites.filter(s => DB.minTripDays.big[s.id] || DB.minTripDays.small[s.id]).map(s =>
+          `<tr><td>${s.name}</td><td>${DB.minTripDays.big[s.id] || '—'} 天</td><td>${DB.minTripDays.small[s.id] || '—'} 天</td></tr>`).join('')}
         </tbody></table></div></div>
     </div>`;
 };

@@ -89,14 +89,12 @@ const ModuleC = {
 
   /* ---- C-1 空車移動最小化（規格最高優化目標）----
      空駛＝資源「當前位置」開到「出發地對應據點」的車程（分）。
-     無法量測（查無據點）視為 0。相鄰據點固定車程走主檔 legMinutes。 */
+     無法量測（查無據點）視為 0。據點間車程與幹線共用主檔路程表（2.9 siteTravel）。 */
   deadheadMin(resource, app) {
     const originSite = DB.bizOriginSite[app.origin];
     if (!originSite || !resource.currentSite) return 0;
-    const a = DB.sites.find(s => s.id === resource.currentSite);
-    const b = DB.sites.find(s => s.id === originSite);
-    if (!a || !b) return 0;
-    return Math.abs(a.order - b.order) * DB.legMinutes;
+    const t = DB.siteTravel[resource.currentSite + '|' + originSite];
+    return t != null ? t : 0;
   },
 
   /* 可用車＋司機候選清單（商務池），依「空駛時間總和」升冪排序（C-1）

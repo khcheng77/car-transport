@@ -53,8 +53,30 @@ const DB = {
     { id: 'D10',name: '台北據點', order: 10, buildings: ['總部收發', '中央倉'] },
   ],
 
-  /* ---- 據點間行駛分鐘數（相鄰站，示意）---- */
-  legMinutes: 55, // 相鄰兩據點固定行駛時間（示意，不分尖離峰 G62）
+  /* ---- 2.9 據點相互路程表（分鐘）----
+     業務單位提供「10 據點相互路程表」，含龍潭/屏東/高雄三處休息會館位置。
+     下方 marks 為各節點南北位置（示意分鐘刻度），啟動時展開為完整查表矩陣 siteTravel；
+     實際數值到位後直接替換 siteTravel（或改寫 marks），程式一律走查表、不再用單一常數。
+     ★ 示意值，待業務提供實表（Q1/Q2）。 */
+  siteTravelMarks: {
+    D1: 0, D2: 45, D3: 100, D4: 145, D5: 180, D6: 235, D7: 300, D8: 345, D9: 395, D10: 445,
+  },
+  /* 休息會館（2.13「返回休息地」用）：龍潭／屏東／高雄 */
+  restHouses: [
+    { id: 'RH-LT', name: '龍潭休息會館', mark: 395 },
+    { id: 'RH-PT', name: '屏東休息會館', mark: 5 },
+    { id: 'RH-KH', name: '高雄休息會館', mark: 50 },
+  ],
+  siteTravel: {}, // 由 marks 展開（見檔尾 buildSiteTravel）
+
+  /* ---- 2.12 司機休息與用餐（依「純累積行駛時間」觸發，共用不歸零時數線，每日歸零）---- */
+  driverBreaks: [
+    { afterDriveMin: 180, kind: '第一次休息', costMin: 30 },
+    { afterDriveMin: 240, kind: '第一次用餐', costMin: 60 },
+    { afterDriveMin: 360, kind: '第二次休息', costMin: 30 },
+    { afterDriveMin: 480, kind: '第二次用餐', costMin: 30 },
+    { afterDriveMin: 600, kind: '第三次休息', costMin: 30 },
+  ],
 
   /* ---- 幹線出發（基地）據點：主檔參數，不寫死於程式（B-1）----
      依規格背景設為桃園龍潭（中間位置）。基地以北據點（D10 台北）不在現行
@@ -62,16 +84,26 @@ const DB = {
      在政策確定前，涉及北側據點的託運單不排入並於派車 trace 明確說明。 */
   homeSite: 'D9',
 
-  /* ---- 幹線時間參數（B-3，示意值走主檔）---- */
-  workdayMin: 8 * 60,       // 每日工時（分）
-  maxTripDays: 3,           // 全域最大出勤天數上限（保險）
+  /* ---- 2.13 每日總在勤時間上限與其組成（自司機實際到班起算）---- */
+  dailyDutyMin: 12.5 * 60,  // 12.5 小時：涵蓋待勤/前後緩衝/裝卸/行駛/休息用餐
+  shiftStartDefault: '08:00', // 2.14 排班一律以表定上班時間為基準（實際到班 07:30–08:30 屬事後例外）
+  prepMin: 30,              // 出勤前緩衝：車輛檢查＋前往報到 ★示意，待業務提供（Q2）
+  closeMin: 20,             // 收工後緩衝：車輛檢整 ★示意，待業務提供（Q2）；「返回休息地」另查路程表
+  maxTripDays: 3,           // 目前已知最大出勤天數（跨夜則當日時數線歸零）
+
+  /* ---- 2.14 媒合截止：派車日前兩天中午 12:00 ---- */
+  matchCutoffDaysBefore: 2,
+  matchCutoffTime: '12:00',
   /* ---- 回程全域直達鎖定：撞期判定時間窗寬（分，示意；窗寬待業務確認 B-5）---- */
   directLockWindowMin: 240,
 
-  /* ---- 天數對照表（示意，P1 待業務確認）---- */
-  //  key = 終點據點；天數為整台車屬性，決定該趟時間上限（B-3）
-  dayCountDirect:   { 'D9': 1, 'D6': 1, 'D3': 2, 'D2': 2, 'D1': 2 }, // 直達
-  dayCountStopover: { 'D9': 1, 'D6': 2, 'D3': 3, 'D2': 3, 'D1': 3 }, // 有停靠
+  /* ---- 3.1 各據點出差「最短天數表」：依 車型（大車/小車）× 目的地 查表 ----
+     ★ 停靠與否不影響天數；此表為寬鬆估計值，僅供排班參考顯示，
+       不參與運算、不反過來限制 12.5 小時精算結果。★示意值待業務提供（Q1）。 */
+  minTripDays: {
+    big:   { D8: 1, D7: 1, D6: 2, D5: 2, D4: 2, D3: 2, D2: 3, D1: 3 },
+    small: { D8: 1, D7: 1, D6: 2, D5: 2, D4: 2, D3: 3, D2: 3, D1: 3 },
+  },
 
   /* ---- 車輛主檔（含資源池別 G05/G60）----
      homeSite＝歸屬據點：行政與資產管理上固定隸屬（保養、常駐、鑰匙管理），不因單次出差改變（C-2）
@@ -82,9 +114,10 @@ const DB = {
       dims: { l: 420, w: 180, h: 190 }, volume: 420*180*190/1000, weight: 3000 },
     { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'S1', currentSite: 'S1',
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
-    { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
+    // sizeClass：3.1 天數表查表維度（大車 big／小車 small）；決定方式待業務確認（Q3）
+    { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
       dims: { l: 600, w: 240, h: 240 }, volume: 600*240*240/1000, weight: 8000 },
-    { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
+    { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'small',
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
     // 商務共乘池（模組 C）— 完全分開（資源池原則）
     { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7 },
@@ -146,6 +179,17 @@ const DB = {
     '財務部-鄭安琪': '財務部-主管 蔡副理',
   },
 };
+
+/* 展開 2.9 據點相互路程表：由南北位置刻度產生完整查表矩陣（含休息會館）
+   實際數值到位後可直接改寫 DB.siteTravel，程式一律走查表 */
+(function buildSiteTravel() {
+  const marks = Object.assign({}, DB.siteTravelMarks);
+  DB.restHouses.forEach(r => { marks[r.id] = r.mark; });
+  const ids = Object.keys(marks);
+  ids.forEach(a => ids.forEach(b => {
+    DB.siteTravel[a + '|' + b] = Math.abs(marks[a] - marks[b]);
+  }));
+})();
 
 /* 工具：格式化體積（公升） */
 function fmtVol(cm3) { return (cm3 / 1000).toFixed(0); }

@@ -421,7 +421,8 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     eq(r.endpoint, 'D2', '直達終點＝申請單目的地（單一目的地 G38）');
     ok(!r.carried.some(o => o.id === other.id), '不同目的地不得同車（G38）');
     ok(!r.carried.some(o => o.id === d3.id), '超量第三張應留下一班直達車（G39）');
-    eq(r.days, H.DB.dayCountDirect['D2'], '天數查直達對照表（G37）');
+    eq(r.days, H.ModuleB.minTripDaysFor(H.DB.vehicles.find(v => v.id === 'V-T01'), 'D2'),
+      '天數查「車型×目的地」最短天數表（3.1，僅參考值）');
   });
 
   test('G40/G41/G42 回程撞期直達 → 鎖定直達、延續動態淨值、排擠非直達順延', () => {
@@ -586,14 +587,104 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(!H.ModuleB.isSouthbound(north), '迄點較北 → 北上');
   });
 
-  test('B-3 時間上限依天數對照表動態決定（非固定 3 天）', () => {
+  test('3.1 天數表改「車型×目的地」單表，且不參與運算（僅參考值）', () => {
     const H = fresh();
-    // D9 停靠 1 天 → 1×480；D3 停靠 3 天 → 3×480
-    eq(H.ModuleB.timeLimitFor('D9', false), 1 * H.DB.workdayMin, 'D9 非直達 1 天');
-    eq(H.ModuleB.timeLimitFor('D3', false), 3 * H.DB.workdayMin, 'D3 非直達 3 天');
-    eq(H.ModuleB.timeLimitFor('D3', true), 2 * H.DB.workdayMin, 'D3 直達查直達表 2 天');
-    // 查無終點 → 全域最大天數保險
-    eq(H.ModuleB.timeLimitFor('D7', false), H.DB.maxTripDays * H.DB.workdayMin, '查無 → 全域上限');
+    ok(typeof H.ModuleB.timeLimitFor === 'undefined', '天數表不得再用於推算時間上限');
+    ok(H.DB.dayCountDirect === undefined && H.DB.dayCountStopover === undefined,
+      '不應再有「直達／有停靠」兩張表');
+    const big = H.DB.vehicles.find(v => v.id === 'V-T01');   // 大車
+    const small = H.DB.vehicles.find(v => v.id === 'V-T02'); // 小車
+    eq(H.ModuleB.minTripDaysFor(big, 'D3'), H.DB.minTripDays.big.D3, '大車查大車列');
+    eq(H.ModuleB.minTripDaysFor(small, 'D3'), H.DB.minTripDays.small.D3, '小車查小車列');
+    eq(H.ModuleB.minTripDaysFor(big, 'D9'), null, '表中無值 → null，不代入預設');
+    // 停靠與否不影響天數：同車同目的地只有一個值
+    eq(H.ModuleB.minTripDaysFor(small, 'D1'), H.DB.minTripDays.small.D1, '停靠與否不影響查表結果');
+  });
+
+  test('2.13 時間上限改為每日 12.5 小時在勤模型（非天數×工時）', () => {
+    const H = fresh();
+    eq(H.DB.dailyDutyMin, 12.5 * 60, '每日在勤上限 12.5 小時');
+    const c = H.ModuleB.newDutyClock();
+    eq(c.day, 1); eq(c.dayElapsed, H.DB.prepMin, '起始即含出勤前緩衝');
+    // 剩餘量須扣掉收工緩衝與返回休息地
+    const rem = c.remaining('D1');
+    eq(rem, H.DB.dailyDutyMin - H.DB.prepMin - H.DB.closeMin - H.ModuleB.returnToRestMin('D1'),
+      '剩餘＝12.5h −已用 −收工緩衝 −返回休息地');
+  });
+
+  test('2.9 行駛時間改查據點相互路程表（非單一常數×段數）', () => {
+    const H = fresh();
+    ok(H.DB.legMinutes === undefined, '不應再有單一常數 legMinutes');
+    ok(H.DB.siteTravel && Object.keys(H.DB.siteTravel).length > 50, '應有完整查表矩陣');
+    eq(H.ModuleB.travelMin('D9', 'D9'), 0, '同點為 0');
+    eq(H.ModuleB.travelMin('D9', 'D8'), H.DB.siteTravel['D9|D8'], '查表取值');
+    eq(H.ModuleB.travelMin('D8', 'D9'), H.ModuleB.travelMin('D9', 'D8'), '對稱');
+    // 非等距：D9→D8 與 D8→D7 不應相同（若為常數×段數則會相同）
+    ok(H.ModuleB.travelMin('D9', 'D8') !== H.ModuleB.travelMin('D8', 'D7'), '各段距離不等，非固定常數');
+    // 返回休息地取最近會館
+    ok(H.ModuleB.returnToRestMin('D1') < H.ModuleB.returnToRestMin('D6'), '屏東較接近休息會館');
+  });
+
+  test('2.12 司機休息用餐：依純累積行駛觸發，計入在勤但不推進行駛時數線', () => {
+    const H = fresh();
+    const c = H.ModuleB.newDutyClock();
+    const base = c.dayElapsed;
+    c.addDrive(170);                       // 未達 3 小時門檻
+    eq(c.breaksTaken.length, 0, '未達門檻不觸發');
+    eq(c.dayElapsed, base + 170, '僅累加行駛');
+    c.addDrive(20);                        // 累積 190 分 > 180 → 第一次休息 30 分
+    eq(c.breaksTaken.length, 1, '跨越 3 小時門檻應觸發一次');
+    eq(c.driveMin, 190, '休息不得推進純行駛時數線');
+    eq(c.dayElapsed, base + 190 + 30, '休息時間計入在勤');
+    c.addDrive(60);                        // 累積 250 > 240 → 第一次用餐 60 分
+    eq(c.breaksTaken.length, 2, '共用同一條不歸零時數線，依序觸發');
+    // 跨夜歸零
+    c.rollover('D6');
+    eq(c.day, 2); eq(c.driveMin, 0, '每日出勤行駛時數線重新歸零');
+    eq(c.breaksTaken.length, 0, '休息紀錄亦歸零');
+  });
+
+  test('2.14 媒合截止：派車日前兩天 12:00，逾時自動排入下一可媒合車次', () => {
+    const H = fresh();
+    const cut = H.ModuleB.matchCutoffFor('2026-09-10');
+    eq(cut.getFullYear(), 2026); eq(cut.getMonth(), 8); eq(cut.getDate(), 8);
+    eq(cut.getHours(), 12, '截止為中午 12:00');
+    const onTime = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false,
+      volume: 500, handleMin: 10 });
+    onTime.createdAt = new Date(2026, 8, 8, 11, 0);   // 截止前
+    const late = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D3', direct: false,
+      volume: 500, handleMin: 10 });
+    late.createdAt = new Date(2026, 8, 8, 13, 0);     // 截止後
+    ok(H.ModuleB.meetsCutoff(onTime, '2026-09-10'), '截止前應可媒合');
+    ok(!H.ModuleB.meetsCutoff(late, '2026-09-10'), '截止後不得插單');
+    [onTime, late].forEach(o => H.ModuleB.approve(o));
+    const r = H.ModuleB.dispatch('V-T02', 'greedy', '2026-09-10');
+    ok(r.carried.includes(onTime), '準時單應排入');
+    ok(!r.carried.includes(late), '逾時單不得排入');
+    ok(r.lateOrders.includes(late), '應列於逾時清單');
+    ok(late.deferredToDate > '2026-09-10', '應標記順延至更後面的可媒合車次，實得 ' + late.deferredToDate);
+    eq(late.status, 'approved', '順延者留在待派車，不另立狀態（同 3.5）');
+  });
+
+  test('3.2 自然直達（時間不足未停靠）不觸發分流；急件直達才觸發', () => {
+    const H = fresh();
+    // 急件直達：申請人指定
+    const urgent = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: true,
+      volume: 500, handleMin: 10 });
+    eq(urgent.direct, true, '急件直達為申請人指定之輸入條件');
+    H.ModuleB.approve(urgent);
+    const rd = H.ModuleB.dispatch('V-T01', 'direct');
+    eq(rd.matrixRow, 2, '急件直達 → 獨立派車（矩陣第 2 列）');
+    ok(rd.urgentDirect, '應標記為急件直達');
+    // 自然直達：非急件、僅一張基地出發直送最遠點，中途無貨可收
+    const H2 = fresh();
+    const o = H2.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D1', direct: false,
+      volume: 500, handleMin: 10 });
+    H2.ModuleB.approve(o);
+    const rg = H2.ModuleB.dispatch('V-T02', 'greedy');
+    eq(rg.matrixRow, 1, '自然直達仍走非直達列（不獨立派車）');
+    ok(rg.naturalDirect, '應標記為自然直達（排程結果）');
+    ok(/自然直達/.test(rg.reason), '原因需說明為自然直達且不觸發分流');
   });
 
   test('B-4 五列決策矩陣為單一決策表，去程兩列齊備', () => {
@@ -792,7 +883,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     const atHome = H.DB.vehicles.find(v => v.id === 'V-B01');   // currentSite D10 ＝出發地
     const away = H.DB.vehicles.find(v => v.id === 'V-B03');     // currentSite D6
     eq(H.ModuleC.deadheadMin(atHome, a), 0, '同據點空駛 0');
-    eq(H.ModuleC.deadheadMin(away, a), 4 * H.DB.legMinutes, 'D6→D10 相隔 4 段');
+    eq(H.ModuleC.deadheadMin(away, a), H.DB.siteTravel['D6|D10'], 'D6→D10 查同一張路程表（2.9）');
   });
 
   test('C-2 歸屬據點 homeSite 與當前位置分離；行程完成後回歸屬據點', () => {
