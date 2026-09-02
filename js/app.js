@@ -2027,17 +2027,20 @@ RENDER.master = function () {
   const p = $('#page-master');
   const nodeName = id => (DB.sites.find(s => s.id === id) || DB.restHouses.find(r => r.id === id) || {}).name || id;
 
-  /* 2.9 據點相互路程表（測試資料）：右上三角＝大車、左下三角＝小車、對角線＝0（比照實表結構） */
+  /* 2.9 據點相互路程表（測試資料）：大車、小車各一張完整矩陣，對角線＝0（同車型內對稱） */
   const matIds = [...DB.sites.map(s => s.id), ...DB.restHouses.map(r => r.id)];
   const matHead = '<th>起＼迄</th>' + matIds.map(id => `<th title="${nodeName(id)}">${id}</th>`).join('');
-  const matBody = matIds.map((ri, r) => {
-    const cells = matIds.map((ci, c) => {
-      if (r === c) return '<td class="diag">0</td>';
-      if (c > r) return `<td class="tri-big">${DB.siteTravel.big[ri + '|' + ci]}</td>`;
-      return `<td class="tri-small">${DB.siteTravel.small[ri + '|' + ci]}</td>`;
+  const fullMatrix = (type, cellCls) => {
+    const body = matIds.map(ri => {
+      const cells = matIds.map(ci => ri === ci
+        ? '<td class="diag">0</td>'
+        : `<td class="${cellCls}">${DB.siteTravel[type][ri + '|' + ci]}</td>`).join('');
+      return `<tr><th title="${nodeName(ri)}">${ri}</th>${cells}</tr>`;
     }).join('');
-    return `<tr><th title="${nodeName(ri)}">${ri}</th>${cells}</tr>`;
-  }).join('');
+    return `<div class="table-wrap"><table class="dt matrix"><thead><tr>${matHead}</tr></thead><tbody>${body}</tbody></table></div>`;
+  };
+  const matBig = fullMatrix('big', 'tri-big');
+  const matSmall = fullMatrix('small', 'tri-small');
 
   /* 3.1 各據點最短天數表（大車／小車） */
   const dayIds = DB.sites.map(s => s.id).filter(id => DB.minTripDays.big[id] != null || DB.minTripDays.small[id] != null);
@@ -2096,12 +2099,13 @@ RENDER.master = function () {
 
     <div class="card">
       <div class="card-title">2.9 據點相互路程表（分鐘）<span class="g-tag">測試資料</span></div>
-      <div class="card-desc">實表為單一矩陣同時承載兩種車型：<b>右上三角＝大車、左下三角＝小車</b>，對角線為 0。
-        下列數值為<b>依實表特徵產生之虛構測試資料</b>（規則見 <code>docs/SPEC-DATA.md</code>）：最小計算單位 30 分、路程具次可加性（長程 < 各段相加）、大車＝小車＋30 分。實表到位後直接覆寫 <code>siteTravel</code> 即可，演算法無須更動。</div>
-      <div class="table-wrap"><table class="dt matrix"><thead><tr>${matHead}</tr></thead><tbody>${matBody}</tbody></table></div>
+      <div class="card-desc">大車、小車<b>各一張完整矩陣</b>，對角線為 0、同車型內對稱。
+        下列數值為<b>依實表特徵產生之虛構測試資料</b>（規則見 <code>docs/SPEC-DATA.md</code>）：最小計算單位 30 分、路程具次可加性（長程 < 各段相加）、大車＝小車＋30 分（小車 ≤ 一個計算單位之短程則相同）。實表到位後直接覆寫 <code>siteTravel</code> 即可，演算法無須更動。</div>
+      <div class="card-title" style="font-size:14px;margin:14px 0 8px;"><span class="badge b-navy">大車</span>　據點相互路程（分）</div>
+      ${matBig}
+      <div class="card-title" style="font-size:14px;margin:20px 0 8px;"><span class="badge b-amber">小車</span>　據點相互路程（分）</div>
+      ${matSmall}
       <div class="legend">
-        <span><span class="sw" style="background:var(--blue-bg);"></span>右上三角：大車（分）</span>
-        <span><span class="sw" style="background:var(--amber-bg);"></span>左下三角：小車（分）</span>
         <span><span class="sw" style="background:#EDEFF2;"></span>對角線：同點＝0</span>
         <span>含休息會館：RH-S 南區／RH-M 中區／RH-N 北區</span>
       </div>
