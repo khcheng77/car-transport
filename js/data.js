@@ -29,11 +29,13 @@ const DB = {
     { id: 'S10',name: '新竹科園站', order: 10,buildings: ['收貨區'] },
   ],
 
-  /* ---- 區域內物流班次（人工每日排定 G18）---- */
+  /* ---- 區域內物流班次（人工每日排定 G18）：每日 5 班，兩台車輪替 ---- */
   regionalShifts: [
-    { id: 'R-A1', label: '早班 08:30', depart: '08:30', vehicle: 'V-L01' },
-    { id: 'R-A2', label: '午班 13:00', depart: '13:00', vehicle: 'V-L02' },
-    { id: 'R-A3', label: '末班 16:30', depart: '16:30', vehicle: 'V-L01' },
+    { id: 'R-A1', label: '第一班 08:00', depart: '08:00', vehicle: 'V-L01' },
+    { id: 'R-A2', label: '第二班 10:30', depart: '10:30', vehicle: 'V-L02' },
+    { id: 'R-A3', label: '第三班 13:00', depart: '13:00', vehicle: 'V-L01' },
+    { id: 'R-A4', label: '第四班 15:00', depart: '15:00', vehicle: 'V-L02' },
+    { id: 'R-A5', label: '末班 17:00',   depart: '17:00', vehicle: 'V-L01' },
   ],
 
   /* ---- 南北幹線 10 據點（G30）南→北一直線固定順序 ---- */

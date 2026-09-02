@@ -539,13 +539,14 @@ function renderAGrid() {
   $('#aq-count').textContent = `${rows.length} 筆`;
   $('#aq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>單號</th><th>申請人</th><th>目的地</th><th>模式</th><th>班次</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      <th></th><th>單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>模式</th><th>班次</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         return `<tr>
           <td><button class="btn btn-ghost btn-sm" data-detail="${a.id}">細節</button></td>
           <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
           <td>${st.name}/${a.building}</td>
+          <td>${a.serviceDate || '—'}</td>
           <td>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好'}</td>
           <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td>
           <td class="muted">${fmtTime(a.createdAt)}</td></tr>`; }).join('')}
@@ -578,6 +579,7 @@ function renderAApplyDetail(p, id) {
         <div class="field"><label>收貨地點（起）</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>送貨地點（迄）</label><div>${st.name} / ${a.building}</div></div>
         <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'}</div></div>
+        <div class="field"><label>排班日期</label><div><b>${a.serviceDate || '—'}</b>${a.serviceDate === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}</div></div>
         <div class="field"><label>期望收貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
         <div class="field"><label>上貨 / 下貨時間</label><div>${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）</div></div>
         <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
@@ -649,8 +651,10 @@ function renderAApplyNew(p) {
         </div>
       </div>
       <div class="row" id="aa-deliver-wrap" style="display:none;">
+        <div class="field"><label>期望日期 <span class="hint">今天或未來日期</span></label><input type="date" id="aa-date"></div>
         <div class="field"><label>期望收貨時間 <span class="hint">僅用於挑選最接近的班次，非硬性截止（4.1）</span></label><input type="time" id="aa-deliver" value="14:00"></div>
       </div>
+      <div class="callout info" id="aa-today-hint" style="display:none;margin-bottom:10px;">選擇<b>今天</b>時，<b>已經出發的班次不會被媒合</b>；若今日班次都已過，請改選未來日期。</div>
       <div class="row">
         <div class="field"><label>上貨時間（分，自填 G15）</label><input type="number" id="aa-load" value="10"></div>
         <div class="field"><label>下貨時間（分，自填 G15）</label><input type="number" id="aa-unload" value="5"></div>
@@ -673,8 +677,12 @@ function renderAApplyNew(p) {
     const exact = $('#page-a_apply input[value=exact]').checked;
     $('#aa-mode-asap').classList.toggle('sel', !exact);
     $('#aa-mode-exact').classList.toggle('sel', exact);
-    $('#aa-deliver-wrap').style.display = exact ? '' : 'none'; // 交貨時間僅指定期望時間需要
+    $('#aa-deliver-wrap').style.display = exact ? '' : 'none'; // 期望日期/時間僅指定期望時間需要
+    $('#aa-today-hint').style.display = exact ? '' : 'none';
   });
+  // 期望日期預設今天、不可早於今天
+  const _today = ModuleA.todayStr();
+  $('#aa-date').value = _today; $('#aa-date').min = _today;
   renderAaItems(); // 一開始顯示空白清單
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
@@ -690,12 +698,18 @@ function renderAApplyNew(p) {
     if (pickSt && dropSt && pickSt.order >= dropSt.order) {
       toast('收貨站須在送貨站之前（路線行進方向）', 'err'); return;
     }
+    if (mode === 'exact') {
+      const d = $('#aa-date').value;
+      if (!d) { toast('請選擇期望日期', 'err'); return; }
+      if (d < ModuleA.todayStr()) { toast('期望日期不可早於今天', 'err'); return; }
+    }
     const { app, result } = ModuleA.submit({
       applicant: $('#aa-applicant').value, station: $('#aa-station').value,
       building: bldgVal('aa-building', 'aa-destother'),
       pickStation: $('#aa-pickuploc').value,
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
       deliverTime: mode === 'exact' ? $('#aa-deliver').value : '', // 期望收貨時間（僅 exact 用於排序）
+      serviceDate: mode === 'exact' ? $('#aa-date').value : ModuleA.todayStr(), // 排班日期（asap＝今天）
 
       recipient: recipientVal('aa'),
       items: aaItems.map(x => ({ ...x })), recvMode: mode,
@@ -773,7 +787,7 @@ function renderAr_scheduled() {
   const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
   const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。使用者送出申請並自動媒合成功後即會出現在此。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>車輛</th><th>到站</th>
+      <th>單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>班次</th><th>車輛</th><th>到站</th>
       <th>交貨</th><th>操作</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
@@ -784,6 +798,7 @@ function renderAr_scheduled() {
         if (a.status === 'matched') op = `<button class="btn btn-accent btn-sm" data-deliver="${a.id}">確認交貨</button>`;
         else if (a.status === 'delivered') op = `<span class="muted">${a.deliveredBy || ''} 完成</span>`;
         return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
+          <td>${a.serviceDate || '—'}</td>
           <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td>
           <td>${del}</td><td>${op}</td></tr>`; }).join('')}
     </tbody></table></div>`;
@@ -2030,11 +2045,18 @@ RENDER.master = function () {
 RENDER.a_driver = function () {
   const p = $('#page-a_driver');
   const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status) && a.assignedShift);
-  const byShift = {};
-  rows.forEach(a => { (byShift[a.assignedShift] = byShift[a.assignedShift] || []).push(a); });
-  let cards = DB.regionalShifts.filter(sh => byShift[sh.id]).map(sh => {
+  // 以「日期＋班次」為一張任務單（不同日期不可混在同一張）
+  const byKey = {};
+  rows.forEach(a => { const k = (a.serviceDate || '—') + '|' + a.assignedShift; (byKey[k] = byKey[k] || []).push(a); });
+  const keys = Object.keys(byKey).sort((x, y) => {
+    const [dx, sx] = x.split('|'), [dy, sy] = y.split('|');
+    return dx.localeCompare(dy) || DB.regionalShifts.findIndex(s => s.id === sx) - DB.regionalShifts.findIndex(s => s.id === sy);
+  });
+  let cards = keys.map(k => {
+    const [date, shiftId] = k.split('|');
+    const sh = DB.regionalShifts.find(s => s.id === shiftId);
     const veh = DB.vehicles.find(v => v.id === sh.vehicle);
-    const list = byShift[sh.id].slice().sort((x, y) => {
+    const list = byKey[k].slice().sort((x, y) => {
       const ox = DB.stations.find(s => s.id === x.station).order;
       const oy = DB.stations.find(s => s.id === y.station).order;
       return ox - oy || hhmmToMin(x.arrival || '23:59') - hhmmToMin(y.arrival || '23:59');
@@ -2054,7 +2076,7 @@ RENDER.a_driver = function () {
     }).join('');
     return `<div class="card">
       <div class="card-title" style="justify-content:space-between;">
-        <span>🚚 ${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
+        <span>🚚 <b>${date}</b>${date === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}｜${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
         <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
       <div class="card-desc">本班共 <b>${list.length}</b> 個交貨點、總貨量約 <b>${totalVol.toFixed(0)}L</b>；沿固定 10 站路線依序於各送貨站卸貨。</div>
       <div class="table-wrap"><table class="dt"><thead><tr>
@@ -2064,7 +2086,7 @@ RENDER.a_driver = function () {
   if (!cards) cards = `<div class="card"><div class="empty">今日尚無已排定的班次任務。使用者送出收貨申請並自動媒合成功後，這裡會依班次（車輛）顯示司機任務單。</div></div>`;
   p.innerHTML = `
     <div class="section-h">區域內物流 · 司機任務單（駕駛）</div>
-    <div class="section-sub">以「班次（車輛）」為單位，顯示今日該車沿固定 10 站路線的收送任務：每個交貨點的收貨地點（起）、送貨站（迄）、預計到站時間、貨物與接收人。</div>
+    <div class="section-sub">以「日期＋班次（車輛）」為單位，顯示該車沿固定 10 站路線的收送任務：每個交貨點的收貨地點（起）、送貨站（迄）、預計到站時間、貨物與接收人。</div>
     ${cards}`;
 };
 

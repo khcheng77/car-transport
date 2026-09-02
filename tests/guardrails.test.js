@@ -79,7 +79,12 @@ group('共用裝載判定引擎（G01–G05 / T1-2〜T1-6）', () => {
    模組 A：區域內物流（G10–G20）
    ================================================================= */
 group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
+  const FIX_Y = 2026, FIX_M = 8, FIX_D = 2; // 2026-09-02
+  const FIX_DATE = '2026-09-02';
+  // 媒合會讀取「現在時間」，測試一律注入固定時點（06:00，早於當日所有班次）以確保可重現
+  function fixNow(H, h, m) { H.ModuleA.now = () => new Date(FIX_Y, FIX_M, FIX_D, h == null ? 6 : h, m || 0); return H; }
   function submit(H, over) {
+    if (!H.ModuleA.__fixed) { fixNow(H); H.ModuleA.__fixed = true; }
     return H.ModuleA.submit(Object.assign({
       applicant: '業務部-周雅婷', station: 'S3', building: '一號月台',
       items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15,
@@ -119,7 +124,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     // 先用大量佔滿三個班次車輛的容量（每件可放入空車，但累積後無空間）
     // V-L01(≈14364L)/V-L02(≈11655L)；用多張大單填滿
     const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 }); // ≈8078L×1.1
-    for (let i = 0; i < 8; i++) submit(H, { items: [big()], handleMin: 1 });
+    for (let i = 0; i < 14; i++) submit(H, { items: [big()], handleMin: 1 });
     const { app, result } = submit(H, { items: [big()], handleMin: 1 });
     ok(!result.ok, '此時應已滿');
     eq(result.reason, 'full', '放得下空車但各班次已滿 → full');
@@ -166,7 +171,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
   test('G19 指定期望時間：以交貨時間為目標，選到站時間差最小的班次（早晚都比）', () => {
     const H = fresh();
     const { result } = submit(H, { recvMode: 'exact', deliverTime: '20:00' });
-    ok(result.ok); eq(result.shift.id, 'R-A3', '交貨時間 20:00 應選最接近的末班');
+    ok(result.ok); eq(result.shift.id, 'R-A5', '期望 20:00 應選最接近的末班（5 班制）');
   });
 
   test('指定期望時間不再需要期望到站時間欄位（expectTime 已移除）', () => {
@@ -185,7 +190,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 
   test('A-1 期望時間非硬性截止：期望早於首班到站仍排入首班並回報時間差', () => {
     const H = fresh();
-    // S3 到站：R-A1≈09:06；期望 08:00 早於任何班次 → 仍應排入最接近的 R-A1，不得退件
+    // S3 到站：R-A1＝08:00+3×12＝08:36；期望 08:00 早於任何班次 → 仍應排入最接近的 R-A1，不得退件
     const { app, result } = submit(H, { recvMode: 'exact', deliverTime: '08:00' });
     ok(result.ok, '不得因期望時間過早而失敗（無 late 退件）');
     eq(result.shift.id, 'R-A1', '應選到站時間差最小的 R-A1');
@@ -196,7 +201,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
   test('A-1 失敗原因只剩 toobig 與 full（無 late 原因碼）', () => {
     const H = fresh();
     const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
-    for (let i = 0; i < 8; i++) submit(H, { items: [big()], handleMin: 1 });
+    for (let i = 0; i < 14; i++) submit(H, { items: [big()], handleMin: 1 });
     const r1 = submit(H, { items: [big()], handleMin: 1, recvMode: 'exact', deliverTime: '08:00' }).result;
     ok(!r1.ok && r1.reason === 'full', '排滿後即使期望極早也應回 full 而非 late，實得 ' + r1.reason);
   });
@@ -233,6 +238,75 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const a2 = submit(H, { pickStation: 'S4', station: 'S8', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
     eq(a1.assignedShift, 'R-A1', '第一張排首班');
     ok(a2.assignedShift !== 'R-A1', '收貨站 S4 上貨額度不足 → 第二張應順延，實得 ' + a2.assignedShift);
+  });
+
+  test('班次主檔為每日 5 班（早到晚）', () => {
+    const H = fresh();
+    eq(H.DB.regionalShifts.length, 5, '應有 5 個班次');
+    const deps = H.DB.regionalShifts.map(s => s.depart);
+    eq(deps.join(','), '08:00,10:30,13:00,15:00,17:00', '班次時間應由早到晚');
+    for (let i = 1; i < deps.length; i++) {
+      ok(H.hhmmToMin(deps[i]) > H.hhmmToMin(deps[i - 1]), '班次須遞增');
+    }
+  });
+
+  test('日期：預設為今天；exact 可指定未來日期', () => {
+    const H = fresh(); fixNow(H); H.ModuleA.__fixed = true;
+    eq(submit(H).app.serviceDate, FIX_DATE, 'asap 應為今天');
+    const future = '2026-09-10';
+    eq(submit(H, { recvMode: 'exact', deliverTime: '14:00', serviceDate: future }).app.serviceDate, future,
+      'exact 應保存指定日期');
+  });
+
+  test('日期：已過的日期不可媒合 → reason=past', () => {
+    const H = fresh(); fixNow(H); H.ModuleA.__fixed = true;
+    const { app, result } = submit(H, { recvMode: 'exact', deliverTime: '14:00', serviceDate: '2026-09-01' });
+    ok(!result.ok, '過去日期應失敗');
+    eq(result.reason, 'past');
+    ok(/日期已過|早於今天/.test(result.msg), '訊息需說明日期已過');
+    eq(app.status, 'unscheduled');
+  });
+
+  test('今天過去的時間不可媒合：已出發班次不採計，只排之後的班次', () => {
+    const H = fresh(); fixNow(H, 11, 0); H.ModuleA.__fixed = true; // 現在 11:00
+    // S1 收貨、S3 送貨：R-A1 08:00、R-A2 10:30 抵 S1 時已過 → 應排 13:00 的 R-A3
+    const { app, result } = submit(H, { pickStation: 'S1', station: 'S3' });
+    ok(result.ok, '仍應媒合到之後的班次');
+    eq(result.shift.id, 'R-A3', '11:00 時 R-A1/R-A2 已過 → 應排 R-A3');
+    eq(app.serviceDate, FIX_DATE);
+  });
+
+  test('今天班次全數過後 → reason=past，提示改指定未來日期', () => {
+    const H = fresh(); fixNow(H, 23, 0); H.ModuleA.__fixed = true; // 現在 23:00，全部班次已過
+    const { app, result } = submit(H);
+    ok(!result.ok, '應媒合失敗');
+    eq(result.reason, 'past', '今日班次皆已過 → past');
+    ok(/未來日期/.test(result.msg), '訊息需建議改指定未來日期');
+    eq(app.status, 'unscheduled');
+  });
+
+  test('未來日期不受今日時間限制：深夜下單仍可排隔日全部班次', () => {
+    const H = fresh(); fixNow(H, 23, 0); H.ModuleA.__fixed = true;
+    const { result } = submit(H, { recvMode: 'exact', deliverTime: '09:00', serviceDate: '2026-09-03' });
+    ok(result.ok, '未來日期應可媒合');
+    eq(result.shift.id, 'R-A1', '期望 09:00 應選最接近的首班');
+  });
+
+  test('不同日期互不佔用同一班次的容量與站內額度', () => {
+    const H = fresh(); fixNow(H); H.ModuleA.__fixed = true;
+    const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
+    // 今天把 R-A1 佔到滿（同站區間、額度 1 分避免額度先擋）
+    const d1 = [];
+    for (let i = 0; i < 3; i++) d1.push(submit(H, { items: [big()], handleMin: 1 }).app);
+    ok(d1.some(a => a.assignedShift === 'R-A1'), '今天應有單佔用 R-A1');
+    // 未來日期同樣條件 → 應可再次排入 R-A1（容量獨立計算）
+    const fut = submit(H, { items: [big()], handleMin: 1, recvMode: 'exact', deliverTime: '08:30', serviceDate: '2026-09-20' }).app;
+    eq(fut.assignedShift, 'R-A1', '不同日期不應共用容量，未來日期仍可排 R-A1');
+    // 額度亦然：同站上貨 30 分，今天與未來各自計算
+    const q1 = submit(H, { pickStation: 'S4', station: 'S7', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
+    const q2 = submit(H, { pickStation: 'S4', station: 'S7', loadMin: 30, unloadMin: 5, handleMin: undefined,
+      recvMode: 'exact', deliverTime: '08:30', serviceDate: '2026-09-21' }).app;
+    eq(q1.assignedShift, 'R-A1'); eq(q2.assignedShift, 'R-A1', '不同日期額度獨立，皆可排首班');
   });
 
   test('接收人資訊（單位/姓名/電話/代理人）隨申請單保存', () => {

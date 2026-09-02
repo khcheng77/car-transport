@@ -3,12 +3,20 @@
    PLAN.md Phase 2 / Guardrails G10–G20
    固定 10 站、時間軸最近班次媒合、站內時間額度、順延
    容量採「站區間淨值」：收貨站上貨佔用 → 送貨站卸貨釋放（先卸後裝 3.4/3.5）
+   排班日期：serviceDate（exact 可選今天或未來日期；asap 即當天）；
+   同一班次的容量與站內額度僅與「同日期」的單互相競用；
+   當天已過的班次不可媒合（以現在時間為界，now() 可注入以利測試）
    ============================================================ */
 
 const ModuleA = {
   applications: [], // 申請單
   seq: 1,
   approveSeq: 1,    // 審核通過時間序（G16 排序用）
+
+  /* ---- 現在時間（可於測試注入固定值）與日期工具 ---- */
+  now() { return new Date(); },
+  todayStr() { const d = this.now(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; },
+  nowMin() { const d = this.now(); return d.getHours() * 60 + d.getMinutes(); },
 
   // 收貨時間模式 G19：exact=指定期望時間 / asap=越快越好
   // 區域內物流：不經主管核准、不需業務按鈕；送出後由 submit() 立即自動媒合
@@ -26,6 +34,7 @@ const ModuleA = {
       pickStation: data.pickStation || null, // 收貨站（起）站 id；未帶＝自路線起點載運（相容）
       pickupLoc: data.pickupLoc || '',  // 收貨地點顯示字串
       deliverTime: data.deliverTime || '', // 期望收貨時間 HH:MM（exact 模式僅用於挑班次，非硬性截止 4.1）
+      serviceDate: data.serviceDate || this.todayStr(), // 排班日期（exact 可指定今天或未來；asap＝當天）
       recipient: data.recipient || {},  // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
       items: data.items,
       recvMode: data.recvMode,       // 'exact'（依期望收貨時間挑最近班次）| 'asap'（越快越好）
@@ -85,9 +94,10 @@ const ModuleA = {
 
   /* 某班次於站序 s（駛離該站時）的車上淨負載：有效體積／重量／地板投影
      只累計「佔用區間涵蓋 s」的已排入單 → 卸貨後容量、重量、地板同步釋放（3.4/3.5） */
-  netLoadAt(shiftId, s) {
+  netLoadAt(shiftId, s, date) {
     return this.applications
-      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status))
+      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status)
+        && (date == null || a.serviceDate === date)) // 僅同日期的單互相競用容量
       .reduce((acc, a) => {
         const seg = this.segmentOf(a);
         if (s >= seg.from && s < seg.to) {
@@ -99,9 +109,10 @@ const ModuleA = {
   },
 
   /* 某班次於某站的時間額度已用量：卸貨（送貨站）與上貨（收貨站）的 handleMin 都計入該站佔用 */
-  quotaUsedAt(shiftId, stationId) {
+  quotaUsedAt(shiftId, stationId, date) {
     return this.applications
-      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status))
+      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status)
+        && (date == null || a.serviceDate === date)) // 僅同日期的單互相佔用站內額度
       .reduce((sum, a) => {
         const split = (a.loadMin || a.unloadMin) > 0;
         let t = 0;
@@ -114,10 +125,23 @@ const ModuleA = {
   /* 媒合迴圈（G10/G11/G12/G19）— 回傳 trace 與結果
      A-1：期望收貨時間只影響班次排序（|到站−期望| 最小優先，早晚都比），非硬性截止；
           失敗原因只分 toobig（空車都放不下）與 full（容量或站內額度皆滿）。
-     A-2：容量採站區間淨值——先卸後裝，體積/重量/地板到送貨站即釋放。 */
+     A-2：容量採站區間淨值——先卸後裝，體積/重量/地板到送貨站即釋放。
+     日期：僅同 serviceDate 的單互相競用容量與額度；當天已過的班次不可媒合。 */
   match(app) {
     const trace = [];
     const station = DB.stations.find(s => s.id === app.station); // 送貨站（迄）
+
+    // --- 排班日期與「現在」---
+    const today = this.todayStr();
+    const date = app.serviceDate || today;
+    if (date < today) {
+      trace.push(`<span class="no">✗ 排班日期 ${date} 已過（今天 ${today}）</span>`);
+      return { ok: false, reason: 'past', trace, msg: `日期已過：${date} 早於今天，請選擇今天或未來日期。` };
+    }
+    const isToday = (date === today);
+    const cutoff = isToday ? this.nowMin() : -1; // 未來日期不受今日時間限制
+    const pickOrder = this.segmentOf(app).from;  // 可上貨時點＝車輛抵達收貨站
+    trace.push(`<span class="dim">排班日期：${date}${isToday ? `（今天，現在 ${minToHHMM(cutoff)}；已過班次不採計）` : '（未來日期，全日班次皆可）'}</span>`);
     const vehiclePool = {}; // 各班次車輛容量
     DB.regionalShifts.forEach(sh => {
       vehiclePool[sh.id] = DB.vehicles.find(v => v.id === sh.vehicle);
@@ -147,11 +171,20 @@ const ModuleA = {
 
     // 逐班次嘗試（時間軸最近的下一班 G10）
     let fitsSomeEmpty = false; // 是否存在「空車放得下」的班次（用來區分太大 vs 今天已滿）
+    let anyUsable = false;     // 是否存在「時間上還來得及」的班次（用來區分已過 vs 已滿）
     for (let i = 0; i < shifts.length; i++) {
       const sh = shifts[i];
       const veh = vehiclePool[sh.id];
       const arr = this.shiftArrivalAtStation(sh, station.order);
+      const board = this.shiftArrivalAtStation(sh, pickOrder); // 車輛抵達收貨站＝可上貨時點
       trace.push(`\n▶ 嘗試班次 <span class="hl">${sh.label}</span>（車 ${veh.id}）到站約 ${minToHHMM(arr)}`);
+
+      // --- 今日已過的班次不可媒合（車輛已離開收貨站）---
+      if (board <= cutoff) {
+        trace.push(`  <span class="no">✗ 本班車 ${minToHHMM(board)} 已離開收貨站（現在 ${minToHHMM(cutoff)}）→ 今日不可再排</span>`);
+        continue;
+      }
+      anyUsable = true;
 
       // --- 尺寸/容量可行性：空車是否根本放不下（與其他訂單無關 → 判斷「太大」）---
       const emptyRes = checkLoad(app.items, veh, { volume: 0, weight: 0 });
@@ -161,13 +194,13 @@ const ModuleA = {
       // --- 站內時間額度（G16）：上貨站與卸貨站各自累計（卸與裝都計入該站佔用）---
       const split = (app.loadMin || app.unloadMin) > 0;
       const dropDemand = split ? app.unloadMin : app.handleMin;
-      const dropUsed = this.quotaUsedAt(sh.id, app.station);
+      const dropUsed = this.quotaUsedAt(sh.id, app.station, date);
       let quotaFail = null;
       if (dropDemand > this.STATION_QUOTA - dropUsed) {
         quotaFail = `送貨站 ${station.name} 額度不足：已用 ${dropUsed} 分、剩 ${this.STATION_QUOTA - dropUsed} 分 < 本單卸貨 ${dropDemand} 分`;
       }
       if (!quotaFail && app.pickStation && (app.loadMin || 0) > 0) {
-        const pickUsed = this.quotaUsedAt(sh.id, app.pickStation);
+        const pickUsed = this.quotaUsedAt(sh.id, app.pickStation, date);
         if (app.loadMin > this.STATION_QUOTA - pickUsed) {
           const ps = DB.stations.find(s => s.id === app.pickStation);
           quotaFail = `收貨站 ${ps ? ps.name : app.pickStation} 額度不足：已用 ${pickUsed} 分、剩 ${this.STATION_QUOTA - pickUsed} 分 < 本單上貨 ${app.loadMin} 分`;
@@ -182,7 +215,7 @@ const ModuleA = {
       // 貨物佔用區間 [seg.from, seg.to) 內每一站，車上淨負載（僅涵蓋該站的單）＋本單須通過 checkLoad
       let res = null, failStation = null, peak = { volume: -1 };
       for (let s = seg.from; s < seg.to; s++) {
-        const base = this.netLoadAt(sh.id, s);
+        const base = this.netLoadAt(sh.id, s, date);
         const r = checkLoad(app.items, veh, base);
         if (base.volume > peak.volume) { peak = base; peak.at = s; res = r; }
         if (!r.ok) { res = r; failStation = s; break; }
@@ -209,7 +242,12 @@ const ModuleA = {
       trace.push(`  <span class="no">✗ 裝不下${fs ? `（於 ${fs.name} 前區段容量不足）` : ''} → pass 下一班（G11）</span>`);
     }
 
-    // 全部班次皆無法排入：區分「太大」與「今天已滿」（G12 不留候補、不排隔日）
+    // 全部班次皆無法排入（G12 不留候補、不排隔日）
+    if (!anyUsable) {
+      trace.push(`\n<span class="no">✗ 今日班次皆已出發（現在 ${minToHHMM(cutoff)}）</span>`);
+      return { ok: false, reason: 'past', trace,
+        msg: `今日班次已過：目前時間 ${minToHHMM(cutoff)}，今天各班次皆已離開收貨站，請改指定未來日期。` };
+    }
     if (!fitsSomeEmpty) {
       trace.push(`\n<span class="no">✗ 任何一班車空車都放不下 → 貨物太大</span>`);
       return { ok: false, reason: 'toobig', trace, msg: '貨物太大：超過任何一班車輛的尺寸或容量，無法承運。' };
