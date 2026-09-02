@@ -30,6 +30,22 @@ const ModuleB = {
   /* B-2：方向由起迄推導（非申請人勾選）——送貨據點較南（order 較小）＝南下貨、較北＝北上貨 */
   isSouthbound(o) { return this.siteById(o.dropSite).order < this.siteById(o.pickSite).order; },
 
+  /* ---- 可服務範圍：基地（homeSite）及其以南 ----
+     現行車次模型為「自基地南下、折返北上回基地」，故基地以北據點不在任何一趟路線上。
+     基地若設於中段（如 D9 龍潭），北側據點（D10）的排班方式為 TODO B-2「待業務確認」項目，
+     在政策確定前一律不排入，並於 trace 明確說明，避免靜默載走卻無法卸貨。 */
+  isServable(o) {
+    const home = this.homeOrder();
+    return this.siteById(o.pickSite).order <= home && this.siteById(o.dropSite).order <= home;
+  },
+  unservableReason(o) {
+    const home = this.siteById(DB.homeSite);
+    const bad = [];
+    if (this.siteById(o.pickSite).order > home.order) bad.push(`收貨據點 ${this.siteById(o.pickSite).name}`);
+    if (this.siteById(o.dropSite).order > home.order) bad.push(`送貨據點 ${this.siteById(o.dropSite).name}`);
+    return `${bad.join('、')} 位於基地 ${home.name} 以北，現行「自基地南下折返」車次模型未涵蓋（北側排班方式待業務確認）`;
+  },
+
   // site＝收貨據點（起）、destSite＝送貨據點（迄）；申請端只負責建立，狀態為「待審核」
   // 幹線貨物多筆項目，每筆填獨立尺寸與重量（品名/長寬高/類別/數量/單件重），比照模組 A（G13）
   // 整張表單為裝載最小單位（G34）；相容：若帶 volume 而無尺寸則以整批貨量計（demo/測試）
@@ -129,8 +145,10 @@ const ModuleB = {
     const veh = DB.vehicles.find(v => v.id === vehicleId);
     const trace = [];
     const origin = DB.homeSite; // 出發據點走主檔（B-1）
-    const pending = this.orders
-      .filter(o => o.status === 'approved' && this.isSouthbound(o))
+    const all = this.orders.filter(o => o.status === 'approved' && this.isSouthbound(o));
+    const unservable = all.filter(o => !this.isServable(o));
+    unservable.forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入：${this.unservableReason(o)}</span>`));
+    const pending = all.filter(o => this.isServable(o))
       .sort((a, b) => a.approvedAt - b.approvedAt); // 核准時間排序（G34）
 
     // ---- 直達分流（G38/G39）----
@@ -307,8 +325,11 @@ const ModuleB = {
     startNet = startNet || 0;
     const path = this.returnPath(turnaroundId);
     const endpoint = DB.homeSite; // 回程固定回出發據點（G36/B-1）
-    const returnOrders = this.orders
-      .filter(o => o.status === 'approved' && !this.isSouthbound(o)) // 北上貨（B-2 由起迄推導）
+    const allReturn = this.orders
+      .filter(o => o.status === 'approved' && !this.isSouthbound(o)); // 北上貨（B-2 由起迄推導）
+    allReturn.filter(o => !this.isServable(o))
+      .forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入：${this.unservableReason(o)}</span>`));
+    const returnOrders = allReturn.filter(o => this.isServable(o))
       .sort((a, b) => a.approvedAt - b.approvedAt);
 
     // 矩陣第 5 列：回程・原本就是直達車 → 純容量加總、不停靠（3.3）
@@ -408,6 +429,19 @@ const ModuleB = {
         + (stopLoaded ? `<span class="ok">收 ${stopLoaded.toFixed(0)}L</span> ` : (unloaded ? '' : '<span class="dim">無回程貨</span> '))
         + `→ 淨值 ${net.toFixed(0)}L / ${totalTime}分`);
     }
+    // 抵達終點（出發據點）：卸下以基地為送貨據點者（回程路徑不含基地本身，故於此結算）
+    totalTime += Math.abs(this.homeOrder() - prevOrder) * DB.legMinutes;
+    const homeEta = minToHHMM(8 * 60 + totalTime);
+    let homeUnloaded = 0;
+    for (let i = onboard.length - 1; i >= 0; i--) {
+      const o = onboard[i];
+      if (o.dropSite === endpoint) {
+        const ev = this.effVolume(o);
+        net -= ev; wt -= o.weight; totalTime += (o.unloadMin || 0);
+        homeUnloaded += ev; onboard.splice(i, 1); o.dispatchDropTime = homeEta;
+      }
+    }
+    if (homeUnloaded) trace.push(`  ${this.siteById(endpoint).name}（終點）：<span class="b-amber">卸 ${homeUnloaded.toFixed(0)}L</span> → 淨值 ${net.toFixed(0)}L / ${totalTime}分`);
     trace.push(`  <span class="hl">回程終點＝${this.siteById(endpoint).name}（G36），峰值淨值 ${peakVol.toFixed(0)}L</span>`);
     const reason3 = '回程無撞期直達單 → 動態淨值沿路收送、到迄點卸貨（G33/G40）';
     this.recordVehicleStatus(veh.id, 3, reason3, endpoint, '出發據點'); // B-6

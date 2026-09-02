@@ -357,7 +357,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     [rd, rn].forEach(o => H.ModuleB.approve(o));
     const r = H.ModuleB.dispatchReturn('V-T02', 'D3', false, 500);
     eq(r.matrixRow, 4, '應為矩陣第 4 列（回程・被迫鎖定直達）');
-    eq(r.endpoint, 'D10', '回程終點仍為出發據點（G41/G36）');
+    eq(r.endpoint, H.DB.homeSite, '回程終點仍為出發據點（G41/G36）');
     ok(r.carried.some(o => o.id === rd.id), '撞期直達回程單應載入');
     ok(r.deferred.some(o => o.id === rn.id), '被排擠非直達單應自動順延（G42）');
   });
@@ -374,7 +374,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   test('G41(3.3) 去程原為直達車的回程 → 矩陣第 5 列、純不停靠', () => {
     const H = fresh();
     const r = H.ModuleB.dispatchReturn('V-T01', 'D2', true, 1000);
-    eq(r.matrixRow, 5); eq(r.endpoint, 'D10'); ok(r.locked, '應鎖定'); eq(r.carried.length, 0);
+    eq(r.matrixRow, 5); eq(r.endpoint, H.DB.homeSite); ok(r.locked, '應鎖定'); eq(r.carried.length, 0);
   });
 
   test('派車後每張已載單標記「幾點來收」（車號＋來收時間，顯示給申請人）', () => {
@@ -451,6 +451,46 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     eq(rn.dropSite, 'D8', '未指定迄點應預設回主檔 homeSite');
     H.ModuleB.approve(rn);
     eq(H.ModuleB.dispatchReturn('V-T01', 'D3', false, 0).endpoint, 'D8', '回程終點＝homeSite');
+  });
+
+  test('B-1 基地預設為 D9 龍潭（中段），南下路線不含基地以北據點', () => {
+    const H = fresh();
+    eq(H.DB.homeSite, 'D9', '主檔基地應為龍潭 D9');
+    const seq = H.ModuleB.southboundFrom(H.DB.homeSite).map(s => s.id);
+    ok(!seq.includes('D10'), '南下序列不應含基地以北的 D10');
+    eq(seq[0], 'D8', '自 D9 南下第一站為 D8');
+  });
+
+  test('B-1 基地以北據點不靜默載走：明確不排入並說明原因（待業務確認）', () => {
+    const H = fresh();
+    // 送到 D10（基地 D9 以北）
+    const north = H.ModuleB.createOrder({ applicant: 'A', site: 'D3', destSite: 'D10', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    H.ModuleB.approve(north);
+    ok(!H.ModuleB.isServable(north), '涉及基地以北據點應判為不可服務');
+    ok(/以北/.test(H.ModuleB.unservableReason(north)), '原因需說明位於基地以北');
+    const r = H.ModuleB.dispatchReturn('V-T02', 'D3', false, 0);
+    ok(!r.carried.includes(north), '不得載走無法卸貨的北側單');
+    eq(north.status, 'approved', '應留在待派車而非 loaded');
+    ok(r.trace.some(t => t.includes(north.id)), 'trace 需明確說明未排入原因');
+    // 自 D10 出發南下者亦同
+    const fromNorth = H.ModuleB.createOrder({ applicant: 'B', site: 'D10', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    H.ModuleB.approve(fromNorth);
+    const r2 = H.ModuleB.dispatch('V-T01', 'greedy');
+    ok(!r2.carried.includes(fromNorth), '自基地以北出發者不排入');
+    ok(r2.trace.some(t => t.includes(fromNorth.id)), 'trace 需說明原因');
+  });
+
+  test('B-1 回程於終點（基地）卸貨：送回基地的單有卸貨時間', () => {
+    const H = fresh();
+    const back = H.ModuleB.createOrder({ applicant: 'A', site: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 }); // 未指定迄點 → 預設回基地
+    eq(back.dropSite, H.DB.homeSite, '預設迄點＝基地');
+    H.ModuleB.approve(back);
+    const r = H.ModuleB.dispatchReturn('V-T02', 'D3', false, 0);
+    ok(r.carried.includes(back), '應載回基地');
+    ok(/^\d{2}:\d{2}$/.test(back.dispatchDropTime || ''), '抵達基地應記錄卸貨時間，實得 ' + back.dispatchDropTime);
   });
 
   test('B-2 狀態機無 accepted：loaded 直接可 delivered，且無 acceptDelivery', () => {

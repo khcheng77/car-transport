@@ -905,10 +905,10 @@ function renderBApplyList(p) {
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
-    // 回程北上：收貨南部據點 → 送回基地 D10
-    [['D2', 'D10', true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }], { unit: '台北總部收發', name: '謝孟儒', phone: '02-27001234#500', agentName: '王品瑄', agentPhone: '0977-456-789' }],
-     ['D3', 'D10', false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }], { unit: '研發部', name: '吳承恩', phone: '02-27005678#412' }],
-     ['D5', 'D10', false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }], { unit: '中央倉', name: '林曉琪', phone: '02-27009999#601', agentName: '陳柏宇', agentPhone: '0988-567-890' }]
+    // 回程北上：收貨南部據點 → 送回基地（主檔 homeSite）
+    [['D2', DB.homeSite, true, 30, [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 12, category: 'BOX', weight: 15 }], { unit: '台北總部收發', name: '謝孟儒', phone: '02-27001234#500', agentName: '王品瑄', agentPhone: '0977-456-789' }],
+     ['D3', DB.homeSite, false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }], { unit: '研發部', name: '吳承恩', phone: '02-27005678#412' }],
+     ['D5', DB.homeSite, false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }], { unit: '中央倉', name: '林曉琪', phone: '02-27009999#601', agentName: '陳柏宇', agentPhone: '0988-567-890' }]
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
       ModuleB.createOrder({ applicant: '業務部-周雅婷', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
@@ -1023,7 +1023,8 @@ function renderBApplyNew(p) {
     <div class="card">
       <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
       <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
-      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。</div>
+      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。<br>
+        目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；現行車次模型為「自基地南下、折返北上回基地」，<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
       <div class="row">
         <div class="field"><label id="ba-site-label">收貨據點（起）</label><select id="ba-site">${siteOpts}</select></div>
         ${bldgFieldHtml('收貨建物', 'ba-pickbldg', 'ba-pickother')}
@@ -1332,7 +1333,7 @@ function renderBr_approved() {
   const rows = ModuleB.orders.filter(o => o.status === 'approved');
   $('#br-approved').innerHTML = rows.length === 0 ? `<div class="muted">尚無已核准待派車託運單。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>裝卸</th></tr></thead><tbody>
-      ${rows.map(o => `<tr><td>${o.id}</td>
+      ${rows.map(o => `<tr><td>${o.id}${ModuleB.isServable(o) ? '' : ' <span class="badge b-red" title="' + ModuleB.unservableReason(o) + '">基地以北・待確認</span>'}</td>
         <td>${ModuleB.isSouthbound(o) ? '<span class="badge b-navy">南下</span>' : '<span class="badge b-gray">北上</span>'}</td>
         <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
