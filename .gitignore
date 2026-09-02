@@ -1,3 +1,8 @@
 node_modules/
 *.log
 .DS_Store
+
+# 業務單位實際資料（路程表／最短天數表等）不進版控
+# 導入方式見 docs/SPEC-DATA.md 第 6 節
+js/config.local.js
+docs/*.local.md

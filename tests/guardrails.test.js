@@ -615,14 +615,17 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
   test('2.9 行駛時間改查據點相互路程表（非單一常數×段數）', () => {
     const H = fresh();
     ok(H.DB.legMinutes === undefined, '不應再有單一常數 legMinutes');
-    ok(H.DB.siteTravel && Object.keys(H.DB.siteTravel).length > 50, '應有完整查表矩陣');
-    eq(H.ModuleB.travelMin('D9', 'D9'), 0, '同點為 0');
-    eq(H.ModuleB.travelMin('D9', 'D8'), H.DB.siteTravel['D9|D8'], '查表取值');
-    eq(H.ModuleB.travelMin('D8', 'D9'), H.ModuleB.travelMin('D9', 'D8'), '對稱');
+    ok(H.DB.siteTravel.big && H.DB.siteTravel.small, '路程表應分大車／小車兩組（實表結構）');
+    ok(Object.keys(H.DB.siteTravel.small).length > 50, '應有完整查表矩陣');
+    eq(H.ModuleB.travelMin('D9', 'D9', 'small'), 0, '同點為 0');
+    eq(H.ModuleB.travelMin('D9', 'D8', 'small'), H.DB.siteTravel.small['D9|D8'], '查表取值');
+    eq(H.ModuleB.travelMin('D8', 'D9', 'small'), H.ModuleB.travelMin('D9', 'D8', 'small'), '同車型內對稱');
     // 非等距：D9→D8 與 D8→D7 不應相同（若為常數×段數則會相同）
-    ok(H.ModuleB.travelMin('D9', 'D8') !== H.ModuleB.travelMin('D8', 'D7'), '各段距離不等，非固定常數');
+    ok(H.ModuleB.travelMin('D9', 'D8', 'small') !== H.ModuleB.travelMin('D8', 'D7', 'small'), '各段距離不等，非固定常數');
+    // 大車較小車慢（實表亦為此關係）
+    ok(H.ModuleB.travelMin('D9', 'D1', 'big') > H.ModuleB.travelMin('D9', 'D1', 'small'), '同路段大車耗時較長');
     // 返回休息地取最近會館
-    ok(H.ModuleB.returnToRestMin('D1') < H.ModuleB.returnToRestMin('D6'), '屏東較接近休息會館');
+    ok(H.ModuleB.returnToRestMin('D1', 'small') < H.ModuleB.returnToRestMin('D6', 'small'), '屏東較接近休息會館');
   });
 
   test('2.12 司機休息用餐：依純累積行駛觸發，計入在勤但不推進行駛時數線', () => {
@@ -642,6 +645,24 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     c.rollover('D6');
     eq(c.day, 2); eq(c.driveMin, 0, '每日出勤行駛時數線重新歸零');
     eq(c.breaksTaken.length, 0, '休息紀錄亦歸零');
+  });
+
+  test('限制條件 2：指定時刻後不前往受限據點（lateRestricted）', () => {
+    const H = fresh();
+    const cut = H.hhmmToMin(H.DB.noArrivalAfter);
+    // D1 於示範資料標記為受限地區
+    ok(H.DB.sites.find(s => s.id === 'D1').lateRestricted, 'D1 應標記為受限地區');
+    ok(!H.ModuleB.lateArrivalBlocked('D1', cut - 30), '1700 前抵達可前往');
+    ok(H.ModuleB.lateArrivalBlocked('D1', cut + 30), '1700 後抵達不得前往');
+    ok(!H.ModuleB.lateArrivalBlocked('D6', cut + 120), '未標記之據點不受此限');
+  });
+
+  test('限制條件 3：受限據點回程媒合裝貨須於 returnLoadBy 前完成', () => {
+    const H = fresh();
+    const by = H.hhmmToMin(H.DB.sites.find(s => s.id === 'D1').returnLoadBy);
+    ok(H.ModuleB.returnLoadDeadlineOk('D1', by - 30), '1400 前完成裝貨可媒合');
+    ok(!H.ModuleB.returnLoadDeadlineOk('D1', by + 30), '晚於 1400 完成裝貨不得媒合');
+    ok(H.ModuleB.returnLoadDeadlineOk('D6', by + 300), '未設限之據點不受此限');
   });
 
   test('2.14 媒合截止：派車日前兩天 12:00，逾時自動排入下一可媒合車次', () => {
@@ -883,7 +904,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     const atHome = H.DB.vehicles.find(v => v.id === 'V-B01');   // currentSite D10 ＝出發地
     const away = H.DB.vehicles.find(v => v.id === 'V-B03');     // currentSite D6
     eq(H.ModuleC.deadheadMin(atHome, a), 0, '同據點空駛 0');
-    eq(H.ModuleC.deadheadMin(away, a), H.DB.siteTravel['D6|D10'], 'D6→D10 查同一張路程表（2.9）');
+    eq(H.ModuleC.deadheadMin(away, a), H.DB.siteTravel.small['D6|D10'], 'D6→D10 查同一張路程表（2.9 小車列）');
   });
 
   test('C-2 歸屬據點 homeSite 與當前位置分離；行程完成後回歸屬據點', () => {

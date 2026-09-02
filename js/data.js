@@ -41,7 +41,9 @@ const DB = {
   /* ---- 南北幹線 10 據點（G30）南→北一直線固定順序 ---- */
   // 據點內建物清單（G31：系統只給清單，順序由司機自行決定）示意
   sites: [
-    { id: 'D1', name: '屏東據點', order: 1,  buildings: ['A 棟倉庫', '月台區'] },
+    // lateRestricted：1700 後不前往；returnLoadBy：回程媒合裝貨須於此時間前完成
+    { id: 'D1', name: '屏東據點', order: 1,  buildings: ['A 棟倉庫', '月台區'],
+      lateRestricted: true, returnLoadBy: '14:00' },
     { id: 'D2', name: '高雄左營', order: 2,  buildings: ['物流中心', '冷鏈倉'] },
     { id: 'D3', name: '台南據點', order: 3,  buildings: ['主倉', '南棟月台'] },
     { id: 'D4', name: '嘉義據點', order: 4,  buildings: ['收發室', '倉儲區'] },
@@ -54,20 +56,25 @@ const DB = {
   ],
 
   /* ---- 2.9 據點相互路程表（分鐘）----
-     業務單位提供「10 據點相互路程表」，含龍潭/屏東/高雄三處休息會館位置。
-     下方 marks 為各節點南北位置（示意分鐘刻度），啟動時展開為完整查表矩陣 siteTravel；
-     實際數值到位後直接替換 siteTravel（或改寫 marks），程式一律走查表、不再用單一常數。
-     ★ 示意值，待業務提供實表（Q1/Q2）。 */
-  siteTravelMarks: {
-    D1: 0, D2: 45, D3: 100, D4: 145, D5: 180, D6: 235, D7: 300, D8: 345, D9: 395, D10: 445,
+     實表為「單一矩陣同時承載兩種車型」：對角線右上＝大車、左下＝小車，同車型內對稱。
+     本檔採同一結構，但**數值為依實表特徵產生之虛構測試資料**（規則見 docs/SPEC-DATA.md）：
+       ① 最小計算單位 30 分鐘；② 路程具次可加性（長程 < 各段相加）；
+       ③ 大車＝小車＋30 分（小車 ≤ 一個計算單位之短程則相同）。
+     實表到位後直接以真實矩陣覆寫 siteTravel 即可，無須改動任何演算法。 */
+  // 各節點於南北主軸之位置（小時，南→北遞增）；僅用於產生測試矩陣
+  siteTravelPos: {
+    D1: 0, D2: 0.5, D3: 1.25, D4: 2.0, D5: 2.5, D6: 3.25, D7: 4.3, D8: 5.4, D9: 5.9, D10: 6.7,
   },
-  /* 休息會館（2.13「返回休息地」用）：龍潭／屏東／高雄 */
+  /* 休息會館（2.13「返回休息地」用）：南、中、北各一 */
   restHouses: [
-    { id: 'RH-LT', name: '龍潭休息會館', mark: 395 },
-    { id: 'RH-PT', name: '屏東休息會館', mark: 5 },
-    { id: 'RH-KH', name: '高雄休息會館', mark: 50 },
+    { id: 'RH-S', name: '南區休息會館', pos: 0.15 },
+    { id: 'RH-M', name: '中區休息會館', pos: 0.6 },
+    { id: 'RH-N', name: '北區休息會館', pos: 6.0 },
   ],
-  siteTravel: {}, // 由 marks 展開（見檔尾 buildSiteTravel）
+  siteTravel: { big: {}, small: {} }, // 由 siteTravelPos／restHouses 展開（見檔尾 buildSiteTravel）
+  travelUnitMin: 30,        // 最小計算單位（分）
+  travelConcavity: 0.04,    // 次可加性係數：每小時折減 4%，折減上限對應 5 小時
+  bigExtraMin: 30,          // 大車較小車多耗之時間
 
   /* ---- 2.12 司機休息與用餐（依「純累積行駛時間」觸發，共用不歸零時數線，每日歸零）---- */
   driverBreaks: [
@@ -91,9 +98,14 @@ const DB = {
   closeMin: 20,             // 收工後緩衝：車輛檢整 ★示意，待業務提供（Q2）；「返回休息地」另查路程表
   maxTripDays: 3,           // 目前已知最大出勤天數（跨夜則當日時數線歸零）
 
-  /* ---- 2.14 媒合截止：派車日前兩天中午 12:00 ---- */
+  /* ---- 限制條件（業務單位公式頁；詳 docs/SPEC-DATA.md 第 1 節）---- */
+  // 1. 出車前 2 日 1200 時停止媒合
   matchCutoffDaysBefore: 2,
   matchCutoffTime: '12:00',
+  // 2. 正常狀況：每日 1700 後不前往受限據點（身分由據點旗標 lateRestricted 決定）
+  noArrivalAfter: '17:00',
+  // 3. 受限據點之回程媒合，裝貨須於該點 returnLoadBy 前完成
+  //    測試資料以最南端據點 D1 代表一個受限據點。
   /* ---- 回程全域直達鎖定：撞期判定時間窗寬（分，示意；窗寬待業務確認 B-5）---- */
   directLockWindowMin: 240,
 
@@ -183,11 +195,19 @@ const DB = {
 /* 展開 2.9 據點相互路程表：由南北位置刻度產生完整查表矩陣（含休息會館）
    實際數值到位後可直接改寫 DB.siteTravel，程式一律走查表 */
 (function buildSiteTravel() {
-  const marks = Object.assign({}, DB.siteTravelMarks);
-  DB.restHouses.forEach(r => { marks[r.id] = r.mark; });
-  const ids = Object.keys(marks);
+  const pos = Object.assign({}, DB.siteTravelPos);
+  DB.restHouses.forEach(r => { pos[r.id] = r.pos; });
+  const U = DB.travelUnitMin;
+  const roundUnit = m => Math.round(m / U) * U;
+  const ids = Object.keys(pos);
   ids.forEach(a => ids.forEach(b => {
-    DB.siteTravel[a + '|' + b] = Math.abs(marks[a] - marks[b]);
+    const key = a + '|' + b;
+    if (a === b) { DB.siteTravel.small[key] = 0; DB.siteTravel.big[key] = 0; return; }
+    const raw = Math.abs(pos[a] - pos[b]);                          // naive 相加距離（小時）
+    const adj = raw * (1 - DB.travelConcavity * Math.min(raw, 5));  // 次可加性折減
+    const small = Math.max(U, roundUnit(adj * 60));                 // 相異節點至少一個計算單位
+    DB.siteTravel.small[key] = small;
+    DB.siteTravel.big[key] = small <= U ? small : small + DB.bigExtraMin;
   }));
 })();
 

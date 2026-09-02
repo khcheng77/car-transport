@@ -93,7 +93,8 @@ const ModuleC = {
   deadheadMin(resource, app) {
     const originSite = DB.bizOriginSite[app.origin];
     if (!originSite || !resource.currentSite) return 0;
-    const t = DB.siteTravel[resource.currentSite + '|' + originSite];
+    // 商務車無大小車之分，一律取小車路程（2.9 分車型表）
+    const t = DB.siteTravel.small[resource.currentSite + '|' + originSite];
     return t != null ? t : 0;
   },
 

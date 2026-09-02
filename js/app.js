@@ -2043,32 +2043,13 @@ RENDER.master = function () {
           <td>${d.pool === 'LOGI' ? '物流' : '商務'}</td><td>${d.homeSite}</td>
           <td>${d.currentSite}${d.currentSite !== d.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td></tr>`).join('')}
         </tbody></table></div></div>
-      <div class="card"><div class="card-title">幹線時間參數（2.9 / 2.12 / 2.13 / 2.14）<span class="g-tag">示意</span></div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>項目</th><th>值</th><th>依據</th></tr></thead><tbody>
-          <tr><td>每日在勤上限</td><td><b>${(DB.dailyDutyMin / 60).toFixed(1)} 小時</b>（${DB.dailyDutyMin} 分）</td><td>2.13 含待勤/前後緩衝/裝卸/行駛/休息用餐</td></tr>
-          <tr><td>排班基準上班時間</td><td>${DB.shiftStartDefault}</td><td>2.14 表定（實際到班 07:30–08:30 屬事後例外）</td></tr>
-          <tr><td>出勤前緩衝</td><td>${DB.prepMin} 分 ★</td><td>2.13 車輛檢查＋前往報到（待業務 Q2）</td></tr>
-          <tr><td>收工後緩衝</td><td>${DB.closeMin} 分 ★＋返回休息地（查表）</td><td>2.13（待業務 Q2）</td></tr>
-          <tr><td>媒合截止</td><td>派車日前 ${DB.matchCutoffDaysBefore} 天 ${DB.matchCutoffTime}</td><td>2.14 逾時自動順延下一車次</td></tr>
-          <tr><td>行駛時間</td><td>查「據點相互路程表」★</td><td>2.9（不再用單一常數×段數）</td></tr>
-        </tbody></table></div>
-        <div class="card-title" style="margin-top:14px;">司機休息與用餐（2.12）</div>
-        <div class="card-desc">依<b>純累積行駛時間</b>觸發（不含休息/用餐/裝卸）；五門檻共用不歸零時數線，<b>每日出勤重新歸零</b>；耗時計入 12.5 小時上限。</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>累積行駛門檻</th><th>觸發項目</th><th>耗時</th></tr></thead><tbody>
-          ${DB.driverBreaks.map(b => `<tr><td>超過 ${(b.afterDriveMin / 60)} 小時</td><td>${b.kind}</td><td>${b.costMin} 分</td></tr>`).join('')}
-        </tbody></table></div>
-        <div class="card-title" style="margin-top:14px;">休息會館（返回休息地計算用）</div>
-        <div class="muted">${DB.restHouses.map(r => r.name).join('、')}</div>
+      <div class="card"><div class="card-title">幹線時間參數與對照表</div>
+        <div class="card-desc">路程表、休息用餐門檻、最短天數表與限制條件均存放於主檔／設定檔，
+        依業務單位指示<b>不於畫面顯示</b>；資料結構與測試資料產生規則見 <code>docs/SPEC-DATA.md</code>。</div>
       </div>
       <div class="card"><div class="card-title">南北據點順序（G30）</div>
         <div class="route">${DB.sites.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">序 ${s.order}</div></div>`).join('')}</div></div>
-      <div class="card"><div class="card-title">最短天數表（3.1 · 車型 × 目的地）<span class="g-tag">參考值</span></div>
-        <div class="card-desc">停靠與否<b>不影響天數</b>；此表為寬鬆估計值，<b>僅供排班參考、不參與運算</b>，也不限制 12.5 小時精算結果。★數值待業務提供（Q1）。</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>目的地</th><th>大車</th><th>小車</th></tr></thead><tbody>
-        ${DB.sites.filter(s => DB.minTripDays.big[s.id] || DB.minTripDays.small[s.id]).map(s =>
-          `<tr><td>${s.name}</td><td>${DB.minTripDays.big[s.id] || '—'} 天</td><td>${DB.minTripDays.small[s.id] || '—'} 天</td></tr>`).join('')}
-        </tbody></table></div></div>
-    </div>`;
+          </div>`;
 };
 
 /* ============================================================
