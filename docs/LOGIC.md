@@ -198,6 +198,96 @@ submitted ──(approve)──▶ approved ──(批次媒合)──▶ matche
 
 ---
 
+## 四、流程圖（狀態機＋媒合判斷分支）
+
+> 以下為 GitHub 可直接渲染的 Mermaid 圖；判斷條件與程式一致。
+
+### A 區域內物流：送出即自動媒合
+
+```mermaid
+flowchart TD
+  A0["使用者填單送出"] --> A1[["自動媒合 match"]]
+  A1 --> A2{"排序班次<br/>asap：最早出發 / exact：最接近交貨時間"}
+  A2 --> A3{"逐班次嘗試"}
+  A3 --> C1{"交貨時間門檻<br/>到站 ≤ 交貨時間？"}
+  C1 -- 否，跳過此班 --> A3
+  C1 -- 是 --> C2{"站內時間額度<br/>同站累計 + 本單 ≤ 40 分？"}
+  C2 -- 否，順延下一班 --> A3
+  C2 -- 是 --> C3{"裝載 checkLoad<br/>放得下？"}
+  C3 -- 是 --> M["matched 已排班<br/>寫入班次 / 到站時間"]
+  C3 -- 否，pass 下一班 --> A3
+  A3 -- 全部班次失敗 --> F{"判斷失敗原因"}
+  F -- 空車都放不下 --> Ft["unscheduled：toobig 太大"]
+  F -- 無班次可準時 --> Fl["unscheduled：late 交貨過早"]
+  F -- 容量或額度皆滿 --> Fu["unscheduled：full 今天已滿"]
+  M --> D["接收人/調度確認 → delivered"]
+  Ft --> R["改貨物後 rematch"]
+  Fl --> R
+  Fu --> R
+  R --> A1
+```
+
+### B 南北幹線：准駁 → 派車
+
+```mermaid
+flowchart LR
+  s1["submitted"] -->|approve| s2["approved"]
+  s1 -->|reject| sr["rejected（保留紀錄）"]
+  s2 -->|派車 dispatch| s3["loaded"]
+  s3 -->|接收人接受| s4["accepted"]
+  s4 -->|確認收到| s5["delivered"]
+```
+
+```mermaid
+flowchart TD
+  P["approved + outbound 依核准序"] --> M{"直達？"}
+  M -- 直達 --> D1["鎖定單一目的地<br/>純容量加總"]
+  D1 --> DC{"directEta ≤ 交貨時間<br/>且 容量/重量足？"}
+  DC -- 是 --> DL["loaded"]
+  DC -- 否 --> DP["留下一班直達車"]
+  M -- 非直達 --> G["沿線南下逐據點（動態淨值）"]
+  G --> U["① 先卸：dropSite = 本站 → 釋出容量"]
+  U --> L["② 再裝：pickSite = 本站，整張為最小單位"]
+  L --> LC{"估算送達 ≤ 交貨時間<br/>且 淨值/重量/時間 ≤ 上限？"}
+  LC -- 是 --> LL["loaded 記來收時間"]
+  LC -- 否 --> LP["整張留下一班"]
+  LL --> G
+  LP --> G
+  G --> E["終點 = 已載單最南 dropSite"]
+```
+
+### C 差旅共乘：准駁 → 批次媒合
+
+```mermaid
+flowchart LR
+  c1["submitted"] -->|approve| c2["approved"]
+  c1 -->|reject| cr["rejected"]
+  c2 -->|批次媒合| c3["matched"]
+  c2 -->|無法配對| cc["coordinate 待人工協調"]
+  c2 -->|逾期未成| cv["void 作廢（保留紀錄）"]
+  c3 --> c4["boarded"]
+  c4 --> c5["completed"]
+```
+
+```mermaid
+flowchart TD
+  B0["7 天內 approved（已成功不重排）"] --> T{"型態（來回/單程 不混）"}
+  T -- 來回單 --> R1{"六項完全相同 → 合併<br/>起訖地/起訖日/去程/回程上車"}
+  R1 --> R2{"工時：去程、回程完成 ≤ 20:30？"}
+  R2 -- 否 --> RC["待人工協調"]
+  R2 -- 是 --> R3{"有可用車+司機？<br/>當前位置 / 保修 / 請假 檢核"}
+  R3 -- 否 --> RC
+  R3 -- 是 --> RM["matched 同群組同車同司機"]
+  T -- 單程單 --> O1{"目的地為交通轉運點？"}
+  O1 -- 否 --> OC["待人工協調"]
+  O1 -- 是 --> O2{"送達後 4 小時窗內有回程可配？"}
+  O2 --> O3{"含等待 ≤ 20:30 且有資源？"}
+  O3 -- 否 --> OC
+  O3 -- 是 --> OM["matched（配成一趟 / 純去程）"]
+```
+
+---
+
 ## 附：三模組媒合邏輯對照
 
 | 面向 | A 區域內物流 | B 南北幹線 | C 差旅共乘 |
