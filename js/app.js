@@ -2025,9 +2025,58 @@ function statusText(s) {
    ============================================================ */
 RENDER.master = function () {
   const p = $('#page-master');
+  const nodeName = id => (DB.sites.find(s => s.id === id) || DB.restHouses.find(r => r.id === id) || {}).name || id;
+
+  /* 2.9 據點相互路程表（測試資料）：右上三角＝大車、左下三角＝小車、對角線＝0（比照實表結構） */
+  const matIds = [...DB.sites.map(s => s.id), ...DB.restHouses.map(r => r.id)];
+  const matHead = '<th>起＼迄</th>' + matIds.map(id => `<th title="${nodeName(id)}">${id}</th>`).join('');
+  const matBody = matIds.map((ri, r) => {
+    const cells = matIds.map((ci, c) => {
+      if (r === c) return '<td class="diag">0</td>';
+      if (c > r) return `<td class="tri-big">${DB.siteTravel.big[ri + '|' + ci]}</td>`;
+      return `<td class="tri-small">${DB.siteTravel.small[ri + '|' + ci]}</td>`;
+    }).join('');
+    return `<tr><th title="${nodeName(ri)}">${ri}</th>${cells}</tr>`;
+  }).join('');
+
+  /* 3.1 各據點最短天數表（大車／小車） */
+  const dayIds = DB.sites.map(s => s.id).filter(id => DB.minTripDays.big[id] != null || DB.minTripDays.small[id] != null);
+  const dayBody = dayIds.map(id => `<tr><td><b>${id}</b> ${nodeName(id)}</td>
+    <td>${DB.minTripDays.big[id] != null ? DB.minTripDays.big[id] + ' 天' : '—'}</td>
+    <td>${DB.minTripDays.small[id] != null ? DB.minTripDays.small[id] + ' 天' : '—'}</td></tr>`).join('');
+
+  /* 2.12 司機休息／用餐門檻 */
+  const brkBody = DB.driverBreaks.map(b => `<tr><td>${b.kind}</td>
+    <td>純累積行駛滿 ${b.afterDriveMin} 分（${(b.afterDriveMin / 60).toFixed(1)} 小時）</td>
+    <td>${b.costMin} 分</td></tr>`).join('');
+
+  /* 區域內物流班次（每日 5 班，G18） */
+  const shiftBody = DB.regionalShifts.map(s => {
+    const veh = DB.vehicles.find(v => v.id === s.vehicle);
+    return `<tr><td>${s.label}</td><td>${s.depart}</td><td>${s.vehicle}${veh ? '（' + veh.name + '）' : ''}</td></tr>`;
+  }).join('');
+
+  /* 商務共乘車程表（G62） */
+  const bizBody = Object.entries(DB.bizTravel).map(([k, v]) => {
+    const [o, d] = k.split('|');
+    return `<tr><td>${o}</td><td>${d}</td><td>${v} 分</td></tr>`;
+  }).join('');
+
+  /* 限制條件與幹線時間參數 */
+  const kv = [
+    ['出車前停止媒合', `出車前 ${DB.matchCutoffDaysBefore} 日 ${DB.matchCutoffTime} 起停止媒合`],
+    ['受限據點不前往時間', `每日 ${DB.noArrivalAfter} 後不前往受限據點`],
+    ['回程直達鎖定窗寬', `${DB.directLockWindowMin} 分`],
+    ['幹線出發基地', `${DB.homeSite}（${nodeName(DB.homeSite)}）`],
+    ['每日總在勤上限', `${(DB.dailyDutyMin / 60).toFixed(1)} 小時`],
+    ['出勤前緩衝／收工後緩衝', `${DB.prepMin} 分 / ${DB.closeMin} 分`],
+    ['最小計算單位／大車加時', `${DB.travelUnitMin} 分 / +${DB.bigExtraMin} 分`],
+    ['最大出勤天數', `${DB.maxTripDays} 天`],
+  ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+
   p.innerHTML = `
     <div class="section-h">主檔資料</div>
-    <div class="section-sub">示範主檔（記憶體）。正式版對應 VD_ 前綴資料表。類別與天數對照表為示意值，待業務盤點。</div>
+    <div class="section-sub">示範主檔（記憶體）。正式版對應 VD_ 前綴資料表。類別、路程與天數對照表均為<b>虛構測試資料</b>，待業務盤點後以實表覆寫。</div>
     <div class="grid-2">
       <div class="card"><div class="card-title">車輛主檔（含資源池別）<span class="g-tag">C-2</span></div>
         <div class="card-desc">歸屬據點＝行政/資產固定隸屬（不因出差改變）；當前位置＝排班可用性判斷依據（G59）。</div>
@@ -2043,13 +2092,47 @@ RENDER.master = function () {
           <td>${d.pool === 'LOGI' ? '物流' : '商務'}</td><td>${d.homeSite}</td>
           <td>${d.currentSite}${d.currentSite !== d.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td></tr>`).join('')}
         </tbody></table></div></div>
-      <div class="card"><div class="card-title">幹線時間參數與對照表</div>
-        <div class="card-desc">路程表、休息用餐門檻、最短天數表與限制條件均存放於主檔／設定檔，
-        依業務單位指示<b>不於畫面顯示</b>；資料結構與測試資料產生規則見 <code>docs/SPEC-DATA.md</code>。</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2.9 據點相互路程表（分鐘）<span class="g-tag">測試資料</span></div>
+      <div class="card-desc">實表為單一矩陣同時承載兩種車型：<b>右上三角＝大車、左下三角＝小車</b>，對角線為 0。
+        下列數值為<b>依實表特徵產生之虛構測試資料</b>（規則見 <code>docs/SPEC-DATA.md</code>）：最小計算單位 30 分、路程具次可加性（長程 < 各段相加）、大車＝小車＋30 分。實表到位後直接覆寫 <code>siteTravel</code> 即可，演算法無須更動。</div>
+      <div class="table-wrap"><table class="dt matrix"><thead><tr>${matHead}</tr></thead><tbody>${matBody}</tbody></table></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--blue-bg);"></span>右上三角：大車（分）</span>
+        <span><span class="sw" style="background:var(--amber-bg);"></span>左下三角：小車（分）</span>
+        <span><span class="sw" style="background:#EDEFF2;"></span>對角線：同點＝0</span>
+        <span>含休息會館：RH-S 南區／RH-M 中區／RH-N 北區</span>
       </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card"><div class="card-title">3.1 各據點最短天數表 <span class="g-tag">示意</span></div>
+        <div class="card-desc">依車型 × 目的地查表；寬鬆估計、僅供排班參考顯示，不參與運算、不反向限制 12.5 小時精算。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>目的地據點</th><th>大車</th><th>小車</th></tr></thead><tbody>${dayBody}</tbody></table></div></div>
+
+      <div class="card"><div class="card-title">2.12 司機休息／用餐門檻</div>
+        <div class="card-desc">依純累積行駛時間觸發，共用不歸零時數線，每日歸零。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>項目</th><th>觸發條件</th><th>耗時</th></tr></thead><tbody>${brkBody}</tbody></table></div></div>
+
+      <div class="card"><div class="card-title">區域內物流班次（每日 5 班）<span class="g-tag">G18</span></div>
+        <div class="card-desc">人工每日排定，兩台車輪替。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>發車</th><th>車輛</th></tr></thead><tbody>${shiftBody}</tbody></table></div></div>
+
+      <div class="card"><div class="card-title">商務共乘車程表（分鐘）<span class="g-tag">G62</span></div>
+        <div class="card-desc">公司自建；系統另加內建緩衝 ${DB.bizBuffer} 分。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>出發地</th><th>目的地</th><th>車程</th></tr></thead><tbody>${bizBody}</tbody></table></div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card"><div class="card-title">限制條件與幹線時間參數</div>
+        <div class="card-desc">業務單位公式頁參數；正式版存放於設定檔／主檔。</div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>參數</th><th>設定值</th></tr></thead><tbody>${kv}</tbody></table></div></div>
       <div class="card"><div class="card-title">南北據點順序（G30）</div>
+        <div class="card-desc">南 → 北一直線固定順序。</div>
         <div class="route">${DB.sites.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">序 ${s.order}</div></div>`).join('')}</div></div>
-          </div>`;
+    </div>`;
 };
 
 /* ============================================================

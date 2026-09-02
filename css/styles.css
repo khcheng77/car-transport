@@ -236,3 +236,13 @@ table.dt tr:hover td { background: var(--blue-bg); }
 .swal-text { font-size: 14.5px; color: var(--ink-soft, #565C64); line-height: 1.7; margin-bottom: 22px; }
 .swal-actions { display: flex; gap: 12px; justify-content: center; }
 .swal-actions .btn { min-width: 96px; }
+
+/* ---------- 主檔：據點相互路程時間矩陣 ---------- */
+table.dt.matrix th, table.dt.matrix td { padding: 6px 10px; text-align: center; font-variant-numeric: tabular-nums; }
+table.dt.matrix tbody th { background: var(--navy-deep); color: #fff; }
+table.dt.matrix td.diag { background: #EDEFF2; color: var(--ink-soft); }
+table.dt.matrix td.tri-big { background: var(--blue-bg); color: var(--navy); }      /* 右上三角＝大車 */
+table.dt.matrix td.tri-small { background: var(--amber-bg); color: var(--amber-ink); } /* 左下三角＝小車 */
+table.dt.matrix tr:hover td { background: #E4ECF7; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); margin: 10px 2px 0; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; border: 1px solid var(--line); }
