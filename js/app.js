@@ -2169,37 +2169,44 @@ RENDER.a_driver = function () {
     const [date, shiftId] = k.split('|');
     const sh = DB.regionalShifts.find(s => s.id === shiftId);
     const veh = DB.vehicles.find(v => v.id === sh.vehicle);
-    const list = byKey[k].slice().sort((x, y) => {
-      const ox = DB.stations.find(s => s.id === x.station).order;
-      const oy = DB.stations.find(s => s.id === y.station).order;
-      return ox - oy || hhmmToMin(x.arrival || '23:59') - hhmmToMin(y.arrival || '23:59');
-    });
+    const list = byKey[k];
     const totalVol = list.reduce((s, a) => s + a.items.reduce((t, it) => t + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0), 0);
-    const body = list.map((a, i) => {
-      const st = DB.stations.find(s => s.id === a.station);
-      const del = a.status === 'delivered' ? '<span class="badge b-green">已交貨</span>' : '<span class="badge b-gray">待交貨</span>';
-      return `<tr>
-        <td>${i + 1}</td><td>${a.id}</td>
-        <td>${a.pickupLoc || '<span class="muted">—</span>'}</td>
-        <td>${st.name} / ${a.building}</td>
-        <td><b style="color:var(--navy);">${a.arrival || '—'}</b></td>
-        <td>${itemsSummary(a.items)}</td>
-        <td>${recipientDisplay(a.recipient)}</td>
-        <td>${del}</td></tr>`;
+    // 沿固定 10 站路線「一次通過」：為每張單建立取貨（收貨站）與卸貨（送貨站）兩個停靠事件，
+    // 再依站序彙整成停靠站清單——同一站的收貨/送貨自動集中在一起（先卸後裝，比照佔用模型）
+    const stops = {}; // order -> { order, name, picks:[], drops:[] }
+    const ensure = (order, name) => (stops[order] = stops[order] || { order, name, picks: [], drops: [] });
+    list.forEach(a => {
+      const dropSt = DB.stations.find(s => s.id === a.station);
+      const pickSt = a.pickStation ? DB.stations.find(s => s.id === a.pickStation) : null;
+      ensure(pickSt ? pickSt.order : 0, pickSt ? pickSt.name : '路線起點').picks.push(a); // 取貨（起）
+      ensure(dropSt.order, dropSt.name).drops.push(a);                                     // 卸貨（迄）
+    });
+    const ordered = Object.values(stops).sort((x, y) => x.order - y.order);
+    const body = ordered.map((stp, i) => {
+      const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order));
+      const dropLines = stp.drops.map(a => {
+        const del = a.status === 'delivered' ? '<span class="badge b-green">已交貨</span>' : '<span class="badge b-gray">待交貨</span>';
+        return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${stp.name} / ${a.building}｜接收：${recipientDisplay(a.recipient)} ${del}</div>`;
+      }).join('');
+      const pickLines = stp.picks.map(a =>
+        `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${a.id}｜${a.pickupLoc || stp.name}｜${itemsSummary(a.items)}</div>`).join('');
+      return `<tr><td>${i + 1}</td><td><b>${stp.name}</b></td>
+        <td><b style="color:var(--navy);">${t}</b></td>
+        <td style="text-align:left;">${dropLines}${pickLines}</td></tr>`;
     }).join('');
     return `<div class="card">
       <div class="card-title" style="justify-content:space-between;">
         <span>🚚 <b>${date}</b>${date === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}｜${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
         <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
-      <div class="card-desc">本班共 <b>${list.length}</b> 個交貨點、總貨量約 <b>${totalVol.toFixed(0)}L</b>；沿固定 10 站路線依序於各送貨站卸貨。</div>
+      <div class="card-desc">沿固定 10 站路線<b>一次通過</b>，於 <b>${ordered.length}</b> 個停靠站依序<b>卸貨／取貨</b>；本班 <b>${list.length}</b> 筆、總貨量約 <b>${totalVol.toFixed(0)}L</b>。</div>
       <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>順序</th><th>單號</th><th>收貨地點（起）</th><th>送貨站（迄）</th><th>預計到站</th><th>貨物</th><th>接收人</th><th>狀態</th>
+        <th>順序</th><th>停靠站</th><th>抵達</th><th>作業（卸貨／取貨）</th>
       </tr></thead><tbody>${body}</tbody></table></div></div>`;
   }).join('');
   if (!cards) cards = `<div class="card"><div class="empty">今日尚無已排定的班次任務。使用者送出收貨申請並自動媒合成功後，這裡會依班次（車輛）顯示司機任務單。</div></div>`;
   p.innerHTML = `
     <div class="section-h">區域內物流 · 司機任務單（駕駛）</div>
-    <div class="section-sub">以「日期＋班次（車輛）」為單位，顯示該車沿固定 10 站路線的收送任務：每個交貨點的收貨地點（起）、送貨站（迄）、預計到站時間、貨物與接收人。</div>
+    <div class="section-sub">以「日期＋班次（車輛）」為單位，沿固定 10 站路線<b>一次通過</b>：每個停靠站依站序列出要<b>卸貨</b>與<b>取貨</b>的單、抵達時間、貨物與接收人（同一站的收貨自動彙整在一起）。</div>
     ${cards}`;
 };
 
