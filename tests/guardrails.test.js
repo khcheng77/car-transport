@@ -425,6 +425,39 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
       '天數查「車型×目的地」最短天數表（3.1，僅參考值）');
   });
 
+  test('直達(a)：抵達迄點時間納入沿途上貨時間，交貨門檻不再低估', () => {
+    const H = fresh();
+    const veh = H.DB.vehicles.find(v => v.id === 'V-T01'); // 大車
+    const drive = H.ModuleB.travelMin('D9', 'D1', veh.sizeClass); // 基地→迄點直達行駛
+    const base = H.hhmmToMin(H.DB.shiftStartDefault) + H.DB.prepMin;
+    const loadMin = 60;
+    // 交貨時間落在「不含上貨」與「含上貨」抵達時間之間：唯有納入上貨才會被正確擋下
+    const dt = H.minToHHMM(base + drive + Math.floor(loadMin / 2));
+    const item = [{ name: 'x', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }];
+    const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D1', direct: true,
+      loadMin, unloadMin: 0, deliverTime: dt, items: item });
+    H.ModuleB.approve(o);
+    const r = H.ModuleB.dispatch('V-T01', 'direct');
+    ok(!r.carried.some(x => x.id === o.id), '含上貨後抵達晚於交貨時間 → 應留下一班（若漏計上貨會誤放行）');
+    eq(o.status, 'approved', '未排入者狀態不應改為 loaded');
+  });
+
+  test('直達(b)：來收時間＝經過取貨據點時間，非抵達迄點時間', () => {
+    const H = fresh();
+    const veh = H.DB.vehicles.find(v => v.id === 'V-T01'); // 大車
+    const item = [{ name: 'x', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }];
+    const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D1', direct: true,
+      loadMin: 20, unloadMin: 0, items: item });
+    H.ModuleB.approve(o);
+    const r = H.ModuleB.dispatch('V-T01', 'direct');
+    ok(r.carried.some(x => x.id === o.id), '無交貨時間限制 → 應載入');
+    const base = H.hhmmToMin(H.DB.shiftStartDefault) + H.DB.prepMin;
+    const expectPass = H.minToHHMM(base + H.ModuleB.travelMin('D9', 'D6', veh.sizeClass));
+    eq(o.pickupTime, expectPass, '來收時間＝基地→取貨據點 D6 的經過時間');
+    const arriveDest = base + H.ModuleB.travelMin('D9', 'D1', veh.sizeClass);
+    ok(H.hhmmToMin(o.pickupTime) < arriveDest, 'D6 來收應早於 D1 抵達（不再等於迄點時間）');
+  });
+
   test('G40/G41/G42 回程撞期直達 → 鎖定直達、延續動態淨值、排擠非直達順延', () => {
     const H = fresh();
     const rd = H.ModuleB.createOrder({ applicant: 'A', site: 'D3', direct: true, volume: 2000, weight: 200, handleMin: 20 });
