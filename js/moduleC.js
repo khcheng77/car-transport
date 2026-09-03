@@ -334,7 +334,7 @@ const ModuleC = {
       const groupPax = this.applications.filter(x => x.groupId === b.groupId)
         .reduce((s, x) => s + x.pax, 0);
       return {
-        app: b, dest: b.dest, depart: b.earliestPickup, latest: this.latestArrival(b),
+        app: b, origin: b.origin, dest: b.dest, depart: b.earliestPickup, latest: this.latestArrival(b),
         applicant: b.applicant, dept: b.dept, ext: b.ext,
         loaded: groupPax, remain: (veh.seats - groupPax),
       };

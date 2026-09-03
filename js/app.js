@@ -1576,8 +1576,8 @@ function renderCApplyDetail(p, id) {
     if (cands.length === 0) { $('#cd-candidates').innerHTML = `<div class="callout" style="margin-top:12px;">出發日期前後 1 天內查無已派車的候選單。</div>`; return; }
     $('#cd-candidates').innerHTML = `
       <div class="callout info" style="margin-top:12px;">為 <b>${a.id}</b>（${a.origin}→${a.dest}）尋找便車，需要 ${a.pax} 個空位。不顯示私人手機。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>候選單</th><th>目的地</th><th>出發/最晚抵達</th><th>申請人 部門/分機</th><th>已載/剩餘</th><th></th></tr></thead><tbody>
-        ${cands.map(c => `<tr><td>${c.app.id}</td><td>${c.dest}</td><td>${c.depart} / ${c.latest}</td>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>候選單</th><th>起訖（出發地 → 目的地）</th><th>出發/最晚抵達</th><th>申請人 部門/分機</th><th>已載/剩餘</th><th></th></tr></thead><tbody>
+        ${cands.map(c => `<tr><td>${c.app.id}</td><td>${c.origin} → <b>${c.dest}</b></td><td>${c.depart} / ${c.latest}</td>
           <td>${c.applicant}（${c.dept}/${c.ext}）</td><td>${c.loaded} / 剩 ${c.remain}</td>
           <td><button class="btn btn-primary btn-sm" data-merge="${c.app.id}" ${c.remain < a.pax ? 'disabled' : ''}>完成合併</button></td></tr>`).join('')}
       </tbody></table></div>`;
