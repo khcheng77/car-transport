@@ -860,6 +860,50 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     eq(go.groupId, back.groupId, '4 小時內同轉運點應配對成一趟（G51）');
   });
 
+  test('G51 修正①：跨日回程不得配對（須同一天，一趟完整行程）', () => {
+    const H = fresh();
+    const go = H.ModuleC.createApp({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1',
+      departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 3,
+      applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' });
+    // 回程時刻落在 4 小時窗內，但日期是隔天 → 不得配對
+    const back = H.ModuleC.createApp({ type: 'oneway', origin: '桃園機場T1', dest: '台北總部',
+      departDate: D2, earliestPickup: '11:00', returnDate: D2, earliestReturn: '', pax: 2,
+      applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
+    [go, back].forEach(x => H.ModuleC.approve(x));
+    H.ModuleC.runBatch(D);
+    eq(go.status, 'matched', '去程應以純去程單程單媒合');
+    ok(go.groupId !== back.groupId, '跨日回程不得與去程配成同一趟（修正①：同日檢核）');
+  });
+
+  test('G51 修正②：回程目的地非原出發地不得配對（Q35：回司機出發地）', () => {
+    const H = fresh();
+    const go = H.ModuleC.createApp({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1',
+      departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 3,
+      applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' });
+    // 同日、同轉運點出發、時刻在窗內，但目的地是台中（非原出發地台北）→ 不得配對
+    const back = H.ModuleC.createApp({ type: 'oneway', origin: '桃園機場T1', dest: '台中辦公室',
+      departDate: D, earliestPickup: '11:00', returnDate: D, earliestReturn: '', pax: 2,
+      applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
+    [go, back].forEach(x => H.ModuleC.approve(x));
+    H.ModuleC.runBatch(D);
+    eq(go.status, 'matched', '去程應以純去程單程單媒合');
+    ok(go.groupId !== back.groupId, '回程目的地非原出發地不得配對（修正②：回司機出發地）');
+  });
+
+  test('C-4 防禦：已人工覆寫單不被下一次批次重排（overridden 旗標）', () => {
+    const H = fresh();
+    const a = H.ModuleC.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '16:00', pax: 1,
+      applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' });
+    H.ModuleC.approve(a);
+    // 調度室手動覆寫指派（狀態仍為 approved 的邊界情境）
+    H.ModuleC.overrideAssign(a, { vehicle: 'V-B03', driver: 'DR5' }, '測試調度室');
+    ok(a.overridden === true, '覆寫後應標記 overridden');
+    H.ModuleC.runBatch(D);
+    eq(a.vehicle, 'V-B03', '覆寫指派不應被批次重排覆蓋');
+    eq(a.status, 'approved', 'overridden 單不進入批次目標，狀態不應被改動');
+  });
+
   test('G50 來回單與單程單不互相混合比對', () => {
     const H = fresh();
     const r = round(H, { dest: '桃園機場T1' });

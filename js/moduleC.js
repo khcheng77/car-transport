@@ -156,8 +156,8 @@ const ModuleC = {
       const d = new Date(a.departDate);
       return d >= start && d <= end;
     };
-    // 只處理已核准單；已成功單不重排（G53）
-    const targets = this.applications.filter(a => a.status === 'approved' && inRange(a));
+    // 只處理已核准單；已成功單不重排、已人工覆寫者不重排（G53 / C-4；防禦：覆寫旗標即使狀態仍為 approved 也排除）
+    const targets = this.applications.filter(a => a.status === 'approved' && !a.overridden && inRange(a));
     trace.push(`批次 ${batch.id}｜範圍 ${fromDate} 起 7 天內、待處理單 ${targets.length} 筆`);
 
     // 資源佔用表：先納入既有已媒合任務（含前次批次），避免跨批次/跨群組重複指派同一車/司機
@@ -247,10 +247,12 @@ const ModuleC = {
       if (!DB.transferPoints.includes(a.dest)) {
         this._coordinate(a, batch, trace, '單程單目的地非交通轉運點'); usedO.add(a.id); continue;
       }
-      // 找回程：同轉運點出發、回程最早上車在去程送達後 4 小時內（G51）
+      // 找回程：同一天、同轉運點出發、回司機出發地、回程最早上車在去程送達後 4 小時內（G51 / Q35）
       const arrMin = hhmmToMin(a.earliestPickup) + (this.travelMin(a.origin, a.dest) || 0);
       const back = oneways.find(b => !usedO.has(b.id) && b.id !== a.id && b.status === 'approved' &&
+        b.departDate === a.departDate &&          // 同一天（一趟完整行程；出發前配對）
         b.origin === a.dest && DB.transferPoints.includes(b.origin) &&
+        b.dest === a.origin &&                     // Q35：回程須「從該轉運點回司機出發地」
         hhmmToMin(b.earliestPickup) >= arrMin &&
         hhmmToMin(b.earliestPickup) <= arrMin + 240);
       const estStart = hhmmToMin(a.earliestPickup);
