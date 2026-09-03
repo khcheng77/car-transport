@@ -1639,17 +1639,28 @@ function renderCApplyNew(p) {
     $('#ca-return-wrap').style.display = round ? 'block' : 'none';
   };
   $$('#page-c_apply input[name=ca-type]').forEach(r => r.onchange = setType);
+  // 回程日期不可早於出發日期（來回單多天任務依賴正確 returnDate：保修/佔用/C-3 全程檢核）
+  const syncRDateMin = () => { $('#ca-rdate').min = $('#ca-date').value || ''; };
+  $('#ca-date').onchange = syncRDateMin; syncRDateMin();
   $('#ca-cancel').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   $('#ca-submit').onclick = async () => {
+    const type = $('#page-c_apply input[name=ca-type]:checked').value;
+    const departDate = $('#ca-date').value;
+    const returnDate = type === 'round' ? $('#ca-rdate').value : departDate;
+    // 輸入驗證：來回單必須有回程日期且不早於出發日期，避免多天任務被誤當單日退化（保修/佔用漏中間天）
+    if (!departDate) { toast('請選擇出發日期', 'err'); return; }
+    if (type === 'round') {
+      if (!returnDate) { toast('來回單請選擇回程日期', 'err'); return; }
+      if (returnDate < departDate) { toast('回程日期不可早於出發日期', 'err'); return; }
+    }
     const ok = await confirmDialog({ title: '確認送出出差用車申請？',
       text: '送出後將等待主管准駁，再由系統批次媒合。' });
     if (!ok) return;
-    const type = $('#page-c_apply input[name=ca-type]:checked').value;
     const app = ModuleC.createApp({
       applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, ext: $('#ca-ext').value,
       type, origin: $('#ca-origin').value, dest: $('#ca-dest').value,
-      departDate: $('#ca-date').value, earliestPickup: $('#ca-pickup').value,
-      returnDate: type === 'round' ? $('#ca-rdate').value : $('#ca-date').value,
+      departDate, earliestPickup: $('#ca-pickup').value,
+      returnDate,
       earliestReturn: $('#ca-return').value, pax: +$('#ca-pax').value,
     });
     toast(`${app.id} 已送出，等待主管准駁`, 'ok');
