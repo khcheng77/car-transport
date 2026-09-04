@@ -293,6 +293,39 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.status, 'unscheduled');
   });
 
+  test('車次異動：改派班次更新 assignedShift 並重算到站時間', () => {
+    const H = fresh();
+    const { app } = submit(H, { pickStation: 'S1', station: 'S3' });
+    ok(app.status === 'matched' && app.assignedShift, '先媒合成功');
+    const target = H.DB.regionalShifts.find(s => s.id !== app.assignedShift);
+    const st = H.DB.stations.find(s => s.id === app.station);
+    H.ModuleA.reassignShift(app, target.id);
+    eq(app.assignedShift, target.id, '班次應改為目標班次');
+    eq(app.arrival, H.minToHHMM(H.ModuleA.shiftArrivalAtStation(target, st.order)), '到站時間應依新班次重算');
+  });
+
+  test('車次異動：移出班次 → 回未排入、清空班次與到站', () => {
+    const H = fresh();
+    const { app } = submit(H, { pickStation: 'S1', station: 'S3' });
+    H.ModuleA.removeFromShift(app);
+    eq(app.status, 'unscheduled', '移出後回未排入');
+    eq(app.assignedShift, null, '班次應清空');
+    eq(app.arrival, null, '到站應清空');
+  });
+
+  test('車次異動：shiftPlan 預設取班次主檔車輛，覆寫後以覆寫為準', () => {
+    const H = fresh();
+    const sh = H.DB.regionalShifts[0];
+    const def = H.ModuleA.shiftPlan('2026-09-10', sh.id);
+    eq(def.vehicle, sh.vehicle, '預設車輛＝班次主檔車輛');
+    ok(def.driver, '預設應有司機');
+    H.ModuleA.setShiftPlan('2026-09-10', sh.id, { vehicle: 'V-L02', driver: 'DR2' });
+    const ov = H.ModuleA.shiftPlan('2026-09-10', sh.id);
+    eq(ov.vehicle, 'V-L02', '覆寫車輛生效'); eq(ov.driver, 'DR2', '覆寫司機生效');
+    // 覆寫僅限該日該班次，不影響其他日期
+    eq(H.ModuleA.shiftPlan('2026-09-11', sh.id).vehicle, sh.vehicle, '他日不受影響');
+  });
+
   test('未來日期不受今日時間限制：深夜下單仍可排隔日全部班次', () => {
     const H = fresh(); fixNow(H, 23, 0); H.ModuleA.__fixed = true;
     const { result } = submit(H, { recvMode: 'exact', deliverTime: '09:00', serviceDate: '2026-09-03' });

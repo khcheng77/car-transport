@@ -88,6 +88,50 @@ const ModuleA = {
     /* TODO: 串接寄信服務。收件人＝申請人＋ DB.approvalMap[app.applicant]；內容含單號/站點/原因/日期 */
   },
 
+  /* ============================================================
+     已排定車次異動（業務單位手動調整）
+     - shiftPlans：以「收貨日期＋班次」為鍵，覆寫該車次的車輛/司機（不動全域班次主檔）。
+     - reassignShift：將申請單改派到指定班次（同日），重算到站時間。
+     - removeFromShift：把申請單移出班次（回未排入，待重新指定）。
+     ============================================================ */
+  shiftPlans: {}, // key `${date}|${shiftId}` -> { vehicle, driver(id) }
+  logiVehicles() { return DB.vehicles.filter(v => v.pool === 'LOGI' && v.homeSite && v.homeSite[0] === 'S'); },
+  logiDrivers() { return DB.drivers.filter(d => d.pool === 'LOGI'); },
+  defaultVehicleFor(shiftId) { const sh = DB.regionalShifts.find(s => s.id === shiftId); return sh ? sh.vehicle : null; },
+  // 預設司機：物流車與物流司機依序對應（與司機任務單 logiDriverName 一致）
+  defaultDriverFor(vehId) {
+    const vs = this.logiVehicles(), ds = this.logiDrivers();
+    const i = vs.findIndex(v => v.id === vehId);
+    return (i >= 0 && ds.length) ? ds[i % ds.length].id : (ds[0] ? ds[0].id : null);
+  },
+  // 取某車次（日期＋班次）目前的車輛/司機（有覆寫取覆寫，否則取預設）
+  shiftPlan(date, shiftId) {
+    const p = this.shiftPlans[date + '|' + shiftId];
+    if (p) return { vehicle: p.vehicle, driver: p.driver };
+    const vehicle = this.defaultVehicleFor(shiftId);
+    return { vehicle, driver: this.defaultDriverFor(vehicle) };
+  },
+  setShiftPlan(date, shiftId, plan) {
+    this.shiftPlans[date + '|' + shiftId] = { vehicle: plan.vehicle, driver: plan.driver };
+    return this.shiftPlans[date + '|' + shiftId];
+  },
+  // 改派班次（同日）：更新 assignedShift 並依新班次重算到站時間；狀態回 matched
+  reassignShift(app, shiftId) {
+    const sh = DB.regionalShifts.find(s => s.id === shiftId);
+    if (!sh) return app;
+    app.assignedShift = shiftId;
+    app.status = 'matched';
+    const st = DB.stations.find(s => s.id === app.station);
+    app.arrival = st ? minToHHMM(this.shiftArrivalAtStation(sh, st.order)) : null;
+    return app;
+  },
+  // 移出班次：回未排入、清空班次與到站，待業務重新指定
+  removeFromShift(app) {
+    app.assignedShift = null; app.arrival = null; app.status = 'unscheduled';
+    app.note = '已由「已排定車次異動」移出班次，待重新指定。';
+    return app;
+  },
+
   /* 各班次到達某站的時間（示意）：出發時間 + 站序×固定行駛 */
   shiftArrivalAtStation(shift, stationOrder) {
     return hhmmToMin(shift.depart) + stationOrder * 12; // 每站 12 分鐘遞增（示意）

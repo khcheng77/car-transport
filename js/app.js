@@ -82,6 +82,7 @@ const NAV = [
   { group: '模組 A · 區域內物流', items: [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
     { id: 'a_review', ico: '🗂', label: 'A｜車次追蹤（業務）' },
+    { id: 'a_dispatch', ico: '🔧', label: 'A｜已排定車次異動（業務）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
   ] },
   { group: '模組 B · 南北幹線', items: [
@@ -103,6 +104,7 @@ const PAGE_META = {
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
   a_review: { title: '區域內物流 · 車次追蹤（業務單位）', crumb: '模組 A · 調度端 · G18/G20' },
+  a_dispatch: { title: '區域內物流 · 已排定車次異動（業務單位）', crumb: '模組 A · 調度端 · 車次班次/車輛/司機調整' },
   a_driver: { title: '區域內物流 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
   b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
   b_approve: { title: '南北幹線 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
@@ -853,6 +855,167 @@ function renderA_incident() {
   $$('#ar-tab-incident [data-edit]').forEach(b => b.onclick = () => {
     const a = ModuleA.applications.find(x => x.id === b.dataset.edit);
     if (a) openIncidentEditor(a);
+  });
+}
+
+/* ============================================================
+   模組 A · 已排定車次異動（業務單位）— 查詢頁 + 明細頁
+   調整申請單所屬班次、修改車次的車輛/司機、於明細頁新增/移出班次的單。
+   ============================================================ */
+let aDispatch = { view: 'list', key: null, query: { date: '', vehicle: '', driver: '', shift: '' } };
+
+// 以「收貨日期＋班次」聚合已排定（matched）的物流申請單為「車次」
+function dispatchGroups() {
+  const map = {};
+  ModuleA.applications
+    .filter(a => a.status === 'matched' && a.assignedShift && a.serviceDate)
+    .forEach(a => { const k = a.serviceDate + '|' + a.assignedShift; (map[k] = map[k] || []).push(a); });
+  return map;
+}
+const drvName = id => { const d = DB.drivers.find(x => x.id === id); return d ? d.name : (id || '—'); };
+const vehName = id => { const v = DB.vehicles.find(x => x.id === id); return v ? v.name : (id || '—'); };
+
+RENDER.a_dispatch = function () {
+  if (aDispatch.view === 'detail') return renderADispatchDetail();
+  return renderADispatchList();
+};
+
+function renderADispatchList() {
+  const p = $('#page-a_dispatch');
+  const q = aDispatch.query;
+  const vehOpts = ['<option value="">全部車輛</option>'].concat(
+    ModuleA.logiVehicles().map(v => `<option value="${v.id}" ${q.vehicle === v.id ? 'selected' : ''}>${v.id}（${v.name}）</option>`)).join('');
+  const drvOpts = ['<option value="">全部司機</option>'].concat(
+    ModuleA.logiDrivers().map(d => `<option value="${d.id}" ${q.driver === d.id ? 'selected' : ''}>${d.name}</option>`)).join('');
+  const shOpts = ['<option value="">全部班次</option>'].concat(
+    DB.regionalShifts.map(s => `<option value="${s.id}" ${q.shift === s.id ? 'selected' : ''}>${s.label}</option>`)).join('');
+  p.innerHTML = `
+    <div class="section-h">已排定車次異動（業務單位）</div>
+    <div class="section-sub">查詢已排定車次，點「細節」進入明細頁調整所屬<b>班次</b>、修改車次的<b>車輛／司機</b>，並<b>新增／移出</b>該班次的申請單。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="ad-search">🔍 查詢</button></div>
+      <div class="grid-2">
+        <div class="field"><label>收貨日期</label><input type="date" id="adq-date" value="${q.date || ''}"></div>
+        <div class="field"><label>車輛</label><select id="adq-veh">${vehOpts}</select></div>
+        <div class="field"><label>司機</label><select id="adq-drv">${drvOpts}</select></div>
+        <div class="field"><label>班次</label><select id="adq-shift">${shOpts}</select></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>已排定車次</span><span class="muted" id="ad-count"></span></div>
+      <div id="ad-grid"></div>
+    </div>`;
+  $('#ad-search').onclick = () => {
+    aDispatch.query = { date: $('#adq-date').value, vehicle: $('#adq-veh').value, driver: $('#adq-drv').value, shift: $('#adq-shift').value };
+    renderADispatchGrid();
+  };
+  renderADispatchGrid();
+}
+
+function renderADispatchGrid() {
+  const box = $('#ad-grid'); if (!box) return;
+  const q = aDispatch.query;
+  const groups = dispatchGroups();
+  const rows = Object.keys(groups).map(k => {
+    const [date, shiftId] = k.split('|');
+    const plan = ModuleA.shiftPlan(date, shiftId);
+    const sh = DB.regionalShifts.find(s => s.id === shiftId);
+    return { key: k, date, shiftId, sh, plan, n: groups[k].length };
+  }).filter(r =>
+    (!q.date || r.date === q.date) &&
+    (!q.shift || r.shiftId === q.shift) &&
+    (!q.vehicle || r.plan.vehicle === q.vehicle) &&
+    (!q.driver || r.plan.driver === q.driver)
+  ).sort((a, b) => a.date.localeCompare(b.date) ||
+    DB.regionalShifts.findIndex(s => s.id === a.shiftId) - DB.regionalShifts.findIndex(s => s.id === b.shiftId));
+  $('#ad-count').textContent = `${rows.length} 個車次`;
+  box.innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的已排定車次</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>收貨日期</th><th>車輛</th><th>司機</th><th>班次</th><th>單數</th></tr></thead><tbody>
+      ${rows.map(r => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-key="${r.key}">細節</button></td>
+        <td>${r.date}</td>
+        <td><b style="color:var(--navy);">${r.plan.vehicle || '—'}</b>（${vehName(r.plan.vehicle)}）</td>
+        <td>${drvName(r.plan.driver)}</td>
+        <td>${r.sh ? r.sh.label : r.shiftId}</td>
+        <td>${r.n}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $$('#ad-grid [data-key]').forEach(b => b.onclick = () => { aDispatch.key = b.dataset.key; aDispatch.view = 'detail'; RENDER.a_dispatch(); });
+}
+
+function renderADispatchDetail() {
+  const p = $('#page-a_dispatch');
+  const [date, shiftId] = (aDispatch.key || '').split('|');
+  const sh = DB.regionalShifts.find(s => s.id === shiftId);
+  if (!sh) { aDispatch.view = 'list'; return RENDER.a_dispatch(); }
+  const plan = ModuleA.shiftPlan(date, shiftId);
+  const orders = ModuleA.applications.filter(a => a.status === 'matched' && a.serviceDate === date && a.assignedShift === shiftId);
+  const vehOpts = ModuleA.logiVehicles().map(v => `<option value="${v.id}" ${plan.vehicle === v.id ? 'selected' : ''}>${v.id}（${v.name}）</option>`).join('');
+  const drvOpts = ModuleA.logiDrivers().map(d => `<option value="${d.id}" ${plan.driver === d.id ? 'selected' : ''}>${d.name}</option>`).join('');
+  const body = orders.length === 0
+    ? `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px;">此車次目前沒有申請單，可按右上角「新增」加入。</td></tr>`
+    : orders.map(a => { const st = DB.stations.find(s => s.id === a.station);
+        return `<tr>
+          <td><button class="btn btn-ghost btn-sm" data-del="${a.id}">刪除</button></td>
+          <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
+          <td>${a.pickupLoc || '—'}</td><td>${st.name} / ${a.building}</td>
+          <td>${itemsSummary(a.items)}</td></tr>`; }).join('');
+  p.innerHTML = `
+    <div class="section-h">車次明細 · ${date}｜${sh.label}</div>
+    <div class="card">
+      <div class="card-title">班次車輛資訊</div>
+      <div class="grid-2">
+        <div class="field"><label>班次</label><div><b>${sh.label}</b></div></div>
+        <div class="field"><label>收貨日期</label><div>${date}</div></div>
+        <div class="field"><label>車輛 <span class="hint">可修改</span></label><select id="add-veh">${vehOpts}</select></div>
+        <div class="field"><label>司機 <span class="hint">可修改</span></label><select id="add-drv">${drvOpts}</select></div>
+      </div>
+      <div style="margin-top:6px;"><button class="btn btn-primary btn-sm" id="add-save">💾 儲存車輛／司機</button>
+        <span class="hint" style="margin-left:8px;">此調整為本車次（日期＋班次）覆寫，不影響班次主檔預設。</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>本車次申請單（${orders.length} 筆）</span>
+        <button class="btn btn-accent btn-sm" id="add-add">＋ 新增</button></div>
+      <div class="table-wrap"><table class="dt"><thead><tr>
+        <th></th><th>單號</th><th>申請人</th><th>收貨地點（起）</th><th>送貨站（迄）</th><th>貨物</th></tr></thead><tbody>${body}</tbody></table></div>
+      <div class="muted" style="margin-top:6px;">「刪除」＝將該單移出本班次（回未排入，待重新指定）；「新增」＝把同日其他班次或未排入的單改派到本班次。</div>
+    </div>
+    ${backBar('add-back')}`;
+  $('#add-back').onclick = () => { aDispatch.view = 'list'; RENDER.a_dispatch(); };
+  $('#add-save').onclick = () => {
+    ModuleA.setShiftPlan(date, shiftId, { vehicle: $('#add-veh').value, driver: $('#add-drv').value });
+    toast(`${date}｜${sh.label} 車輛／司機已更新`, 'ok');
+    RENDER.a_dispatch();
+  };
+  $$('#page-a_dispatch [data-del]').forEach(b => b.onclick = confirmThen(
+    { title: '確認移出本班次？', text: '此單將移出本車次、回到未排入狀態，待業務重新指定班次。' }, () => {
+      const a = ModuleA.applications.find(x => x.id === b.dataset.del);
+      if (a) { ModuleA.removeFromShift(a); toast(`${a.id} 已移出本班次`, 'ok'); RENDER.a_dispatch(); }
+    }));
+  const add = $('#add-add');
+  if (add) add.onclick = () => openDispatchAdd(date, shiftId);
+}
+
+// 新增：把「同日、非本班次」的 matched/未排入單改派到本班次
+function openDispatchAdd(date, shiftId) {
+  const sh = DB.regionalShifts.find(s => s.id === shiftId);
+  const cands = ModuleA.applications.filter(a =>
+    a.serviceDate === date && a.assignedShift !== shiftId && ['matched', 'unscheduled'].includes(a.status));
+  const rows = cands.length === 0
+    ? `<div class="callout" style="margin-top:6px;">同日沒有可加入的申請單（其他班次或未排入）。</div>`
+    : `<div class="table-wrap"><table class="dt"><thead><tr><th></th><th>單號</th><th>申請人</th><th>送貨站</th><th>目前班次</th></tr></thead><tbody>
+        ${cands.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          const cur = a.assignedShift ? (DB.regionalShifts.find(s => s.id === a.assignedShift) || {}).label : '未排入';
+          return `<tr><td><button class="btn btn-accent btn-sm" data-pick="${a.id}">加入</button></td>
+            <td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td><td>${cur || '—'}</td></tr>`; }).join('')}
+      </tbody></table></div>`;
+  openModal(`新增單到 ${date}｜${sh.label}`, `
+    <div class="card-desc">選取要改派到本班次的申請單（同一收貨日期）。加入後原班次即移除、改到本班次並重算到站時間。</div>
+    ${rows}`);
+  $$('#modal-body [data-pick]').forEach(b => b.onclick = () => {
+    const a = ModuleA.applications.find(x => x.id === b.dataset.pick);
+    if (a) { ModuleA.reassignShift(a, shiftId); closeModal(); toast(`${a.id} 已改派到 ${sh.label}`, 'ok'); RENDER.a_dispatch(); }
   });
 }
 
