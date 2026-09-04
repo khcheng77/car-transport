@@ -566,9 +566,6 @@ function renderAApplyDetail(p, id) {
   const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
   const totalVol = a.items.reduce((s, it) => s + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0);
   const canEdit = !['matched', 'delivered'].includes(a.status); // 媒合後不可編輯貨物
-  let action = '';
-  if (a.status === 'matched') action = `<button class="btn btn-accent" data-recv="${a.id}">確認已收到貨</button>`;
-  else if (a.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
     <div class="section-h">收貨申請明細 · ${a.id}</div>
     <div class="card">
@@ -609,7 +606,6 @@ function renderAApplyDetail(p, id) {
           : `較期望時間${a.expectDiffMin > 0 ? '晚' : '早'} ${Math.abs(a.expectDiffMin)} 分（僅提示）`}</div></div>
         <div class="field"><label>異常回報</label><div>${a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'}</div></div>
       </div>`}
-      ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>
     ${backBar('ad-back')}`;
   renderCargoGrid('#ad-items', a.items, canEdit, () => RENDER.a_apply());
@@ -624,8 +620,6 @@ function renderAApplyDetail(p, id) {
     });
   }
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
-  const rcv = $(`#page-a_apply [data-recv]`);
-  if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此收貨申請將標記為已交貨。' }, () => { ModuleA.confirmDelivery(a, a.applicant); toast(`${a.id} 已確認收到貨`, 'ok'); RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review(); });
 }
 
 /* ---------- 新增畫面 ---------- */
@@ -2205,8 +2199,8 @@ RENDER.a_driver = function () {
     const body = ordered.map((stp, i) => {
       const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order));
       const dropLines = stp.drops.map(a => {
-        const del = a.status === 'delivered' ? '<span class="badge b-green">已交貨</span>' : '<span class="badge b-gray">待交貨</span>';
-        return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${stp.name} / ${a.building}｜接收：${recipientDisplay(a.recipient)} ${del}</div>`;
+        const del = a.status === 'delivered' ? ' <span class="badge b-green">已交貨</span>' : '';
+        return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${stp.name} / ${a.building}｜接收：${recipientDisplay(a.recipient)}${del}</div>`;
       }).join('');
       const pickLines = stp.picks.map(a =>
         `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${a.id}｜${a.pickupLoc || stp.name}｜${itemsSummary(a.items)}</div>`).join('');
