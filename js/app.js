@@ -823,36 +823,56 @@ function renderA_route() {
       </tbody></table></div>
     </div>`;
 }
+// 異常回報選項（value → 顯示）；'' ＝正常運送（預設）
+const INCIDENT_OPTS = [['', '正常運送'], ['使用者不準時', '不準時'], ['使用者沒出現', '沒出現']];
+function incidentLabel(v) { const m = INCIDENT_OPTS.find(o => o[0] === (v || '')); return m ? m[1] : v; }
+
+// 編輯異常回報：下拉選單（預設帶入目前值），送出即存檔；選到異常則寄信（雛形空 function）
+function openIncidentEditor(a) {
+  const st = DB.stations.find(s => s.id === a.station);
+  const cur = a.incident || '';
+  const opts = INCIDENT_OPTS.map(([v, t]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`).join('');
+  openModal('編輯異常回報 · ' + a.id, `
+    <div class="field"><label>單號 / 申請人 / 目的地</label><div>${a.id}｜${a.applicant}｜${st.name}</div></div>
+    <div class="field"><label>異常回報 <span class="hint">預設為正常運送；選擇異常送出後將自動寄信通知申請人＋直屬主管（一單一信 G20）</span></label>
+      <select id="inc-sel">${opts}</select></div>
+    <div style="text-align:center;margin-top:20px;">
+      <button class="btn btn-primary" id="inc-ok">▶ 送出</button>
+      <button class="btn btn-ghost" id="inc-cancel">取消</button>
+    </div>`);
+  $('#inc-cancel').onclick = closeModal;
+  $('#inc-ok').onclick = () => {
+    const val = $('#inc-sel').value;
+    ModuleA.reportIncident(a, val); // 存檔；異常時 sendIncidentMail（雛形空 function）
+    closeModal();
+    toast(val ? `${a.id} 異常已回報（${incidentLabel(val)}）並寄信（示意）` : `${a.id} 已設為正常運送`, 'ok');
+    renderA_incident();
+  };
+}
+
 function renderA_incident() {
   const matched = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
   $('#ar-tab-incident').innerHTML = `
     <div class="card">
       <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>
-      <div class="card-desc">跑完整趟回總部後回報，只標異常站點，記錄到申請單層級，存檔＋立即自動寄信給申請人＋直屬主管（沿用審批對應）。一單一信。</div>
+      <div class="card-desc">跑完整趟回總部後回報，只標異常站點，記錄到申請單層級。<b>每張單預設為「正常運送」</b>；如有異常，點該筆最左的<b>編輯</b>鈕，於下拉選單選取異常類別（不準時／沒出現）送出，存檔並立即自動寄信給申請人＋直屬主管（沿用審批對應）。一單一信。</div>
       ${matched.length === 0 ? `<div class="empty">尚無已排班申請單可回報。先於「審核與排班」核准並執行媒合。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>異常回報</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="dt"><thead><tr><th></th><th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>狀態</th></tr></thead><tbody>
         ${matched.map(a => { const st = DB.stations.find(s => s.id === a.station);
           const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td><td>${sh.label}</td>
-            <td><button class="btn btn-ghost btn-sm" data-inc="${a.id}" data-t="late">標記不準時</button>
-                <button class="btn btn-ghost btn-sm" data-inc="${a.id}" data-t="noshow">標記沒出現</button></td></tr>`; }).join('')}
+          const badge = a.incident
+            ? `<span class="badge b-red">${incidentLabel(a.incident)}</span>`
+            : `<span class="badge b-green">正常運送</span>`;
+          return `<tr>
+            <td><button class="btn btn-ghost btn-sm" data-edit="${a.id}">編輯</button></td>
+            <td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td><td>${sh.label}</td>
+            <td>${badge}</td></tr>`; }).join('')}
       </tbody></table></div>`}
     </div>`;
-  $$('#ar-tab-incident [data-inc]').forEach(b => b.onclick = confirmThen({ title: '確認回報異常並寄信？', text: '確認後將記錄異常並立即自動寄信給申請人與直屬主管（G20）。' }, () => {
-    const a = ModuleA.applications.find(x => x.id === b.dataset.inc);
-    const reason = b.dataset.t === 'late' ? '使用者不準時' : '使用者沒出現';
-    const mgr = DB.approvalMap[a.applicant] || '（查無對應主管）';
-    a.incident = reason;
-    openModal('已存檔並自動寄信（示意）',
-      `<div class="result ok"><div class="r-head">✓ 異常已記錄到申請單層級</div>
-        <div>單號 <b>${a.id}</b>｜站點異常原因：<b>${reason}</b></div></div>
-      <div class="callout info" style="margin-top:14px;">
-        <b>立即自動寄信（一單一信 G20）</b><br>
-        收件人：${a.applicant}（申請人）、${mgr}（直屬主管）<br>
-        內容：站點 ${DB.stations.find(s=>s.id===a.station).name}／原因 ${reason}／日期 2026-08-25<br>
-        <span class="muted">※ 信件格式為「待後續設計」項，此為簡潔版 TODO。</span></div>`);
-    toast(`${a.id} 異常已回報並寄信`, 'ok');
-  }));
+  $$('#ar-tab-incident [data-edit]').forEach(b => b.onclick = () => {
+    const a = ModuleA.applications.find(x => x.id === b.dataset.edit);
+    if (a) openIncidentEditor(a);
+  });
 }
 
 /* ============================================================

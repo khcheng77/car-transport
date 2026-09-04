@@ -75,6 +75,19 @@ const ModuleA = {
   // 交貨確認（matched → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
   confirmDelivery(app, by) { if (app.status === 'matched') { app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室'; } },
 
+  /* ---- 駕駛異常回報（G20）----
+     incident＝''／null 代表「正常運送」（預設）；否則為異常原因字串（使用者不準時／使用者沒出現）。
+     設為異常時寄信通知（一單一信：申請人＋直屬主管）；設回正常則僅存檔不寄信。 */
+  reportIncident(app, reason) {
+    app.incident = reason || '';               // 空字串＝正常運送
+    if (app.incident) this.sendIncidentMail(app, app.incident);
+    return app.incident;
+  },
+  /* 寄信服務（雛形：空 function，實際寄信待實作）——一單一信給申請人＋直屬主管（沿用審批對應） */
+  sendIncidentMail(app, reason) {
+    /* TODO: 串接寄信服務。收件人＝申請人＋ DB.approvalMap[app.applicant]；內容含單號/站點/原因/日期 */
+  },
+
   /* 各班次到達某站的時間（示意）：出發時間 + 站序×固定行駛 */
   shiftArrivalAtStation(shift, stationOrder) {
     return hhmmToMin(shift.depart) + stationOrder * 12; // 每站 12 分鐘遞增（示意）
