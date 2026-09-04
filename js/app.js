@@ -769,36 +769,23 @@ function renderAr_review() {
     </div>
     ${unschedCard}
     ${renderAr_scheduled()}`;
-  // 已排定車次：調度/駕駛端確認交貨
-  $$('#ar-tab-review [data-deliver]').forEach(b => b.onclick = confirmThen({ title: '確認交貨？', text: '確認後此車次將標記為已交貨。' }, () => {
-    const a = ModuleA.applications.find(x => x.id === b.dataset.deliver);
-    ModuleA.confirmDelivery(a, '調度室'); toast(`${a.id} 已確認交貨`, 'ok');
-    renderAr_review(); renderAaList();
-  }));
 }
 // 已排定車次一覽（被安排的車次 + 媒合狀況 + 接受/交貨狀態）
 function renderAr_scheduled() {
   const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
   const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。使用者送出申請並自動媒合成功後即會出現在此。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>班次</th><th>車輛</th><th>到站</th>
-      <th>交貨</th><th>操作</th></tr></thead><tbody>
+      <th>單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>班次</th><th>車輛</th><th>到站</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
-        const del = a.status === 'delivered'
-          ? `<span class="badge b-green">已交貨</span>` : '<span class="badge b-gray">未交貨</span>';
-        let op = '<span class="muted">—</span>';
-        if (a.status === 'matched') op = `<button class="btn btn-accent btn-sm" data-deliver="${a.id}">確認交貨</button>`;
-        else if (a.status === 'delivered') op = `<span class="muted">${a.deliveredBy || ''} 完成</span>`;
         return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
           <td>${a.serviceDate || '—'}</td>
-          <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td>
-          <td>${del}</td><td>${op}</td></tr>`; }).join('')}
+          <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td></tr>`; }).join('')}
     </tbody></table></div>`;
   return `<div class="card">
-    <div class="card-title">已排定車次一覽（被安排車次 · 交貨追蹤）</div>
-    <div class="card-desc">媒合成功即完成排班（免確認接受）。顯示每張已排班申請單的班次、車輛、到站時間與交貨狀態。交貨可由接收人於申請端確認收到，或由調度室在此確認送達。</div>
+    <div class="card-title">已排定車次一覽</div>
+    <div class="card-desc">媒合成功即完成排班（免確認接受）。顯示每張已排班申請單的班次、車輛與到站時間。</div>
     ${body}</div>`;
 }
 function renderA_route() {
