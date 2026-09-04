@@ -276,6 +276,14 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.serviceDate, FIX_DATE);
   });
 
+  test('卡發車時間：已發車但尚未抵收貨站的班次也不可媒合（司機出發後不知新單）', () => {
+    const H = fresh(); fixNow(H, 10, 40); H.ModuleA.__fixed = true; // 現在 10:40
+    // 收貨 S3、送貨 S6；R-A2 已於 10:30 發車（雖未抵 S3）→ 不可再排 → 應排 13:00 的 R-A3
+    const { result } = submit(H, { pickStation: 'S3', station: 'S6' });
+    ok(result.ok, '應媒合到尚未發車的班次');
+    eq(result.shift.id, 'R-A3', 'R-A2 已發車（10:30）雖未到 S3 仍不可排 → 應排未發車的 R-A3');
+  });
+
   test('今天班次全數過後 → reason=past，提示改指定未來日期', () => {
     const H = fresh(); fixNow(H, 23, 0); H.ModuleA.__fixed = true; // 現在 23:00，全部班次已過
     const { app, result } = submit(H);

@@ -140,8 +140,7 @@ const ModuleA = {
     }
     const isToday = (date === today);
     const cutoff = isToday ? this.nowMin() : -1; // 未來日期不受今日時間限制
-    const pickOrder = this.segmentOf(app).from;  // 可上貨時點＝車輛抵達收貨站
-    trace.push(`<span class="dim">排班日期：${date}${isToday ? `（今天，現在 ${minToHHMM(cutoff)}；已過班次不採計）` : '（未來日期，全日班次皆可）'}</span>`);
+    trace.push(`<span class="dim">排班日期：${date}${isToday ? `（今天，現在 ${minToHHMM(cutoff)}；已發車班次不採計）` : '（未來日期，全日班次皆可）'}</span>`);
     const vehiclePool = {}; // 各班次車輛容量
     DB.regionalShifts.forEach(sh => {
       vehiclePool[sh.id] = DB.vehicles.find(v => v.id === sh.vehicle);
@@ -176,12 +175,12 @@ const ModuleA = {
       const sh = shifts[i];
       const veh = vehiclePool[sh.id];
       const arr = this.shiftArrivalAtStation(sh, station.order);
-      const board = this.shiftArrivalAtStation(sh, pickOrder); // 車輛抵達收貨站＝可上貨時點
-      trace.push(`\n▶ 嘗試班次 <span class="hl">${sh.label}</span>（車 ${veh.id}）到站約 ${minToHHMM(arr)}`);
+      const departMin = hhmmToMin(sh.depart); // 發車時間（車輛離開基地）
+      trace.push(`\n▶ 嘗試班次 <span class="hl">${sh.label}</span>（車 ${veh.id}）發車 ${sh.depart}｜到站約 ${minToHHMM(arr)}`);
 
-      // --- 今日已過的班次不可媒合（車輛已離開收貨站）---
-      if (board <= cutoff) {
-        trace.push(`  <span class="no">✗ 本班車 ${minToHHMM(board)} 已離開收貨站（現在 ${minToHHMM(cutoff)}）→ 今日不可再排</span>`);
+      // --- 已發車班次不可媒合：司機出發後無法得知中途新單，故僅「尚未發車」的班次可排（G10/G19）---
+      if (departMin <= cutoff) {
+        trace.push(`  <span class="no">✗ 本班已於 ${sh.depart} 發車（現在 ${minToHHMM(cutoff)}）→ 車已離開基地、無法插入新單</span>`);
         continue;
       }
       anyUsable = true;
@@ -244,9 +243,9 @@ const ModuleA = {
 
     // 全部班次皆無法排入（G12 不留候補、不排隔日）
     if (!anyUsable) {
-      trace.push(`\n<span class="no">✗ 今日班次皆已出發（現在 ${minToHHMM(cutoff)}）</span>`);
+      trace.push(`\n<span class="no">✗ 今日班次皆已發車（現在 ${minToHHMM(cutoff)}）</span>`);
       return { ok: false, reason: 'past', trace,
-        msg: `今日班次已過：目前時間 ${minToHHMM(cutoff)}，今天各班次皆已離開收貨站，請改指定未來日期。` };
+        msg: `今日班次已過：目前時間 ${minToHHMM(cutoff)}，今天各班次皆已發車、無法再插入新單，請改指定未來日期。` };
     }
     if (!fitsSomeEmpty) {
       trace.push(`\n<span class="no">✗ 任何一班車空車都放不下 → 貨物太大</span>`);
