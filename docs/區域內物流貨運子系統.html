@@ -474,6 +474,21 @@
     <div class="content">「最近的一台車」定義為<b>時間軸最近的下一班次</b>，不論空間距離。</div>
   </div>
   <div class="decision-card">
+    <div class="label">決策（發車時間卡控）</div>
+    <div class="content">
+      使用者申請單只能媒合到<b>「尚未發車」的班次</b>：媒合時以班次<b>發車時間</b>為界，
+      <b>發車時間已過（≤ 現在）的班次一律排除</b>，即使該班車尚未行駛到本單的收貨站也不例外。
+      <div style="margin-top:8px">
+        本階段司機在<b>出發前</b>即取得當日固定的收送清單，<b>出發後無法得知中途新進的申請單</b>，
+        因此一旦車輛發車（離開基地）該班次的貨物清單即鎖定，不再接受插入新單。
+      </div>
+    </div>
+    <div class="why">
+      若以「車輛抵達收貨站的時間」為界，會誤放行已發車、只是還沒開到該收貨站的班次——但司機並不會在途中被通知新單，
+      該單實務上無法被執行。以發車時間卡控才符合「出發後不知新單」的現場限制。當日已無未發車班次時，比照容量／額度已滿處理：提示使用者改指定未來日期。
+    </div>
+  </div>
+  <div class="decision-card">
     <div class="label">決策</div>
     <div class="content">媒合結果為<b>同步等待結果</b>，非非同步通知。</div>
   </div>
@@ -769,6 +784,7 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
     <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
     <tbody>
       <tr><td>「最近」定義</td><td>時間軸最近的下一班次，非空間距離</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>發車時間卡控</td><td>只媒合尚未發車的班次；發車時間已過即排除（出發後不知中途新單）</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>媒合結果</td><td>同步等待結果</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>併發處理</td><td>載運量不高，不需併發扣容量機制</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>迴圈終止條件</td><td>找到當日最後一班仍裝不下即終止，無固定 maxAttempts</td><td><span class="badge done">已定案</span></td></tr>
