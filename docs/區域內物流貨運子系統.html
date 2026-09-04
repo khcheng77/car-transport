@@ -349,12 +349,22 @@
     <div class="hero-meta">
       <span>範圍：<b>區域內物流（10 站固定路線）</b></span>
       <span>不含：<b>跨據點南北幹線模組（另文）</b></span>
-      <span>狀態：<b>核心邏輯已定案，部分項目待業務單位確認</b></span>
+      <span>狀態：<b>核心邏輯已定案；本版修訂審批流程與排序基準</b></span>
     </div>
   </div>
 </header>
 
 <div class="wrap">
+
+  <div class="lead-box" style="margin-top:8px;border-left:4px solid var(--accent)">
+    <p><b>本版修訂摘要（依實作回填）</b></p>
+    <p>
+      ・<b>3.1 修訂</b>——取消兩層審批，申請單送出即自動媒合、媒合成功即完成排班；業務端角色改為車次追蹤與異常處理。<br>
+      ・<b>3.6 / 4.1 連帶修訂</b>——站內處理順序的排序基準由「審核通過時間」改為「<b>送出時間</b>」。<br>
+      ・<b>4.1 澄清（非修訂）</b>——「指定期望時間」<b>僅用於挑選班次</b>（取到站時間與期望時間差最小者），<b>不是硬性截止時間</b>；
+      即使沒有任何班次能在期望時間前到站，仍應排入時間差最小的班次，不得因此整張退件。此點原文即如此，因實作曾誤讀為截止門檻，特此標明。
+    </p>
+  </div>
 
   <nav class="toc">
     <div class="toc-title">目錄</div>
@@ -532,7 +542,21 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
   </div>
   <div class="decision-card">
     <div class="label">決策</div>
-    <div class="content">沿用原系統<b>兩層審批流程</b>：部門主管核准 → 派車辦公室確認排程（物流走員工申請制，非訂單自動觸發）。</div>
+    <div class="content"><s style="color:var(--ink-soft)">沿用原系統兩層審批流程：部門主管核准 → 派車辦公室確認排程。</s>　<b>（本版取消，見下）</b></div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策（修訂 · 取代上一條）</div>
+    <div class="content">
+      區域內物流<b>取消兩層審批</b>：申請單<b>送出即由系統自動媒合</b>，不經部門主管核准，也不設派車辦公室的「確認排班」按鈕；
+      媒合成功即視為排班完成，可由已排班狀態直接進入交貨。
+      <div style="margin-top:8px">・<b>使用者端</b>：填單 → 送出 → 同步看到排班結果（班次、預計到站時間）或未排入原因。</div>
+      <div>・<b>業務端</b>：角色由「核准／媒合」轉為<b>追蹤已排定車次</b>與處理駕駛異常回報，不介入單張申請單的准駁。</div>
+      <div>・<b>影響範圍</b>：3.6 與 4.1 原以「審核通過時間」為排序基準者，一併改為「送出時間」，見下方修訂。</div>
+    </div>
+    <div class="why">
+      區域內物流為廠區內短程收送，單張申請單金額與風險低，逐張走主管核准會讓行政成本高於運送本身；且審批延遲會直接壓縮可排入的班次數，
+      反而降低車輛利用率。<b>南北幹線（跨據點、跨天、成本高）與差旅共乘仍維持主管准駁，此處不一致為刻意設計。</b>
+    </div>
   </div>
 
   <h2><span class="num">3.2</span> 申請單結構</h2>
@@ -578,7 +602,8 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
   <h2><span class="num">3.6</span> 站內時間額度與跳過規則</h2>
   <div class="decision-card">
     <div class="label">決策</div>
-    <div class="content">同站點多張申請單依<b>審核通過時間</b>排序，逐張判斷該站剩餘時間額度是否容納得下，<b>額度用完的較晚申請單被跳過</b>（以申請單為單位，非整站）。</div>
+    <div class="content">同站點多張申請單依<b>送出時間</b>（原為審核通過時間，因 3.1 取消審批而修訂）排序，逐張判斷該站剩餘時間額度是否容納得下，<b>額度用完的較晚申請單被跳過</b>（以申請單為單位，非整站）。</div>
+    <div class="why">取消審批後已無「審核通過時間」可用；改以送出時間為序，先送先得的公平性與原設計一致。</div>
   </div>
   <div class="decision-card">
     <div class="label">決策</div>
@@ -599,7 +624,7 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
   │  <span class="dir">固定地理順序 →</span> 逐站檢查是否有貨物需求
   ├─ <span class="stop">站點 1</span>：無貨需求 → 跳過
   ├─ <span class="stop">站點 2</span>：先卸貨（釋放容量）→ 再裝貨（佔用容量）
-  │              時間額度：依審核通過時間逐張申請單判斷
+  │              時間額度：依送出時間逐張申請單判斷
   ├─ <span class="stop">…</span>
   └─ <span class="stop">站點 10</span>
        │
@@ -621,11 +646,11 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
       <b>指定期望時間</b>：僅影響「選班次」，系統找當天經過該站點、到站時間與期望時間<b>差最小</b>的班次
       （提早、延後兩方向都嘗試比較）。<b>越快越好</b>：直接找當天<b>最早排得進去</b>的班次。
     </div>
-    <div class="why">將「挑選班次」與「班次內搶時間額度」責任分開，避免期望時間與審核時間互相覆蓋。</div>
+    <div class="why">將「挑選班次」與「班次內搶時間額度」責任分開，避免期望時間與送出順序互相覆蓋。</div>
   </div>
   <div class="decision-card">
     <div class="label">決策</div>
-    <div class="content">不論哪種模式，排入班次後，同站點內申請單處理順序<b>一律仍依審核通過時間排序</b>，兩種模式皆<b>不享插隊優先權</b>。</div>
+    <div class="content">不論哪種模式，排入班次後，同站點內申請單處理順序<b>一律仍依送出時間排序</b>（原為審核通過時間，隨 3.1 修訂），兩種模式皆<b>不享插隊優先權</b>。</div>
   </div>
   <div class="decision-card">
     <div class="label">決策</div>
@@ -641,7 +666,7 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
   └─ <span class="dir">越快越好</span>     → 找最早排得進去的班次
                     │
                     ▼
-        該班次內依「審核通過時間」排序判斷時間額度
+        該班次內依「送出時間」排序判斷時間額度
                     │
           ┌─────────┴─────────┐
           ▼                   ▼
@@ -756,14 +781,14 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
     <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
     <tbody>
       <tr><td>資源池</td><td>與商務用車共乘分開，各自獨立車輛/司機池</td><td><span class="badge done">已定案</span></td></tr>
-      <tr><td>審批流程</td><td>沿用兩層審批：主管核准 → 派車辦公室確認</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>審批流程</td><td><b>取消兩層審批</b>，送出即自動媒合、即完成排班（幹線與共乘仍保留准駁）</td><td><span class="badge done">已定案（本版修訂）</span></td></tr>
       <tr><td>申請單結構</td><td>一單一目的地，可填多筆貨物項目</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>目的地選單</td><td>兩層階層：區塊 → 建築物</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>路線設計</td><td>固定 10 站、固定地理順序、無貨跳過、不重排</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>送收貨方向</td><td>同站可能同時送貨與收貨，先卸後裝</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>上下貨時間</td><td>申請人自填，同站多單加總計算</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>容量判定</td><td>Level 1+2 + 係數 + 總重量上限（加總比較）</td><td><span class="badge done">已定案</span></td></tr>
-      <tr><td>站內時間額度</td><td>依審核通過時間逐張判斷，額度用完的較晚申請單跳過</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>站內時間額度</td><td>依<b>送出時間</b>逐張判斷，額度用完的較晚申請單跳過</td><td><span class="badge done">已定案（本版修訂）</span></td></tr>
       <tr><td>跳過後處理</td><td>自動順延下一班，當天排不進去則提醒改期</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>車輛指派</td><td>路線固定分組車輛，每日由人工手動排班次</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>路線/站點主檔</td><td>人工維護主檔資料，不做動態路線生成</td><td><span class="badge done">已定案</span></td></tr>
@@ -777,7 +802,7 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
       <tr><td>收貨時間欄位</td><td>二選一：指定期望時間 / 越快越好</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>期望時間作用範圍</td><td>僅影響選班次，不影響班次內排序</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>越快越好邏輯</td><td>找當天最早排得進去的班次</td><td><span class="badge done">已定案</span></td></tr>
-      <tr><td>班次內排序</td><td>一律依審核通過時間，兩種模式皆不享優先權</td><td><span class="badge done">已定案</span></td></tr>
+      <tr><td>班次內排序</td><td>一律依<b>送出時間</b>，兩種模式皆不享優先權</td><td><span class="badge done">已定案（本版修訂）</span></td></tr>
       <tr><td>異常回報時機</td><td>駕駛回總部後，僅回報異常站點</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>異常回報精細度</td><td>記錄到申請單層級</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>異常記錄用途</td><td>存檔備查 + 立即自動寄信通知</td><td><span class="badge done">已定案</span></td></tr>
