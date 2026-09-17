@@ -134,6 +134,7 @@ function goto(pageId) {
   $('#topbar-title').textContent = m.title;
   $('#topbar-crumb').textContent = m.crumb;
   RENDER[pageId] && RENDER[pageId]();
+  document.body.classList.remove('nav-open'); // 手機：選單項點擊後關閉抽屜
   window.scrollTo(0, 0);
 }
 
@@ -2482,6 +2483,9 @@ window.addEventListener('DOMContentLoaded', () => {
   $('#swal-ok').onclick = () => _swalClose(true);
   $('#swal-cancel').onclick = () => _swalClose(false);
   $('#swal-mask').onclick = (e) => { if (e.target.id === 'swal-mask') _swalClose(false); };
+  // 行動裝置側欄抽屜：漢堡開關、點遮罩關閉
+  const navToggle = $('#nav-toggle'); if (navToggle) navToggle.onclick = () => document.body.classList.toggle('nav-open');
+  const navBackdrop = $('#nav-backdrop'); if (navBackdrop) navBackdrop.onclick = () => document.body.classList.remove('nav-open');
   tick(); setInterval(tick, 1000);
   goto('dashboard');
 });

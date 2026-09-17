@@ -9,6 +9,8 @@
 <body>
 
 <div class="app">
+  <!-- 行動裝置抽屜遮罩 -->
+  <div class="nav-backdrop" id="nav-backdrop"></div>
   <!-- 側邊導覽 -->
   <aside class="sidebar">
     <div class="brand">
@@ -24,7 +26,8 @@
   <!-- 主內容 -->
   <main class="main">
     <div class="topbar">
-      <div>
+      <button class="nav-toggle" id="nav-toggle" aria-label="開啟選單">☰</button>
+      <div style="flex:1;min-width:0;">
         <h1 id="topbar-title">系統儀表板</h1>
         <div class="crumb" id="topbar-crumb"></div>
       </div>
