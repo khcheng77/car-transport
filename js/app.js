@@ -910,12 +910,12 @@ function renderADispatchList() {
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
         <button class="btn btn-primary btn-sm" id="ad-search">🔍 查詢</button></div>
-      <div class="grid-2">
-        <div class="field"><label>收貨日期</label><input type="date" id="adq-date" value="${q.date || ''}"></div>
-        <div class="field"><label>車輛</label><select id="adq-veh">${vehOpts}</select></div>
-        <div class="field"><label>司機</label><select id="adq-drv">${drvOpts}</select></div>
-        <div class="field"><label>班次</label><select id="adq-shift">${shOpts}</select></div>
-      </div>
+      ${infoGrid('adq-fields', [
+        fInput('收貨日期', `<input type="date" id="adq-date" value="${q.date || ''}">`),
+        fInput('車輛', `<select id="adq-veh">${vehOpts}</select>`),
+        fInput('司機', `<select id="adq-drv">${drvOpts}</select>`),
+        fInput('班次', `<select id="adq-shift">${shOpts}</select>`),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>已排定車次</span><span class="muted" id="ad-count"></span></div>
@@ -926,6 +926,7 @@ function renderADispatchList() {
     renderADispatchGrid();
   };
   renderADispatchGrid();
+  initMasonry(p);
 }
 
 function renderADispatchGrid() {
@@ -980,12 +981,12 @@ function renderADispatchDetail() {
     <div class="section-h">車次明細 · ${date}｜${sh.label}</div>
     <div class="card">
       <div class="card-title">班次車輛資訊</div>
-      <div class="grid-2">
-        <div class="field"><label>班次</label><div><b>${sh.label}</b></div></div>
-        <div class="field"><label>收貨日期</label><div>${date}</div></div>
-        <div class="field"><label>車輛 <span class="hint">可修改</span></label><select id="add-veh">${vehOpts}</select></div>
-        <div class="field"><label>司機 <span class="hint">可修改</span></label><select id="add-drv">${drvOpts}</select></div>
-      </div>
+      ${infoGrid('add-info', [
+        fItem('班次', `<b>${sh.label}</b>`),
+        fItem('收貨日期', date),
+        fInput('車輛 <span class="hint">可修改</span>', `<select id="add-veh">${vehOpts}</select>`),
+        fInput('司機 <span class="hint">可修改</span>', `<select id="add-drv">${drvOpts}</select>`),
+      ].join(''))}
       <div style="margin-top:6px;"><button class="btn btn-primary btn-sm" id="add-save">💾 儲存車輛／司機</button>
         <span class="hint" style="margin-left:8px;">此調整為本車次（日期＋班次）覆寫，不影響班次主檔預設。</span></div>
     </div>
@@ -1010,6 +1011,7 @@ function renderADispatchDetail() {
     }));
   const add = $('#add-add');
   if (add) add.onclick = () => openDispatchAdd(date, shiftId);
+  initMasonry(p);
 }
 
 // 新增：把「同日、非本班次」的 matched/未排入單改派到本班次
@@ -1171,12 +1173,12 @@ function renderBApplyList(p) {
           <button class="btn btn-accent btn-sm" id="bq-new">＋ 新增</button>
         </span>
       </div>
-      <div class="grid-2">
-        <div class="field"><label>申請人（模糊）</label><input type="text" id="bq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
-        <div class="field"><label>據點</label><select id="bq-site">${siteOpts}</select></div>
-        <div class="field"><label>派送型態</label><select id="bq-direct">${dirOpts}</select></div>
-        <div class="field"><label>狀態</label><select id="bq-status">${statusOpts}</select></div>
-      </div>
+      ${infoGrid('bq-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="bq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('據點', `<select id="bq-site">${siteOpts}</select>`),
+        fInput('派送型態', `<select id="bq-direct">${dirOpts}</select>`),
+        fInput('狀態', `<select id="bq-status">${statusOpts}</select>`),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
@@ -1214,6 +1216,7 @@ function renderBApplyList(p) {
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
+  initMasonry(p);
 }
 function runBQuery() {
   bApply.query = {
@@ -1267,24 +1270,24 @@ function renderBApplyDetail(p, id) {
     <div class="section-h">幹線託運單明細 · ${o.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
-      <div class="grid-2">
-        <div class="field"><label>單號</label><div>${o.id}</div></div>
-        <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
-        <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span></div></div>
-        <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span></div></div>
-        <div class="field"><label>收貨地點（建物）</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>送貨地點（建物）</label><div>${o.deliverLoc || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
-        <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
-        <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
-        <div class="field"><label>上貨 / 下貨時間</label><div>${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）</div></div>
-        <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
-      </div>
+      ${infoGrid('bd-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
+        fItem('申請人', o.applicant),
+        fItem('收貨據點（起）', `${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span>`),
+        fItem('送貨據點（迄）', `${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span>`),
+        fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
+        fItem('送貨地點（建物）', o.deliverLoc || '<span class="muted">—</span>'),
+        fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
+        fItem('交貨時間', o.deliverTime || '<span class="muted">—</span>'),
+        fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
+        fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
+        fItem('上貨 / 下貨時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
+        fItem('建立時間', fmtTime(o.createdAt)),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title">接收人資訊</div>
-      <div class="field"><div>${recipientDisplay(o.recipient)}</div></div>
+      ${infoGrid('bd-recv', fItem('接收人', recipientDisplay(o.recipient), { full: true, tall: true }))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
@@ -1294,10 +1297,10 @@ function renderBApplyDetail(p, id) {
     </div>
     <div class="card">
       <div class="card-title">派車資訊</div>
-      <div class="grid-2">
-        <div class="field"><label>指派車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '<span class="muted">尚未派車</span>'}</div></div>
-        <div class="field"><label>預計來收時間</label><div>${o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>　<span class="hint">幹線車抵達「${ModuleB.siteById(o.pickSite).name}」收貨的時間</span>` : '<span class="muted">待派車</span>'}</div></div>
-      </div>
+      ${infoGrid('bd-dispatch', [
+        fItem('指派車號', veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '<span class="muted">尚未派車</span>'),
+        fItem('預計來收時間', o.pickupTime ? `<b style="color:var(--navy);">${o.pickupTime}</b>　<span class="hint">幹線車抵達「${ModuleB.siteById(o.pickSite).name}」收貨的時間</span>` : '<span class="muted">待派車</span>', { w2: true }),
+      ].join(''))}
       ${action ? `<div class="divider"></div><div><b>接收人操作：</b> ${action}</div>` : ''}
     </div>
     ${backBar('bd-back')}`;
@@ -1307,6 +1310,7 @@ function renderBApplyDetail(p, id) {
     if (add) add.onclick = () => openCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); });
   }
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
+  initMasonry(p);
   const rcv = $('#page-b_apply [data-brecv]');
   if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此託運單將標記為已交貨。' }, () => { ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
 }
@@ -1320,29 +1324,34 @@ function renderBApplyNew(p) {
     <div class="section-h">新增幹線託運單</div>
     <div class="card">
       <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
-      <div class="field"><label>申請人</label><input type="text" id="ba-applicant" value="研發部-吳承恩"></div>
+      ${infoGrid('ba-fields0', fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`))}
       <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。<br>
         目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；現行車次模型為「自基地南下、折返北上回基地」，<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
-      <div class="row">
-        <div class="field"><label id="ba-site-label">收貨據點（起）</label><select id="ba-site">${siteOpts}</select></div>
-        ${bldgFieldHtml('收貨建物', 'ba-pickbldg', 'ba-pickother')}
-      </div>
-      <div class="row">
-        <div class="field"><label>送貨據點（迄）</label><select id="ba-dest">${siteOpts}</select></div>
-        ${bldgFieldHtml('送貨建物', 'ba-dropbldg', 'ba-dropother')}
-      </div>
-      <div class="field"><label>派送型態 <span class="hint">直達不湊單、單一目的地 G38</span></label>
-        <div class="radio-group">
-          <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
-          <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
-        </div>
-      </div>
-      <div class="row">
-        <div class="field"><label>交貨時間（幾點交貨）</label><input type="time" id="ba-deliver" value="15:00"></div>
-        <div class="field"><label>上貨時間 (分，G35)</label><input type="number" id="ba-load" value="20"></div>
-        <div class="field"><label>下貨時間 (分，G35)</label><input type="number" id="ba-unload" value="10"></div>
-      </div>
-      ${recipientFieldsHtml('ba')}
+      ${infoGrid('ba-fields', [
+        fInput('收貨據點（起）', `<select id="ba-site">${siteOpts}</select>`),
+        fInput('收貨建物', `<select id="ba-pickbldg"></select><input type="text" id="ba-pickother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput('送貨據點（迄）', `<select id="ba-dest">${siteOpts}</select>`),
+        fInput('送貨建物', `<select id="ba-dropbldg"></select><input type="text" id="ba-dropother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput('派送型態 <span class="hint">直達不湊單、單一目的地 G38</span>', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
+            <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
+          </div>`, { stack: true, full: true }),
+      ].join(''))}
+      ${infoGrid('ba-fields2', [
+        fInput('交貨時間（幾點交貨）', `<input type="time" id="ba-deliver" value="15:00">`),
+        fInput('上貨時間 (分，G35)', `<input type="number" id="ba-load" value="20">`),
+        fInput('下貨時間 (分，G35)', `<input type="number" id="ba-unload" value="10">`),
+      ].join(''))}
+      <div class="divider"></div>
+      <div class="card-title">接收人資訊</div>
+      ${infoGrid('ba-recv', [
+        fInput('單位', `<input type="text" id="ba-runit" placeholder="收貨單位／部門">`),
+        fInput('姓名', `<input type="text" id="ba-rname" placeholder="接收人姓名">`),
+        fInput('電話', `<input type="text" id="ba-rphone" placeholder="聯絡電話">`),
+        fInput('代理人姓名 <span class="hint">選填</span>', `<input type="text" id="ba-aname" placeholder="代理人姓名">`),
+        fInput('代理人電話 <span class="hint">選填</span>', `<input type="text" id="ba-aphone" placeholder="代理人電話">`),
+      ].join(''))}
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="ba-add">＋ 新增</button></div>
@@ -1360,10 +1369,15 @@ function renderBApplyNew(p) {
   $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
   wireBldg('ba-site', 'ba-pickbldg', 'ba-pickother', siteBuildings); // 收貨建物
   wireBldg('ba-dest', 'ba-dropbldg', 'ba-dropother', siteBuildings); // 送貨建物
+  // 建物下拉切換「其他」會改變區塊高度 → 重排 Masonry
+  ['ba-site', 'ba-pickbldg', 'ba-dest', 'ba-dropbldg'].forEach(id => {
+    const el = $('#' + id); if (el) el.addEventListener('change', () => initMasonry(p));
+  });
   // 預設：自基地北端收貨、送往南部（可自行改；方向由起迄自動判斷 B-2）
   $('#ba-site').value = 'D6'; $('#ba-dest').value = 'D3';
   $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填建物選單
   renderBaCargo(); // 一開始顯示空白清單
+  initMasonry(p);
   $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   $('#ba-submit').onclick = async () => {
@@ -1421,11 +1435,11 @@ function renderBApproveList(p) {
     <div class="section-sub">員工建立幹線託運單後由直屬主管准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進派車池。（G63）</div>
     <div class="card">
       <div class="card-title">查詢條件</div>
-      <div class="grid-2">
-        <div class="field"><label>申請人（模糊）</label><input type="text" id="bap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
-        <div class="field"><label>行程方向</label><select id="bap-q-leg">${legOpts}</select></div>
-        <div class="field"><label>狀態</label><select id="bap-q-status">${stOpts}</select></div>
-      </div>
+      ${infoGrid('bap-q-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="bap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('行程方向', `<select id="bap-q-leg">${legOpts}</select>`),
+        fInput('狀態', `<select id="bap-q-status">${stOpts}</select>`),
+      ].join(''))}
       <button class="btn btn-primary btn-sm" id="bap-search">🔍 查詢</button>
     </div>
     <div class="card">
@@ -1446,6 +1460,7 @@ function renderBApproveList(p) {
     renderBApproveGrid(); renderBaList(); if ($('#br-approved')) renderBr_approved();
   });
   renderBApproveGrid();
+  initMasonry(p);
 }
 function renderBApproveGrid() {
   if (!$('#bap-grid')) return;
@@ -1471,26 +1486,26 @@ function renderBApproveDetail(p, id) {
     <div class="section-h">託運單審核 · ${o.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
-      <div class="grid-2">
-        <div class="field"><label>單號</label><div>${o.id}</div></div>
-        <div class="field"><label>申請人</label><div>${o.applicant}</div></div>
-        <div class="field"><label>行程方向 <span class="hint">由起迄自動判斷</span></label><div>${ModuleB.isSouthbound(o) ? '去程（南下）' : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`}</div></div>
-        <div class="field"><label>收貨據點（起）</label><div>${ModuleB.siteById(o.pickSite).name}</div></div>
-        <div class="field"><label>送貨據點（迄）</label><div>${ModuleB.siteById(o.dropSite).name}</div></div>
-        <div class="field"><label>收貨地點（建物）</label><div>${o.pickupLoc || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>送貨地點（建物）</label><div>${o.deliverLoc || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>派送型態</label><div>${o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'}</div></div>
-        <div class="field"><label>交貨時間</label><div>${o.deliverTime || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>貨量 / 重量</label><div>${o.volume}L / ${o.weight}kg</div></div>
-        <div class="field"><label>有效體積（容量計算用）</label><div><b>${ModuleB.effVolume(o).toFixed(0)}L</b></div></div>
-        <div class="field"><label>上貨 / 下貨時間</label><div>${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）</div></div>
-        <div class="field"><label>建立時間</label><div>${fmtTime(o.createdAt)}</div></div>
-        ${o.reviewNote ? `<div class="field"><label>審核備註</label><div>${o.reviewNote}</div></div>` : ''}
-      </div>
+      ${infoGrid('bap-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
+        fItem('申請人', o.applicant),
+        fItem('行程方向 <span class="hint">由起迄自動判斷</span>', ModuleB.isSouthbound(o) ? '去程（南下）' : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`),
+        fItem('收貨據點（起）', ModuleB.siteById(o.pickSite).name),
+        fItem('送貨據點（迄）', ModuleB.siteById(o.dropSite).name),
+        fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
+        fItem('送貨地點（建物）', o.deliverLoc || '<span class="muted">—</span>'),
+        fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
+        fItem('交貨時間', o.deliverTime || '<span class="muted">—</span>'),
+        fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
+        fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
+        fItem('上貨 / 下貨時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
+        fItem('建立時間', fmtTime(o.createdAt)),
+        o.reviewNote ? fItem('審核備註', o.reviewNote) : '',
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title">接收人資訊</div>
-      <div class="field"><div>${recipientDisplay(o.recipient)}</div></div>
+      ${infoGrid('bap-recv', fItem('接收人', recipientDisplay(o.recipient), { full: true, tall: true }))}
     </div>
     <div class="card">
       <div class="card-title">貨物項目</div>
@@ -1499,14 +1514,14 @@ function renderBApproveDetail(p, id) {
     ${pending ? `
     <div class="card">
       <div class="card-title">主管審核 <span class="g-tag">G63</span></div>
-      <div class="field"><label>是否同意</label>
-        <div class="radio-group">
-          <label class="radio-pill sel" id="bsv-yes-pill"><input type="radio" name="bsv-agree" value="yes" checked>是</label>
-          <label class="radio-pill" id="bsv-no-pill"><input type="radio" name="bsv-agree" value="no">否</label>
-        </div>
-      </div>
-      <div class="field"><label>審核備註 <span class="hint" id="bsv-req" style="display:none;color:#c0392b;">（駁回時必填）</span></label>
-        <input type="text" id="bsv-note" placeholder="請輸入審核意見（駁回為必填）"></div>
+      ${infoGrid('bsv-fields', [
+        fInput('是否同意', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="bsv-yes-pill"><input type="radio" name="bsv-agree" value="yes" checked>是</label>
+            <label class="radio-pill" id="bsv-no-pill"><input type="radio" name="bsv-agree" value="no">否</label>
+          </div>`, { stack: true, full: true }),
+        fInput('審核備註 <span class="hint" id="bsv-req" style="display:none;color:#c0392b;">（駁回時必填）</span>', `<input type="text" id="bsv-note" placeholder="請輸入審核意見（駁回為必填）">`, { full: true }),
+      ].join(''))}
       <div style="text-align:center;margin-top:22px;">
         <button class="btn btn-primary" id="bsv-submit">▶ 送出</button>
         <button class="btn btn-ghost" id="bsv-cancel">取消</button>
@@ -1533,6 +1548,7 @@ function renderBApproveDetail(p, id) {
   } else {
     $('#bsv-back').onclick = () => { bApprove.view = 'list'; RENDER.b_approve(); };
   }
+  initMasonry(p);
 }
 
 /* ============================================================
@@ -1742,13 +1758,13 @@ function renderCApplyList(p) {
           <button class="btn btn-accent btn-sm" id="cq-new">＋ 新增</button>
         </span>
       </div>
-      <div class="grid-2">
-        <div class="field"><label>申請人（模糊）</label><input type="text" id="cq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
-        <div class="field"><label>任務型態</label><select id="cq-type">${typeOpts}</select></div>
-        <div class="field"><label>出發地</label><select id="cq-origin">${oOpts}</select></div>
-        <div class="field"><label>目的地</label><select id="cq-dest">${dOpts}</select></div>
-        <div class="field"><label>狀態</label><select id="cq-status">${statusOpts}</select></div>
-      </div>
+      ${infoGrid('cq-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="cq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('任務型態', `<select id="cq-type">${typeOpts}</select>`),
+        fInput('出發地', `<select id="cq-origin">${oOpts}</select>`),
+        fInput('目的地', `<select id="cq-dest">${dOpts}</select>`),
+        fInput('狀態', `<select id="cq-status">${statusOpts}</select>`),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
@@ -1762,6 +1778,7 @@ function renderCApplyList(p) {
   $('#cq-new').onclick = () => { cApply.view = 'new'; RENDER.c_apply(); };
   $('#cq-demo').onclick = () => { loadCDemo(); cApply.resultIds = null; renderCGrid(); };
   renderCGrid();
+  initMasonry(p);
 }
 function runCQuery() {
   cApply.query = {
@@ -1816,28 +1833,28 @@ function renderCApplyDetail(p, id) {
     <div class="section-h">出差用車申請明細 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
-      <div class="grid-2">
-        <div class="field"><label>單號</label><div>${a.id}</div></div>
-        <div class="field"><label>申請人</label><div>${a.applicant}（${a.dept}/${a.ext}）</div></div>
-        <div class="field"><label>任務型態</label><div>${a.type === 'round' ? '來回單' : '單程單（交通轉運點）'}</div></div>
-        <div class="field"><label>路線</label><div>${a.origin} → ${a.dest}</div></div>
-        <div class="field"><label>去程（出發日期 / 上車時間）</label><div>${a.departDate} ${a.earliestPickup}</div></div>
-        ${a.type === 'round'
-          ? `<div class="field"><label>回程（回程日期 / 上車時間）</label><div>${a.returnDate} ${a.earliestReturn || '—'}</div></div>`
-          : `<div class="field"><label>回程</label><div class="muted">單程單不適用</div></div>`}
-        <div class="field"><label>最晚抵達（參考 G55）</label><div class="muted">${ModuleC.latestArrival(a)}</div></div>
-        <div class="field"><label>人數</label><div>${a.pax}</div></div>
-        <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
-      </div>
+      ${infoGrid('cd-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('申請人', `${a.applicant}（${a.dept}/${a.ext}）`),
+        fItem('任務型態', a.type === 'round' ? '來回單' : '單程單（交通轉運點）'),
+        fItem('路線', `${a.origin} → ${a.dest}`),
+        fItem('去程（出發日期 / 上車時間）', `${a.departDate} ${a.earliestPickup}`),
+        a.type === 'round'
+          ? fItem('回程（回程日期 / 上車時間）', `${a.returnDate} ${a.earliestReturn || '—'}`)
+          : fItem('回程', '<span class="muted">單程單不適用</span>'),
+        fItem('最晚抵達（參考 G55）', `<span class="muted">${ModuleC.latestArrival(a)}</span>`),
+        fItem('人數', a.pax),
+        fItem('建立時間', fmtTime(a.createdAt)),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title">媒合與行程狀態</div>
-      <div class="grid-2">
-        <div class="field"><label>指派車輛</label><div>${veh ? veh.name : '<span class="muted">尚未媒合</span>'}</div></div>
-        <div class="field"><label>司機</label><div>${drv ? drv.name : '—'}</div></div>
-        <div class="field"><label>併車群組</label><div>${a.groupId || '—'}</div></div>
-        <div class="field"><label>備註</label><div>${a.note || '—'}</div></div>
-      </div>
+      ${infoGrid('cd-match', [
+        fItem('指派車輛', veh ? veh.name : '<span class="muted">尚未媒合</span>'),
+        fItem('司機', drv ? drv.name : '—'),
+        fItem('併車群組', a.groupId || '—'),
+        fItem('備註', a.note || '—'),
+      ].join(''))}
       ${action ? `<div class="divider"></div><div><b>乘客操作：</b> ${action}</div>` : ''}
     </div>
     ${['approved', 'coordinate', 'manual'].includes(a.status) ? `
@@ -1849,6 +1866,7 @@ function renderCApplyDetail(p, id) {
     </div>` : ''}
     ${backBar('cd-back')}`;
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
+  initMasonry(p);
   const brd = $('#page-c_apply [data-board]');
   if (brd) brd.onclick = confirmThen({ title: '確認上車？', text: '確認後此趟共乘將標記為已上車。' }, () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
   const dn = $('#page-c_apply [data-done]');
@@ -1881,34 +1899,31 @@ function renderCApplyNew(p) {
     <div class="section-h">新增出差用車申請單</div>
     <div class="card">
       <div class="card-title">出差用車申請 <span class="g-tag">G50/G54</span></div>
-      <div class="row">
-        <div class="field"><label>申請人</label><input type="text" id="ca-applicant" value="業務部-周雅婷"></div>
-        <div class="field"><label>部門</label><input type="text" id="ca-dept" value="業務部"></div>
-        <div class="field"><label>分機</label><input type="text" id="ca-ext" value="2201"></div>
-      </div>
-      <div class="field"><label>任務型態</label>
-        <div class="radio-group">
-          <label class="radio-pill sel" id="ca-round"><input type="radio" name="ca-type" value="round" checked>來回單</label>
-          <label class="radio-pill" id="ca-oneway"><input type="radio" name="ca-type" value="oneway">單程單（轉運點）</label>
-        </div>
-      </div>
-      <div class="row">
-        <div class="field"><label>出發地</label><select id="ca-origin">${oOpts}</select></div>
-        <div class="field"><label>目的地</label><select id="ca-dest">${dOpts}</select></div>
-      </div>
+      ${infoGrid('ca-fields', [
+        fInput('申請人', `<input type="text" id="ca-applicant" value="業務部-周雅婷">`),
+        fInput('部門', `<input type="text" id="ca-dept" value="業務部">`),
+        fInput('分機', `<input type="text" id="ca-ext" value="2201">`),
+        fInput('任務型態', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="ca-round"><input type="radio" name="ca-type" value="round" checked>來回單</label>
+            <label class="radio-pill" id="ca-oneway"><input type="radio" name="ca-type" value="oneway">單程單（轉運點）</label>
+          </div>`, { stack: true, full: true }),
+        fInput('出發地', `<select id="ca-origin">${oOpts}</select>`),
+        fInput('目的地', `<select id="ca-dest">${dOpts}</select>`),
+      ].join(''))}
       <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">去程（起始）</div>
-      <div class="row">
-        <div class="field"><label>出發日期</label><input type="date" id="ca-date" value="2026-08-27"></div>
-        <div class="field"><label>最早上車時間</label><input type="time" id="ca-pickup" value="09:00"></div>
-      </div>
+      ${infoGrid('ca-depart', [
+        fInput('出發日期', `<input type="date" id="ca-date" value="2026-08-27">`),
+        fInput('最早上車時間', `<input type="time" id="ca-pickup" value="09:00">`),
+      ].join(''))}
       <div id="ca-return-wrap">
         <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">回程（結束）</div>
-        <div class="row">
-          <div class="field"><label>回程日期</label><input type="date" id="ca-rdate" value="2026-08-27"></div>
-          <div class="field"><label>回程上車時間</label><input type="time" id="ca-return" value="16:00"></div>
-        </div>
+        ${infoGrid('ca-return-grid', [
+          fInput('回程日期', `<input type="date" id="ca-rdate" value="2026-08-27">`),
+          fInput('回程上車時間', `<input type="time" id="ca-return" value="16:00">`),
+        ].join(''))}
       </div>
-      <div class="field" style="max-width:160px;"><label>人數</label><input type="number" id="ca-pax" value="2"></div>
+      ${infoGrid('ca-pax-grid', fInput('人數', `<input type="number" id="ca-pax" value="2">`))}
       <div class="callout info">來回單須「出發地、目的地、出發日期、回程日期、去程上車、回程上車」六項完全相同才能媒合（G54）。最晚抵達時間僅供參考，<b>不參與媒合判斷</b>（G55）。</div>
       <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待主管准駁）</button>
       <button class="btn btn-ghost" id="ca-cancel">取消</button>
@@ -1920,11 +1935,13 @@ function renderCApplyNew(p) {
     $('#ca-round').classList.toggle('sel', round);
     $('#ca-oneway').classList.toggle('sel', !round);
     $('#ca-return-wrap').style.display = round ? 'block' : 'none';
+    initMasonry(p);
   };
   $$('#page-c_apply input[name=ca-type]').forEach(r => r.onchange = setType);
   // 回程日期不可早於出發日期（來回單多天任務依賴正確 returnDate：保修/佔用/C-3 全程檢核）
   const syncRDateMin = () => { $('#ca-rdate').min = $('#ca-date').value || ''; };
   $('#ca-date').onchange = syncRDateMin; syncRDateMin();
+  initMasonry(p);
   $('#ca-cancel').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   $('#ca-submit').onclick = async () => {
     const type = $('#page-c_apply input[name=ca-type]:checked').value;
@@ -1997,11 +2014,11 @@ function renderCApproveList(p) {
     <div class="section-sub">員工填單後由直屬主管審核出差用車准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進排班池。（G63）</div>
     <div class="card">
       <div class="card-title">查詢條件</div>
-      <div class="grid-2">
-        <div class="field"><label>申請人（模糊）</label><input type="text" id="cap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
-        <div class="field"><label>任務型態</label><select id="cap-q-type">${typeOpts}</select></div>
-        <div class="field"><label>狀態</label><select id="cap-q-status">${stOpts}</select></div>
-      </div>
+      ${infoGrid('cap-q-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="cap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('任務型態', `<select id="cap-q-type">${typeOpts}</select>`),
+        fInput('狀態', `<select id="cap-q-status">${stOpts}</select>`),
+      ].join(''))}
       <button class="btn btn-primary btn-sm" id="cap-search">🔍 查詢</button>
     </div>
     <div class="card">
@@ -2022,6 +2039,7 @@ function renderCApproveList(p) {
     renderCApproveGrid(); renderCaList();
   });
   renderCApproveGrid();
+  initMasonry(p);
 }
 function renderCApproveGrid() {
   if (!$('#cap-grid')) return;
@@ -2047,32 +2065,32 @@ function renderCApproveDetail(p, id) {
     <div class="section-h">出差用車審核 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
-      <div class="grid-2">
-        <div class="field"><label>單號</label><div>${a.id}</div></div>
-        <div class="field"><label>申請人</label><div>${a.applicant}（${a.dept}/${a.ext}）</div></div>
-        <div class="field"><label>任務型態</label><div>${a.type === 'round' ? '來回單' : '單程單（交通轉運點）'}</div></div>
-        <div class="field"><label>路線</label><div>${a.origin} → ${a.dest}</div></div>
-        <div class="field"><label>去程（出發日期 / 上車時間）</label><div>${a.departDate} ${a.earliestPickup}</div></div>
-        ${a.type === 'round'
-          ? `<div class="field"><label>回程（回程日期 / 上車時間）</label><div>${a.returnDate} ${a.earliestReturn || '—'}</div></div>`
-          : `<div class="field"><label>回程</label><div class="muted">單程單不適用</div></div>`}
-        <div class="field"><label>最晚抵達（參考 G55）</label><div class="muted">${ModuleC.latestArrival(a)}</div></div>
-        <div class="field"><label>人數</label><div>${a.pax}</div></div>
-        <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
-        ${a.reviewNote ? `<div class="field"><label>審核備註</label><div>${a.reviewNote}</div></div>` : ''}
-      </div>
+      ${infoGrid('cap-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('申請人', `${a.applicant}（${a.dept}/${a.ext}）`),
+        fItem('任務型態', a.type === 'round' ? '來回單' : '單程單（交通轉運點）'),
+        fItem('路線', `${a.origin} → ${a.dest}`),
+        fItem('去程（出發日期 / 上車時間）', `${a.departDate} ${a.earliestPickup}`),
+        a.type === 'round'
+          ? fItem('回程（回程日期 / 上車時間）', `${a.returnDate} ${a.earliestReturn || '—'}`)
+          : fItem('回程', '<span class="muted">單程單不適用</span>'),
+        fItem('最晚抵達（參考 G55）', `<span class="muted">${ModuleC.latestArrival(a)}</span>`),
+        fItem('人數', a.pax),
+        fItem('建立時間', fmtTime(a.createdAt)),
+        a.reviewNote ? fItem('審核備註', a.reviewNote) : '',
+      ].join(''))}
     </div>
     ${pending ? `
     <div class="card">
       <div class="card-title">主管審核 <span class="g-tag">G63</span></div>
-      <div class="field"><label>是否同意</label>
-        <div class="radio-group">
-          <label class="radio-pill sel" id="csv-yes-pill"><input type="radio" name="csv-agree" value="yes" checked>是</label>
-          <label class="radio-pill" id="csv-no-pill"><input type="radio" name="csv-agree" value="no">否</label>
-        </div>
-      </div>
-      <div class="field"><label>審核備註 <span class="hint" id="csv-req" style="display:none;color:#c0392b;">（駁回時必填）</span></label>
-        <input type="text" id="csv-note" placeholder="請輸入審核意見（駁回為必填）"></div>
+      ${infoGrid('csv-fields', [
+        fInput('是否同意', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="csv-yes-pill"><input type="radio" name="csv-agree" value="yes" checked>是</label>
+            <label class="radio-pill" id="csv-no-pill"><input type="radio" name="csv-agree" value="no">否</label>
+          </div>`, { stack: true, full: true }),
+        fInput('審核備註 <span class="hint" id="csv-req" style="display:none;color:#c0392b;">（駁回時必填）</span>', `<input type="text" id="csv-note" placeholder="請輸入審核意見（駁回為必填）">`, { full: true }),
+      ].join(''))}
       <div style="text-align:center;margin-top:22px;">
         <button class="btn btn-primary" id="csv-submit">▶ 送出</button>
         <button class="btn btn-ghost" id="csv-cancel">取消</button>
@@ -2098,6 +2116,7 @@ function renderCApproveDetail(p, id) {
   } else {
     $('#csv-back').onclick = () => { cApprove.view = 'list'; RENDER.c_approve(); };
   }
+  initMasonry(p);
 }
 
 /* ============================================================
