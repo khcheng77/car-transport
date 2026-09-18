@@ -1033,10 +1033,8 @@ let aMasonry = { inst: null };
 // 建一個資訊區塊：label + value（valueHtml 已是內部 HTML）；tall=true 供示範不同高度
 function fItem(label, valueHtml, opts) {
   opts = opts || {};
-  return `<div class="grid-item"><div class="fcard${opts.tall ? ' tall' : ''}">
-    <div class="fcard-label">${label}</div>
-    <div class="fcard-value ${opts.widget ? 'is-widget' : 'is-text'}"${opts.widget ? ` data-widget="${opts.widget}"` : ''}>${valueHtml}</div>
-  </div></div>`;
+  // 無外框；label 藍字＋一個空格＋value，同一行呈現
+  return `<div class="grid-item"><div class="fcard${opts.tall ? ' tall' : ''}"><span class="fcard-label">${label}</span> <span class="fcard-value ${opts.widget ? 'is-widget' : 'is-text'}"${opts.widget ? ` data-widget="${opts.widget}"` : ''}>${valueHtml}</span></div></div>`;
 }
 const fSelect = (id, options, sel) => `<select id="${id}">${options.map(([v, t]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
 
