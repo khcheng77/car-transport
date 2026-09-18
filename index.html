@@ -2,7 +2,18 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" id="viewport-meta">
+<script>
+  /* 手機（螢幕短邊 < 768px）：改用固定桌面寬度，讓整頁「等比縮放」塞進螢幕（像桌面版網站），
+     避免固定側欄在窄直向把主內容壓成一行一字。平板／桌機維持原生 device-width 響應。 */
+  (function () {
+    var shortSide = Math.min(screen.width || 9999, screen.height || 9999);
+    if (shortSide < 768) {
+      var m = document.getElementById('viewport-meta');
+      if (m) m.setAttribute('content', 'width=1100');
+    }
+  })();
+</script>
 <title>車輛派遣系統整合 — 原型</title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
