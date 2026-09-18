@@ -486,12 +486,12 @@ function renderAApplyList(p) {
           <button class="btn btn-accent btn-sm" id="aq-new">＋ 新增</button>
         </span>
       </div>
-      <div class="grid-2">
-        <div class="field"><label>申請人（模糊）</label><input type="text" id="aq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字"></div>
-        <div class="field"><label>目的地站點</label><select id="aq-station">${stOpts}</select></div>
-        <div class="field"><label>狀態</label><select id="aq-status">${statusOpts}</select></div>
-        <div class="field"><label>收貨模式</label><select id="aq-mode">${modeOpts}</select></div>
-      </div>
+      ${infoGrid('aq-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="aq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('目的地站點', `<select id="aq-station">${stOpts}</select>`),
+        fInput('狀態', `<select id="aq-status">${statusOpts}</select>`),
+        fInput('收貨模式', `<select id="aq-mode">${modeOpts}</select>`),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
@@ -516,6 +516,7 @@ function renderAApplyList(p) {
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
+  initMasonry(p);
 }
 function runAQuery() {
   aApply.query = {
@@ -574,21 +575,21 @@ function renderAApplyDetail(p, id) {
     <div class="section-h">收貨申請明細 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status)}</div>
-      <div class="grid-2">
-        <div class="field"><label>單號</label><div>${a.id}</div></div>
-        <div class="field"><label>申請人</label><div>${a.applicant}</div></div>
-        <div class="field"><label>收貨地點（起）</label><div>${a.pickupLoc || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>送貨地點（迄）</label><div>${st.name} / ${a.building}</div></div>
-        <div class="field"><label>收貨模式</label><div>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'}</div></div>
-        <div class="field"><label>排班日期</label><div><b>${a.serviceDate || '—'}</b>${a.serviceDate === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}</div></div>
-        <div class="field"><label>期望收貨時間</label><div>${a.deliverTime || '<span class="muted">—</span>'}</div></div>
-        <div class="field"><label>上貨 / 下貨時間</label><div>${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）</div></div>
-        <div class="field"><label>建立時間</label><div>${fmtTime(a.createdAt)}</div></div>
-      </div>
+      ${infoGrid('ad-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('申請人', a.applicant),
+        fItem('收貨地點（起）', a.pickupLoc || '<span class="muted">—</span>'),
+        fItem('送貨地點（迄）', `${st.name} / ${a.building}`),
+        fItem('收貨模式', a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'),
+        fItem('排班日期', `<b>${a.serviceDate || '—'}</b>${a.serviceDate === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}`),
+        fItem('期望收貨時間', a.deliverTime || '<span class="muted">—</span>'),
+        fItem('上貨 / 下貨時間', `${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）`),
+        fItem('建立時間', fmtTime(a.createdAt)),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title">接收人資訊</div>
-      <div class="field"><div>${recipientDisplay(a.recipient)}</div></div>
+      ${infoGrid('ad-recv', fItem('接收人', recipientDisplay(a.recipient), { full: true, tall: true }))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目（總體積約 ${totalVol.toFixed(0)}L）</span>
@@ -601,15 +602,15 @@ function renderAApplyDetail(p, id) {
       ${a.status === 'unscheduled'
         ? `<div class="callout warn"><b>未排入 — 請改期</b><br>${a.note || '當日各班次皆無法排入（不留候補、不排隔日 G12）。'}</div>
            <div style="margin-top:12px;"><button class="btn btn-primary btn-sm" id="ad-rematch">↻ 重新媒合</button></div>`
-        : `<div class="grid-2">
-        <div class="field"><label>排定班次</label><div>${sh ? sh.label : '<span class="muted">尚未排班</span>'}</div></div>
-        <div class="field"><label>車號</label><div>${veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '—'}</div></div>
-        <div class="field"><label>預計到站時間</label><div>${a.arrival ? `<b style="color:var(--navy);">${a.arrival}</b>` : '—'}</div></div>
-        <div class="field"><label>與期望時間差</label><div>${a.expectDiffMin == null ? '<span class="muted">—（未指定期望）</span>'
+        : infoGrid('ad-match', [
+        fItem('排定班次', sh ? sh.label : '<span class="muted">尚未排班</span>'),
+        fItem('車號', veh ? `<b style="color:var(--navy);">${veh.id}</b>（${veh.name}）` : '—'),
+        fItem('預計到站時間', a.arrival ? `<b style="color:var(--navy);">${a.arrival}</b>` : '—'),
+        fItem('與期望時間差', a.expectDiffMin == null ? '<span class="muted">—（未指定期望）</span>'
           : a.expectDiffMin === 0 ? '準時'
-          : `較期望時間${a.expectDiffMin > 0 ? '晚' : '早'} ${Math.abs(a.expectDiffMin)} 分（僅提示）`}</div></div>
-        <div class="field"><label>異常回報</label><div>${a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'}</div></div>
-      </div>`}
+          : `較期望時間${a.expectDiffMin > 0 ? '晚' : '早'} ${Math.abs(a.expectDiffMin)} 分（僅提示）`),
+        fItem('異常回報', a.incident ? '<span class="badge b-red">' + a.incident + '</span>' : '無'),
+      ].join(''))}
     </div>
     ${backBar('ad-back')}`;
   renderCargoGrid('#ad-items', a.items, canEdit, () => RENDER.a_apply());
@@ -624,6 +625,7 @@ function renderAApplyDetail(p, id) {
     });
   }
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
+  initMasonry(p);
 }
 
 /* ---------- 新增畫面 ---------- */
@@ -633,31 +635,36 @@ function renderAApplyNew(p) {
     <div class="section-h">新增收貨申請單</div>
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
-      <div class="field"><label>申請人</label><input type="text" id="aa-applicant" value="業務部-周雅婷"></div>
-      <div class="row">
-        <div class="field"><label>收貨地點站點（起）</label><select id="aa-pickuploc">${stOpts}</select></div>
-        ${bldgFieldHtml('收貨建物', 'aa-pickbldg', 'aa-pickother')}
-      </div>
-      <div class="row">
-        <div class="field"><label>送貨地點站點（迄）</label><select id="aa-station">${stOpts}</select></div>
-        ${bldgFieldHtml('送貨建物', 'aa-building', 'aa-destother')}
-      </div>
-      <div class="field"><label>收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span></label>
-        <div class="radio-group">
-          <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好（離現在最近）</label>
-          <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
-        </div>
-      </div>
+      ${infoGrid('aa-fields', [
+        fInput('申請人', `<input type="text" id="aa-applicant" value="業務部-周雅婷">`),
+        fInput('收貨地點站點（起）', `<select id="aa-pickuploc">${stOpts}</select>`),
+        fInput('收貨建物', `<select id="aa-pickbldg"></select><input type="text" id="aa-pickother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput('送貨地點站點（迄）', `<select id="aa-station">${stOpts}</select>`),
+        fInput('送貨建物', `<select id="aa-building"></select><input type="text" id="aa-destother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput('收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span>', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好（離現在最近）</label>
+            <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
+          </div>`, { stack: true, full: true }),
+      ].join(''))}
       <div class="row" id="aa-deliver-wrap" style="display:none;">
         <div class="field"><label>期望日期 <span class="hint">今天或未來日期</span></label><input type="date" id="aa-date"></div>
         <div class="field"><label>期望收貨時間 <span class="hint">僅用於挑選最接近的班次，非硬性截止（4.1）</span></label><input type="time" id="aa-deliver" value="14:00"></div>
       </div>
       <div class="callout info" id="aa-today-hint" style="display:none;margin-bottom:10px;">選擇<b>今天</b>時，<b>已經出發的班次不會被媒合</b>；若今日班次都已過，請改選未來日期。</div>
-      <div class="row">
-        <div class="field"><label>上貨時間（分，自填 G15）</label><input type="number" id="aa-load" value="10"></div>
-        <div class="field"><label>下貨時間（分，自填 G15）</label><input type="number" id="aa-unload" value="5"></div>
-      </div>
-      ${recipientFieldsHtml('aa')}
+      ${infoGrid('aa-fields2', [
+        fInput('上貨時間（分，自填 G15）', `<input type="number" id="aa-load" value="10">`),
+        fInput('下貨時間（分，自填 G15）', `<input type="number" id="aa-unload" value="5">`),
+      ].join(''))}
+      <div class="divider"></div>
+      <div class="card-title">接收人資訊</div>
+      ${infoGrid('aa-recv', [
+        fInput('單位', `<input type="text" id="aa-runit" placeholder="收貨單位／部門">`),
+        fInput('姓名', `<input type="text" id="aa-rname" placeholder="接收人姓名">`),
+        fInput('電話', `<input type="text" id="aa-rphone" placeholder="聯絡電話">`),
+        fInput('代理人姓名 <span class="hint">選填</span>', `<input type="text" id="aa-aname" placeholder="代理人姓名">`),
+        fInput('代理人電話 <span class="hint">選填</span>', `<input type="text" id="aa-aphone" placeholder="代理人電話">`),
+      ].join(''))}
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="aa-add">＋ 新增</button></div>
@@ -671,17 +678,23 @@ function renderAApplyNew(p) {
   $('#an-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   wireBldg('aa-pickuploc', 'aa-pickbldg', 'aa-pickother', stationBuildings); // 收貨建物
   wireBldg('aa-station', 'aa-building', 'aa-destother', stationBuildings);    // 送貨建物
+  // 建物下拉切換「其他」會改變區塊高度 → 重排 Masonry 避免絕對定位重疊
+  ['aa-pickuploc', 'aa-pickbldg', 'aa-station', 'aa-building'].forEach(id => {
+    const el = $('#' + id); if (el) el.addEventListener('change', () => initMasonry(p));
+  });
   $$('#page-a_apply input[name=aa-recv]').forEach(r => r.onchange = () => {
     const exact = $('#page-a_apply input[value=exact]').checked;
     $('#aa-mode-asap').classList.toggle('sel', !exact);
     $('#aa-mode-exact').classList.toggle('sel', exact);
     $('#aa-deliver-wrap').style.display = exact ? '' : 'none'; // 期望日期/時間僅指定期望時間需要
     $('#aa-today-hint').style.display = exact ? '' : 'none';
+    initMasonry(p);
   });
   // 期望日期預設今天、不可早於今天
   const _today = ModuleA.todayStr();
   $('#aa-date').value = _today; $('#aa-date').min = _today;
   renderAaItems(); // 一開始顯示空白清單
+  initMasonry(p);  // 表單資訊區塊自適應排版（與顯示頁一致）
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   $('#aa-submit').onclick = async () => {
@@ -1028,13 +1041,36 @@ function openDispatchAdd(date, shiftId) {
    select/date/time；正式版於同一 DOM 節點掛 Kendo：kendoDropDownList / kendoDatePicker…）。
    欄寬用百分比（33.33%），交給 Masonry 依可用寬度自動排列、換行、變高不齊時打包。
    ============================================================ */
-let aMasonry = { inst: null };
+// grid-item 寬度修飾：w2＝2 欄寬、full＝滿版（供較長欄位或群組控件）
+const _giCls = opts => 'grid-item' + (opts.full ? ' full' : (opts.w2 ? ' w2' : ''));
 
-// 建一個資訊區塊：label + value（valueHtml 已是內部 HTML）；tall=true 供示範不同高度
+// 顯示型資訊區塊：label 藍字＋一個空格＋value（純文字或 widget 掛載點），同一行呈現。tall=多行值
 function fItem(label, valueHtml, opts) {
   opts = opts || {};
-  // 無外框；label 藍字＋一個空格＋value，同一行呈現
-  return `<div class="grid-item"><div class="fcard${opts.tall ? ' tall' : ''}"><span class="fcard-label">${label}</span> <span class="fcard-value ${opts.widget ? 'is-widget' : 'is-text'}"${opts.widget ? ` data-widget="${opts.widget}"` : ''}>${valueHtml}</span></div></div>`;
+  return `<div class="${_giCls(opts)}"><div class="fcard${opts.tall ? ' tall' : ''}"><span class="fcard-label">${label}</span> <span class="fcard-value ${opts.widget ? 'is-widget' : 'is-text'}"${opts.widget ? ` data-widget="${opts.widget}"` : ''}>${valueHtml}</span></div></div>`;
+}
+// 輸入型資訊區塊：label 藍字＋輸入控件（控件填滿區塊剩餘寬度），同一行；stack=控件另起一行（群組用）
+function fInput(label, inputHtml, opts) {
+  opts = opts || {};
+  return `<div class="${_giCls(opts)}"><div class="fcard fcard-input${opts.stack ? ' stack' : ''}"><span class="fcard-label">${label}</span> <span class="fcard-value">${inputHtml}</span></div></div>`;
+}
+// 包一層 .fgrid（含 Masonry 需要的 grid-sizer）
+function infoGrid(id, itemsHtml) {
+  return `<div class="fgrid" id="${id}"><div class="grid-sizer"></div>${itemsHtml}</div>`;
+}
+// 初始化 root 內所有 .fgrid（實例存在 grid 元素上）；未載入 Masonry 時退回 float 排版
+function initMasonry(root) {
+  const grids = $$('.fgrid', root || document);
+  if (!grids.length) return;
+  const run = () => grids.forEach(grid => {
+    if (grid._masonry && grid._masonry.destroy) grid._masonry.destroy();
+    if (window.Masonry) {
+      grid._masonry = new window.Masonry(grid, {
+        itemSelector: '.grid-item', columnWidth: '.grid-sizer', percentPosition: true, gutter: 0, transitionDuration: '0.2s',
+      });
+    } else { grid.classList.add('no-masonry'); }
+  });
+  if (window.requestAnimationFrame) requestAnimationFrame(run); else run();
 }
 const fSelect = (id, options, sel) => `<select id="${id}">${options.map(([v, t]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
 
@@ -1099,21 +1135,8 @@ function mountWidgets(root) {
   });
 }
 
-// 初始化或重新排版 Masonry；未載入 Masonry 時退回一般排版（.no-masonry）
-function layoutMasonry() {
-  const grid = $('#m-grid'); if (!grid) return;
-  if (aMasonry.inst && aMasonry.inst.destroy) { aMasonry.inst.destroy(); aMasonry.inst = null; }
-  if (window.Masonry) {
-    requestAnimationFrame(() => {
-      aMasonry.inst = new window.Masonry(grid, {
-        itemSelector: '.grid-item', columnWidth: '.grid-sizer', percentPosition: true, gutter: 0,
-        transitionDuration: '0.2s',
-      });
-    });
-  } else {
-    grid.classList.add('no-masonry'); // 退化：靠 CSS float/百分比排（無打包）
-  }
-}
+// 初始化或重新排版 Masonry（POC 頁）；委派共用引擎 initMasonry
+function layoutMasonry() { initMasonry($('#page-a_masonry')); }
 
 /* ============================================================
    模組 B · 申請端（使用者）

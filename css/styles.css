@@ -262,3 +262,16 @@ table.dt.matrix tr:hover td { background: #E4ECF7; }
 .fcard-value.is-text { word-break: break-word; }
 .fcard-value.is-widget > select, .fcard-value.is-widget > input { width: auto; max-width: 100%; vertical-align: middle; }
 .fcard.tall .fcard-value { white-space: pre-line; }   /* 多行值（示範不同高度供 Masonry 打包）*/
+/* 較寬 / 滿版區塊（供表單中較長欄位或群組控件使用） */
+.fgrid .grid-item.w2 { width: 66.666%; }
+.fgrid .grid-item.full { width: 100%; }
+@media (max-width: 980px) { .fgrid .grid-item.w2 { width: 100%; } }
+/* 輸入型資訊區塊：label 定寬、控件填滿剩餘寬度，仍維持 label + value 同一行 */
+.fcard.fcard-input { display: flex; align-items: baseline; gap: 6px; }
+.fcard.fcard-input > .fcard-label { flex: none; }
+.fcard.fcard-input > .fcard-value { flex: 1 1 auto; min-width: 0; color: var(--ink); }
+.fcard.fcard-input > .fcard-value > input,
+.fcard.fcard-input > .fcard-value > select { width: 100%; box-sizing: border-box; vertical-align: middle; }
+/* 輸入型群組（如建物下拉＋其他文字框、單選膠囊）改為上下堆疊，控件另起一行 */
+.fcard.fcard-input.stack { display: block; }
+.fcard.fcard-input.stack > .fcard-value { display: block; margin-top: 4px; }
