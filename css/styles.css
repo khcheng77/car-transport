@@ -34,10 +34,12 @@ body {
 }
 
 /* ---------- 版面 ---------- */
-.app { display: flex; min-height: 100vh; }
+/* 側欄改用 position:fixed（非 flex 內 sticky）——避開 iOS Safari「flex + sticky + 100vh」
+   會夾住右側主內容、需轉橫向才正常的排版 bug；桌機外觀不變。 */
+.app { min-height: 100vh; }
 .sidebar {
-  width: 232px; flex-shrink: 0; background: var(--navy-deep); color: #fff;
-  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
+  width: 232px; background: var(--navy-deep); color: #fff;
+  display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 20;
 }
 .brand { padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,.12); }
 .brand .logo { font-size: 17px; font-weight: 700; letter-spacing: .01em; }
@@ -54,7 +56,7 @@ body {
 .nav-item .ico { width: 18px; text-align: center; font-size: 15px; }
 .sidebar-foot { padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.12); font-size: 11px; color: #7891B5; }
 
-.main { flex: 1; min-width: 0; }
+.main { margin-left: 232px; min-width: 0; }
 .topbar {
   background: var(--card); border-bottom: 1px solid var(--line); padding: 16px 32px;
   display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10;
