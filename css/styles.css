@@ -257,7 +257,7 @@ table.dt.matrix tr:hover td { background: #E4ECF7; }
 @media (max-width: 640px) { .fgrid .grid-sizer, .fgrid .grid-item { width: 100%; } }
 .fgrid .grid-item { padding: 2px 10px 12px; box-sizing: border-box; float: left; } /* Masonry 以絕對定位排版，float 僅為未載入時的退化 */
 .fcard { font-size: 14.5px; line-height: 1.8; }                      /* 無外框：label + value 同一行 */
-.fcard-label { color: var(--navy); font-weight: 700; }              /* 欄位名稱：藍色字 */
+.fcard-label { color: #2563EB; font-weight: 700; }                  /* 欄位名稱：亮藍色字 */
 .fcard-value { color: var(--ink); }
 .fcard-value.is-text { word-break: break-word; }
 .fcard-value.is-widget > select, .fcard-value.is-widget > input { width: auto; max-width: 100%; vertical-align: middle; }
