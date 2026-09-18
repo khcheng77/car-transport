@@ -83,6 +83,7 @@ const NAV = [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
     { id: 'a_review', ico: '🗂', label: 'A｜車次追蹤（業務）' },
     { id: 'a_dispatch', ico: '🔧', label: 'A｜已排定車次異動（業務）' },
+    { id: 'a_masonry', ico: '🧩', label: 'A｜資訊卡試做（Masonry）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
   ] },
   { group: '模組 B · 南北幹線', items: [
@@ -105,6 +106,7 @@ const PAGE_META = {
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
   a_review: { title: '區域內物流 · 車次追蹤（業務單位）', crumb: '模組 A · 調度端 · G18/G20' },
   a_dispatch: { title: '區域內物流 · 已排定車次異動（業務單位）', crumb: '模組 A · 調度端 · 車次班次/車輛/司機調整' },
+  a_masonry: { title: '區域內物流 · 資訊卡試做（Masonry）', crumb: '模組 A · label+value 資訊區塊 · 自適應排版 POC' },
   a_driver: { title: '區域內物流 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
   b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
   b_approve: { title: '南北幹線 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
@@ -1017,6 +1019,102 @@ function openDispatchAdd(date, shiftId) {
     const a = ModuleA.applications.find(x => x.id === b.dataset.pick);
     if (a) { ModuleA.reassignShift(a, shiftId); closeModal(); toast(`${a.id} 已改派到 ${sh.label}`, 'ok'); RENDER.a_dispatch(); }
   });
+}
+
+/* ============================================================
+   模組 A · 資訊卡試做（Masonry POC）
+   把一張表單拆成多個獨立「資訊區塊（item）」，每塊 label + value。
+   value 相容兩種模式：純文字（is-text）與 widget 掛載點（is-widget，示範用原生
+   select/date/time；正式版於同一 DOM 節點掛 Kendo：kendoDropDownList / kendoDatePicker…）。
+   欄寬用百分比（33.33%），交給 Masonry 依可用寬度自動排列、換行、變高不齊時打包。
+   ============================================================ */
+let aMasonry = { inst: null };
+
+// 建一個資訊區塊：label + value（valueHtml 已是內部 HTML）；tall=true 供示範不同高度
+function fItem(label, valueHtml, opts) {
+  opts = opts || {};
+  return `<div class="grid-item"><div class="fcard${opts.tall ? ' tall' : ''}">
+    <div class="fcard-label">${label}</div>
+    <div class="fcard-value ${opts.widget ? 'is-widget' : 'is-text'}"${opts.widget ? ` data-widget="${opts.widget}"` : ''}>${valueHtml}</div>
+  </div></div>`;
+}
+const fSelect = (id, options, sel) => `<select id="${id}">${options.map(([v, t]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+
+RENDER.a_masonry = function () {
+  const p = $('#page-a_masonry');
+  // 取一張示範申請單（無資料則用假資料），把每個欄位拆成 item
+  const a = ModuleA.applications[0] || {
+    id: 'LA001', applicant: '業務部-周雅婷', station: 'S3', building: '一號月台',
+    pickupLoc: '五股廠 / 原料倉', recvMode: 'exact', serviceDate: ModuleA.todayStr(),
+    deliverTime: '14:00', loadMin: 10, unloadMin: 5, handleMin: 15, assignedShift: 'R-A1',
+    recipient: { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' },
+    items: [{ name: '零件箱', qty: 6 }, { name: '棧板', qty: 1 }],
+  };
+  const st = DB.stations.find(s => s.id === a.station) || {};
+  const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
+  const stationOpts = DB.stations.map(s => [s.id, `${s.order}. ${s.name}`]);
+
+  // 混合：純文字 item 與 widget item（下拉／日期／時間）——示範 value 兩種 render 模式
+  const items = [
+    fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+    fItem('申請人', a.applicant),
+    fItem('收貨模式', fSelect('m-mode', [['asap', '越快越好'], ['exact', '指定期望時間']], a.recvMode), { widget: 'dropdown' }),
+    fItem('目的地站點', fSelect('m-station', stationOpts, a.station), { widget: 'dropdown' }),
+    fItem('送貨建物', a.building || '—'),
+    fItem('收貨地點（起）', a.pickupLoc || '—'),
+    fItem('排班日期', `<input type="date" id="m-date" value="${a.serviceDate || ''}">`, { widget: 'datepicker' }),
+    fItem('期望收貨時間', `<input type="time" id="m-time" value="${a.deliverTime || '14:00'}">`, { widget: 'timepicker' }),
+    fItem('上貨 / 下貨時間', `${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分`),
+    fItem('排定班次', sh ? sh.label : '尚未排班'),
+    fItem('接收人', recipientDisplay(a.recipient), { tall: true }),
+    fItem('貨物摘要', (a.items || []).map(it => `${it.name || '貨物'} × ${it.qty || 1}`).join('\n') || '—', { tall: true }),
+  ].join('');
+
+  p.innerHTML = `
+    <div class="section-h">資訊卡試做（Masonry）</div>
+    <div class="section-sub">把一張收貨申請拆成多個獨立「資訊區塊」，每塊 <b>label + value</b>，交給 Masonry 依可用寬度自動排列、換行（1280＝一列 3 塊，窄螢幕自動降 2／1 欄）。value 相容<b>純文字</b>與<b>Kendo 元件掛載</b>（此處以原生下拉／日期／時間示範同一掛載點）。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>收貨申請 · ${a.id}</span>
+        <button class="btn btn-ghost btn-sm" id="m-relayout">↻ 重新排版</button></div>
+      <div class="fgrid" id="m-grid">
+        <div class="grid-sizer"></div>
+        ${items}
+      </div>
+    </div>
+    <div class="callout info">Masonry 以絕對定位排版；欄寬用百分比（<code>33.333%</code>、非寫死 px），故換行由可用寬度決定。value 區塊 <code>.fcard-value.is-widget</code> 即為 widget 掛載點——正式版在同一節點呼叫 <code>kendoDropDownList / kendoDatePicker</code> 即可，純文字則走 <code>.is-text</code>。</div>`;
+
+  mountWidgets(p);          // Kendo 掛載 hook（原型：無 kendo 時保留原生控件）
+  layoutMasonry();          // 初始化／重排 Masonry
+  const rl = $('#m-relayout'); if (rl) rl.onclick = layoutMasonry;
+};
+
+// widget 掛載 hook：正式版於 [data-widget] 節點掛 Kendo；原型無 window.kendo 時保留原生控件
+function mountWidgets(root) {
+  $$('.fcard-value[data-widget]', root).forEach(el => {
+    if (window.kendo && window.jQuery) {
+      // 範例（正式版）：依 data-widget 掛對應 Kendo 元件
+      // const $w = window.jQuery(el).children().first();
+      // if (el.dataset.widget === 'dropdown') $w.kendoDropDownList();
+      // else if (el.dataset.widget === 'datepicker') $w.kendoDatePicker();
+    }
+    el.dataset.mounted = '1'; // 標記已處理（原型：原生控件即為 value 呈現）
+  });
+}
+
+// 初始化或重新排版 Masonry；未載入 Masonry 時退回一般排版（.no-masonry）
+function layoutMasonry() {
+  const grid = $('#m-grid'); if (!grid) return;
+  if (aMasonry.inst && aMasonry.inst.destroy) { aMasonry.inst.destroy(); aMasonry.inst = null; }
+  if (window.Masonry) {
+    requestAnimationFrame(() => {
+      aMasonry.inst = new window.Masonry(grid, {
+        itemSelector: '.grid-item', columnWidth: '.grid-sizer', percentPosition: true, gutter: 0,
+        transitionDuration: '0.2s',
+      });
+    });
+  } else {
+    grid.classList.add('no-masonry'); // 退化：靠 CSS float/百分比排（無打包）
+  }
 }
 
 /* ============================================================
