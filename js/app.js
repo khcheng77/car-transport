@@ -21,6 +21,7 @@ function openModal(title, bodyHtml) {
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = bodyHtml;
   $('#modal-mask').classList.add('show');
+  initMasonry($('#modal-body')); // 若含 .fgrid（資訊輸入欄位）則於顯示後排版
 }
 function closeModal() { $('#modal-mask').classList.remove('show'); }
 
@@ -327,17 +328,15 @@ function openCargoEditor(item, onSave) {
   const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '' }, item || {});
   const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
   openModal(item ? '編輯貨物內容' : '新增貨物', `
-    <div class="field"><label>品名</label><input type="text" id="ce-name" value="${it.name}"></div>
-    <div class="row">
-      <div class="field"><label>長 (cm)</label><input type="number" id="ce-l" value="${it.l}"></div>
-      <div class="field"><label>寬 (cm)</label><input type="number" id="ce-w" value="${it.w}"></div>
-      <div class="field"><label>高 (cm)</label><input type="number" id="ce-h" value="${it.h}"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>類別 <span class="hint">浪費係數查表 G03</span></label><select id="ce-cat">${catOpts}</select></div>
-      <div class="field"><label>數量</label><input type="number" id="ce-qty" value="${it.qty}"></div>
-      <div class="field"><label>單件重 (kg)</label><input type="number" id="ce-wt" value="${it.weight}"></div>
-    </div>
+    ${infoGrid('ce-fields', [
+      fInput('品名', `<input type="text" id="ce-name" value="${it.name}">`, { full: true }),
+      fInput('長 (cm)', `<input type="number" id="ce-l" value="${it.l}">`),
+      fInput('寬 (cm)', `<input type="number" id="ce-w" value="${it.w}">`),
+      fInput('高 (cm)', `<input type="number" id="ce-h" value="${it.h}">`),
+      fInput('類別 <span class="hint">浪費係數查表 G03</span>', `<select id="ce-cat">${catOpts}</select>`),
+      fInput('數量', `<input type="number" id="ce-qty" value="${it.qty}">`),
+      fInput('單件重 (kg)', `<input type="number" id="ce-wt" value="${it.weight}">`),
+    ].join(''))}
     <div style="text-align:center;margin-top:20px;">
       <button class="btn btn-primary" id="ce-ok">▶ 送出</button>
       <button class="btn btn-ghost" id="ce-cancel">取消</button>
@@ -831,9 +830,10 @@ function openIncidentEditor(a) {
   const cur = a.incident || '';
   const opts = INCIDENT_OPTS.map(([v, t]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`).join('');
   openModal('編輯異常回報 · ' + a.id, `
-    <div class="field"><label>單號 / 申請人 / 目的地</label><div>${a.id}｜${a.applicant}｜${st.name}</div></div>
-    <div class="field"><label>異常回報 <span class="hint">預設為正常運送；選擇異常送出後將自動寄信通知申請人＋直屬主管（一單一信 G20）</span></label>
-      <select id="inc-sel">${opts}</select></div>
+    ${infoGrid('inc-fields', [
+      fItem('單號 / 申請人 / 目的地', `${a.id}｜${a.applicant}｜${st.name}`, { full: true }),
+      fInput('異常回報 <span class="hint">預設為正常運送；選擇異常送出後將自動寄信通知申請人＋直屬主管（一單一信 G20）</span>', `<select id="inc-sel">${opts}</select>`, { full: true }),
+    ].join(''))}
     <div style="text-align:center;margin-top:20px;">
       <button class="btn btn-primary" id="inc-ok">▶ 送出</button>
       <button class="btn btn-ghost" id="inc-cancel">取消</button>
@@ -2240,10 +2240,12 @@ function openOverrideDialog(id) {
       ${a.origin} → ${a.dest}｜${a.pax} 人｜${a.departDate} ${a.earliestPickup}<br>
       調度室可直接調整，<b>不退回員工重新申請</b>；調整將留下人工覆寫紀錄，且此單不再被下一次批次重排。
     </div>
-    <div class="field"><label>指派車輛</label><select id="ovr-veh">${vOpts}</select></div>
-    <div class="field"><label>指派司機</label><select id="ovr-drv">${dOpts}</select></div>
-    <div class="field"><label>調整人</label><input type="text" id="ovr-by" value="調度室-值班人員"></div>
-    <div class="field"><label>調整原因（選填）</label><input type="text" id="ovr-note" placeholder="例：原車輛臨時故障，改派備用車"></div>
+    ${infoGrid('ovr-fields', [
+      fInput('指派車輛', `<select id="ovr-veh">${vOpts}</select>`),
+      fInput('指派司機', `<select id="ovr-drv">${dOpts}</select>`),
+      fInput('調整人', `<input type="text" id="ovr-by" value="調度室-值班人員">`),
+      fInput('調整原因（選填）', `<input type="text" id="ovr-note" placeholder="例：原車輛臨時故障，改派備用車">`, { w2: true }),
+    ].join(''))}
     <div style="text-align:center;margin-top:18px;">
       <button class="btn btn-primary" id="ovr-ok">▶ 確認改派</button>
       <button class="btn btn-ghost" id="ovr-cancel">取消</button>
