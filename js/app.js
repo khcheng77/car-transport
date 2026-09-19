@@ -135,6 +135,8 @@ function goto(pageId) {
   const m = PAGE_META[pageId];
   $('#topbar-title').textContent = m.title;
   $('#topbar-crumb').textContent = m.crumb;
+  // 試作：資訊卡頁的頂列改為橘色漸層橫條、隱藏麵包屑小字
+  const tb = $('.topbar'); if (tb) tb.classList.toggle('grad', pageId === 'a_masonry');
   RENDER[pageId] && RENDER[pageId]();
   window.scrollTo(0, 0);
 }
@@ -1107,7 +1109,6 @@ RENDER.a_masonry = function () {
   ].join('');
 
   p.innerHTML = `
-    <div class="section-h hbar-grad">資訊卡試做（Masonry）</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>收貨申請 · ${a.id}</span>
         <button class="btn btn-ghost btn-sm" id="m-relayout">↻ 重新排版</button></div>

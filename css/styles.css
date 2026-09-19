@@ -83,12 +83,13 @@ body {
 .card-desc { font-size: 13px; color: var(--ink-soft); margin: 0 0 18px; }
 .section-h { font-size: 20px; color: var(--navy); font-weight: 700; margin: 0 0 6px; }
 .section-sub { font-size: 13.5px; color: var(--ink-soft); margin: 0 0 22px; }
-/* 橫條橘色漸層標題：左最橘、往右漸淡（試作於資訊卡頁）*/
-.section-h.hbar-grad {
-  color: #fff; padding: 12px 18px; border-radius: 8px; margin: 0 0 18px;
+/* 試作：頂列改為橫條橘色漸層（左最橘、往右漸淡），並隱藏麵包屑小字 */
+.topbar.grad {
   background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .25); box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  border-bottom-color: transparent;
 }
+.topbar.grad h1 { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.topbar.grad .crumb { display: none; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
