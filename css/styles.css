@@ -121,11 +121,12 @@ body.nav-collapsed .topbar { padding-left: 62px; } /* 讓開左上角漢堡鈕 *
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
 .field .hint { font-size: 11.5px; color: var(--ink-soft); font-weight: 400; margin-left: 6px; }
+/* 輸入欄位：只留下方一條底線，不用整個框框 */
 input[type=text], input[type=number], input[type=date], input[type=time], select, textarea {
-  width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px;
-  font-size: 14px; font-family: inherit; background: #fff; color: var(--ink);
+  width: 100%; padding: 8px 2px; border: none; border-bottom: 1px solid var(--line); border-radius: 0;
+  font-size: 14px; font-family: inherit; background: transparent; color: var(--ink);
 }
-input:focus, select:focus, textarea:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(31,56,100,.1); }
+input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: var(--navy); box-shadow: 0 1px 0 0 var(--navy); }
 .row { display: flex; gap: 12px; }
 .row > * { flex: 1; }
 .radio-group { display: flex; gap: 10px; flex-wrap: wrap; }
