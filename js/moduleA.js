@@ -133,9 +133,12 @@ const ModuleA = {
     return app;
   },
 
-  /* 各班次到達某站的時間（示意）：出發時間 + 站序×固定行駛 */
+  /* 站間行駛時間（分／站）：據點為在地路線、站點相鄰，行駛短。
+     全程 9 站＝9×INTER_STATION_MIN，須明顯小於班距 60 分，確保整條路線在同一時段內走完。 */
+  INTER_STATION_MIN: 3,
+  /* 各班次到達某站的時間（示意）：出發時間 + 站序×站間行駛（全程 ≤ 27 分，不跨時段）*/
   shiftArrivalAtStation(shift, stationOrder) {
-    return hhmmToMin(shift.depart) + stationOrder * 12; // 每站 12 分鐘遞增（示意）
+    return hhmmToMin(shift.depart) + stationOrder * this.INTER_STATION_MIN;
   },
 
   /* 每班次站內處理時間預算（分鐘）＝班距（每小時一班）。

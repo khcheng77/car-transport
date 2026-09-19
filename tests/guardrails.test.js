@@ -191,7 +191,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 
   test('A-1 期望時間非硬性截止：期望早於首班到站仍排入首班並回報時間差', () => {
     const H = fresh();
-    // S3 到站：R-A1＝08:00+3×12＝08:36；期望 08:00 早於任何班次 → 仍應排入最接近的 R-A1，不得退件
+    // 300 站到站：08:00 班＝08:00+3×3＝08:09；期望 08:00 早於任何班次 → 仍應排入最接近的首班，不得退件
     const { app, result } = submit(H, { recvMode: 'exact', deliverTime: '08:00' });
     ok(result.ok, '不得因期望時間過早而失敗（無 late 退件）');
     eq(result.shift.id, 'D1-R1', '應選到站時間差最小的 R-A1');
@@ -332,7 +332,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const H = fresh(); fixNow(H, 23, 0); H.ModuleA.__fixed = true;
     const { result } = submit(H, { recvMode: 'exact', deliverTime: '09:00', serviceDate: '2026-09-03' });
     ok(result.ok, '未來日期應可媒合');
-    eq(result.shift.id, 'D1-R1', '期望 09:00 應選最接近的首班');
+    eq(result.shift.id, 'D1-R2', '期望 09:00 應選到站最接近的 09:00 班（每小時一班）');
   });
 
   test('不同日期互不佔用同一班次的容量與站內額度', () => {
