@@ -84,12 +84,12 @@ body {
 .card-title.grad {
   position: relative; color: #fff; margin: -22px -24px 16px; /* 貼齊卡片上緣與左右緣 */
   border-radius: 10px 10px 0 0;                              /* 上緣圓角對齊卡片、下緣切齊 */
-  padding: 12px 16px 12px 22px; text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+  padding: 12px 16px 12px 26px; text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
   background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
 }
 .card-title.grad::before {
-  content: ''; position: absolute; left: 8px; top: 9px; bottom: 9px; width: 4px;
-  background: #fff; border-radius: 2px;
+  content: '^'; position: absolute; left: 9px; top: 50%; transform: translateY(-58%);
+  color: #fff; font-weight: 800; font-size: 20px; line-height: 1;
 }
 .card-desc { font-size: 13px; color: var(--ink-soft); margin: 0 0 18px; }
 .section-h { font-size: 20px; color: var(--navy); font-weight: 700; margin: 0 0 6px; }
