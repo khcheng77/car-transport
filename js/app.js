@@ -450,7 +450,13 @@ function logiDriverName(vehId) {
    ============================================================ */
 let aaItems = [];
 // 申請功能的子畫面狀態：list 查詢 / new 新增 / detail 明細
-let aApply = { view: 'list', detailId: null, query: { applicant: '', station: '', status: '', mode: '' }, resultIds: null };
+let aApply = { view: 'list', detailId: null, query: { applicant: '', branch: '', station: '', status: '', mode: '' }, resultIds: null };
+
+// 區域內物流：分公司據點小工具
+const brName = id => { const b = DB.branches.find(x => x.id === id); return b ? b.name : (id || '—'); };
+// 某分公司的站點 <option>（value＝站點 id、顯示＝站點編號）
+const branchStationOpts = (branchId, sel) => DB.stations.filter(s => s.branch === branchId)
+  .map(s => `<option value="${s.id}"${s.id === sel ? ' selected' : ''}>${s.name}</option>`).join('');
 
 function fmtTime(d) {
   if (!d) return '—';
@@ -468,8 +474,10 @@ RENDER.a_apply = function () {
 /* ---------- 查詢畫面：上半查詢條件 + 下半歷史紀錄 grid ---------- */
 function renderAApplyList(p) {
   const q = aApply.query;
+  const brOpts = ['<option value="">全部分公司</option>'].concat(
+    DB.branches.map(b => `<option value="${b.id}" ${q.branch === b.id ? 'selected' : ''}>${b.name}</option>`)).join('');
   const stOpts = ['<option value="">全部站點</option>'].concat(
-    DB.stations.map(s => `<option value="${s.id}" ${q.station === s.id ? 'selected' : ''}>${s.order}. ${s.name}</option>`)).join('');
+    DB.stations.map(s => `<option value="${s.id}" ${q.station === s.id ? 'selected' : ''}>${brName(s.branch)}·${s.name}</option>`)).join('');
   const statusOpts = [['', '全部狀態'], ['matched', '已排班'], ['unscheduled', '未排入·請改期'], ['delivered', '已交貨']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   const modeOpts = [['', '全部模式'], ['asap', '越快越好'], ['exact', '指定期望時間']]
@@ -487,6 +495,7 @@ function renderAApplyList(p) {
       </div>
       ${infoGrid('aq-fields', [
         fInput('申請人（模糊）', `<input type="text" id="aq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('分公司據點', `<select id="aq-branch">${brOpts}</select>`),
         fInput('目的地站點', `<select id="aq-station">${stOpts}</select>`),
         fInput('狀態', `<select id="aq-status">${statusOpts}</select>`),
         fInput('收貨模式', `<select id="aq-mode">${modeOpts}</select>`),
@@ -503,13 +512,13 @@ function renderAApplyList(p) {
   $('#aq-search').onclick = () => { runAQuery(); };
   $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
   $('#aq-demo').onclick = () => {
-    // [收貨站(起), 送貨站(迄), 模式, 上貨分, 下貨分, 貨物, 接收人]（收貨站須在送貨站之前）
-    [['S2', 'S3', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
-     ['S2', 'S6', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
-     ['S3', 'S9', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
-    ].forEach(([pick, s, mode, lm, um, items, recipient]) => { const pSt = DB.stations.find(x => x.id === pick);
+    // [分公司, 收貨站(起), 送貨站(迄), 模式, 上貨分, 下貨分, 貨物, 接收人]（收貨站須在送貨站之前）
+    [['BR1', 'BR1-200', 'BR1-300', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
+     ['BR1', 'BR1-200', 'BR1-600', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
+     ['BR2', 'BR2-300', 'BR2-900', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
+    ].forEach(([branch, pick, s, mode, lm, um, items, recipient]) => { const pSt = DB.stations.find(x => x.id === pick);
       ModuleA.submit({
-        applicant: '業務部-周雅婷', station: s, building: DB.stations.find(x => x.id === s).buildings[0],
+        applicant: '業務部-周雅婷', branch, station: s, building: DB.stations.find(x => x.id === s).buildings[0],
         pickStation: pick, pickupLoc: pSt.name + ' / ' + pSt.buildings[0],
         deliverTime: mode === 'exact' ? '14:00' : '', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }); });
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
@@ -520,6 +529,7 @@ function renderAApplyList(p) {
 function runAQuery() {
   aApply.query = {
     applicant: $('#aq-applicant').value.trim(),
+    branch: $('#aq-branch').value,
     station: $('#aq-station').value,
     status: $('#aq-status').value,
     mode: $('#aq-mode').value,
@@ -527,6 +537,7 @@ function runAQuery() {
   const q = aApply.query;
   const res = ModuleA.applications.filter(a =>
     (!q.applicant || a.applicant.includes(q.applicant)) &&
+    (!q.branch || a.branch === q.branch) &&
     (!q.station || a.station === q.station) &&
     (!q.status || a.status === q.status) &&
     (!q.mode || a.recvMode === q.mode));
@@ -549,7 +560,7 @@ function renderAGrid() {
         return `<tr>
           <td><button class="btn btn-ghost btn-sm" data-detail="${a.id}">細節</button></td>
           <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
-          <td>${st.name}/${a.building}</td>
+          <td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td>
           <td>${a.serviceDate || '—'}</td>
           <td>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好'}</td>
           <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td>
@@ -577,8 +588,9 @@ function renderAApplyDetail(p, id) {
       ${infoGrid('ad-basic', [
         fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
         fItem('申請人', a.applicant),
+        fItem('分公司據點', brName(a.branch)),
         fItem('收貨地點（起）', a.pickupLoc || '<span class="muted">—</span>'),
-        fItem('送貨地點（迄）', `${st.name} / ${a.building}`),
+        fItem('送貨地點（迄）', `${st ? st.name : '—'} / ${a.building}`),
         fItem('收貨模式', a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'),
         fItem('排班日期', `<b>${a.serviceDate || '—'}</b>${a.serviceDate === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}`),
         fItem('期望收貨時間', a.deliverTime || '<span class="muted">—</span>'),
@@ -629,13 +641,16 @@ function renderAApplyDetail(p, id) {
 
 /* ---------- 新增畫面 ---------- */
 function renderAApplyNew(p) {
-  const stOpts = DB.stations.map(s => `<option value="${s.id}">${s.order}. ${s.name}</option>`).join('');
+  const initBranch = DB.branches[0].id;
+  const brOpts = DB.branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+  const stOpts = branchStationOpts(initBranch);
   p.innerHTML = `
     <div class="section-h">新增收貨申請單</div>
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       ${infoGrid('aa-fields', [
         fInput('申請人', `<input type="text" id="aa-applicant" value="業務部-周雅婷">`),
+        fInput('分公司據點 <span class="hint">收送貨須同一分公司</span>', `<select id="aa-branch">${brOpts}</select>`),
         fInput('收貨地點站點（起）', `<select id="aa-pickuploc">${stOpts}</select>`),
         fInput('收貨建物', `<select id="aa-pickbldg"></select><input type="text" id="aa-pickother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
         fInput('送貨地點站點（迄）', `<select id="aa-station">${stOpts}</select>`),
@@ -677,6 +692,13 @@ function renderAApplyNew(p) {
   $('#an-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   wireBldg('aa-pickuploc', 'aa-pickbldg', 'aa-pickother', stationBuildings); // 收貨建物
   wireBldg('aa-station', 'aa-building', 'aa-destother', stationBuildings);    // 送貨建物
+  // 切換分公司：重填收/送貨站點選單（限該分公司），再依站點重填建物
+  $('#aa-branch').onchange = () => {
+    const opts = branchStationOpts($('#aa-branch').value);
+    $('#aa-pickuploc').innerHTML = opts; $('#aa-station').innerHTML = opts;
+    $('#aa-pickuploc').onchange(); $('#aa-station').onchange(); // 觸發 wireBldg 重填建物
+    initMasonry(p);
+  };
   // 建物下拉切換「其他」會改變區塊高度 → 重排 Masonry 避免絕對定位重疊
   ['aa-pickuploc', 'aa-pickbldg', 'aa-station', 'aa-building'].forEach(id => {
     const el = $('#' + id); if (el) el.addEventListener('change', () => initMasonry(p));
@@ -714,7 +736,7 @@ function renderAApplyNew(p) {
       if (d < ModuleA.todayStr()) { toast('期望日期不可早於今天', 'err'); return; }
     }
     const { app, result } = ModuleA.submit({
-      applicant: $('#aa-applicant').value, station: $('#aa-station').value,
+      applicant: $('#aa-applicant').value, branch: $('#aa-branch').value, station: $('#aa-station').value,
       building: bldgVal('aa-building', 'aa-destother'),
       pickStation: $('#aa-pickuploc').value,
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
@@ -775,7 +797,7 @@ function renderAr_review() {
       <div class="card-desc">自動媒合時當日各班次皆裝不下或時間額度已滿，系統已即時提醒該使用者改期（不留候補、不排隔日 G12）。</div>
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>原因</th></tr></thead><tbody>
         ${unsched.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td><td class="muted">${a.note || '—'}</td></tr>`; }).join('')}
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td><td class="muted">${a.note || '—'}</td></tr>`; }).join('')}
       </tbody></table></div>
     </div>`;
   $('#ar-tab-review').innerHTML = `
@@ -795,7 +817,7 @@ function renderAr_scheduled() {
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
-        return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${st.name}/${a.building}</td>
+        return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td>
           <td>${a.serviceDate || '—'}</td>
           <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td></tr>`; }).join('')}
     </tbody></table></div>`;
@@ -805,20 +827,23 @@ function renderAr_scheduled() {
     ${body}</div>`;
 }
 function renderA_route() {
-  $('#ar-tab-route').innerHTML = `
+  // 每個分公司據點各有 9 站固定路線（100~900）與專屬 5 班班次（獨立路線）
+  const perBranch = DB.branches.map(b => {
+    const sts = DB.stations.filter(s => s.branch === b.id);
+    const shs = DB.regionalShifts.filter(s => s.branch === b.id);
+    return `
     <div class="card">
-      <div class="card-title">固定 10 站路線 <span class="g-tag">G14</span></div>
-      <div class="card-desc">固定地理順序、無貨跳過、不重排。同站先卸後裝、多單時間加總。</div>
-      <div class="route">${DB.stations.map(s => `<div class="stop"><div class="s-name">${s.order}. ${s.name}</div><div class="s-meta">${s.buildings.join(' / ')}</div></div>`).join('')}</div>
-    </div>
-    <div class="card">
-      <div class="card-title">今日班次 · 車輛對應 <span class="g-tag">G18</span></div>
-      <div class="card-desc">「今日哪台車跑哪班次」人工每日排定，系統只記錄對應並代入容量參數。</div>
+      <div class="card-title">${b.name} · 9 站固定路線 <span class="g-tag">G14</span></div>
+      <div class="card-desc">固定地理順序（站點 100→900）、無貨跳過、不重排。同站先卸後裝、多單時間加總。</div>
+      <div class="route">${sts.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">建物 ${s.buildings[0]}–${s.buildings[s.buildings.length - 1]}</div></div>`).join('')}</div>
+      <div class="card-title" style="font-size:14px;margin-top:14px;">今日班次 · 車輛對應 <span class="g-tag">G18</span></div>
       <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>出發</th><th>車輛</th><th>容量</th><th>重量上限</th></tr></thead><tbody>
-        ${DB.regionalShifts.map(sh => { const v = DB.vehicles.find(x => x.id === sh.vehicle);
+        ${shs.map(sh => { const v = DB.vehicles.find(x => x.id === sh.vehicle);
           return `<tr><td>${sh.label}</td><td>${sh.depart}</td><td>${v.name}</td><td>${v.volume.toFixed(0)}L</td><td>${v.weight}kg</td></tr>`; }).join('')}
       </tbody></table></div>
     </div>`;
+  }).join('');
+  $('#ar-tab-route').innerHTML = perBranch;
 }
 // 異常回報選項（value → 顯示）；'' ＝正常運送（預設）
 const INCIDENT_OPTS = [['', '正常運送'], ['使用者不準時', '不準時'], ['使用者沒出現', '沒出現']];
@@ -831,7 +856,7 @@ function openIncidentEditor(a) {
   const opts = INCIDENT_OPTS.map(([v, t]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`).join('');
   openModal('編輯異常回報 · ' + a.id, `
     ${infoGrid('inc-fields', [
-      fItem('單號 / 申請人 / 目的地', `${a.id}｜${a.applicant}｜${st.name}`, { full: true }),
+      fItem('單號 / 申請人 / 目的地', `${a.id}｜${a.applicant}｜${brName(a.branch)}·${st ? st.name : '—'}`, { full: true }),
       fInput('異常回報 <span class="hint">預設為正常運送；選擇異常送出後將自動寄信通知申請人＋直屬主管（一單一信 G20）</span>', `<select id="inc-sel">${opts}</select>`, { full: true }),
     ].join(''))}
     <div style="text-align:center;margin-top:20px;">
@@ -863,7 +888,7 @@ function renderA_incident() {
             : `<span class="badge b-green">正常運送</span>`;
           return `<tr>
             <td><button class="btn btn-ghost btn-sm" data-edit="${a.id}">編輯</button></td>
-            <td>${a.id}</td><td>${a.applicant}</td><td>${st.name}</td><td>${sh.label}</td>
+            <td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}</td><td>${sh.label}</td>
             <td>${badge}</td></tr>`; }).join('')}
       </tbody></table></div>`}
     </div>`;
@@ -903,7 +928,7 @@ function renderADispatchList() {
   const drvOpts = ['<option value="">全部司機</option>'].concat(
     ModuleA.logiDrivers().map(d => `<option value="${d.id}" ${q.driver === d.id ? 'selected' : ''}>${d.name}</option>`)).join('');
   const shOpts = ['<option value="">全部班次</option>'].concat(
-    DB.regionalShifts.map(s => `<option value="${s.id}" ${q.shift === s.id ? 'selected' : ''}>${s.label}</option>`)).join('');
+    DB.regionalShifts.map(s => `<option value="${s.id}" ${q.shift === s.id ? 'selected' : ''}>${brName(s.branch)}·${s.label}</option>`)).join('');
   p.innerHTML = `
     <div class="section-h">已排定車次異動（業務單位）</div>
     <div class="section-sub">查詢已排定車次，點「細節」進入明細頁調整所屬<b>班次</b>、修改車次的<b>車輛／司機</b>，並<b>新增／移出</b>該班次的申請單。</div>
@@ -954,7 +979,7 @@ function renderADispatchGrid() {
         <td>${r.date}</td>
         <td><b style="color:var(--navy);">${r.plan.vehicle || '—'}</b>（${vehName(r.plan.vehicle)}）</td>
         <td>${drvName(r.plan.driver)}</td>
-        <td>${r.sh ? r.sh.label : r.shiftId}</td>
+        <td>${r.sh ? brName(r.sh.branch) + '·' + r.sh.label : r.shiftId}</td>
         <td>${r.n}</td></tr>`).join('')}
     </tbody></table></div>`;
   $$('#ad-grid [data-key]').forEach(b => b.onclick = () => { aDispatch.key = b.dataset.key; aDispatch.view = 'detail'; RENDER.a_dispatch(); });
@@ -978,10 +1003,11 @@ function renderADispatchDetail() {
           <td>${a.pickupLoc || '—'}</td><td>${st.name} / ${a.building}</td>
           <td>${itemsSummary(a.items)}</td></tr>`; }).join('');
   p.innerHTML = `
-    <div class="section-h">車次明細 · ${date}｜${sh.label}</div>
+    <div class="section-h">車次明細 · ${brName(sh.branch)}｜${date}｜${sh.label}</div>
     <div class="card">
       <div class="card-title">班次車輛資訊</div>
       ${infoGrid('add-info', [
+        fItem('分公司據點', brName(sh.branch)),
         fItem('班次', `<b>${sh.label}</b>`),
         fItem('收貨日期', date),
         fInput('車輛 <span class="hint">可修改</span>', `<select id="add-veh">${vehOpts}</select>`),
@@ -1018,7 +1044,7 @@ function renderADispatchDetail() {
 function openDispatchAdd(date, shiftId) {
   const sh = DB.regionalShifts.find(s => s.id === shiftId);
   const cands = ModuleA.applications.filter(a =>
-    a.serviceDate === date && a.assignedShift !== shiftId && ['matched', 'unscheduled'].includes(a.status));
+    a.serviceDate === date && a.branch === sh.branch && a.assignedShift !== shiftId && ['matched', 'unscheduled'].includes(a.status));
   const rows = cands.length === 0
     ? `<div class="callout" style="margin-top:6px;">同日沒有可加入的申請單（其他班次或未排入）。</div>`
     : `<div class="table-wrap"><table class="dt"><thead><tr><th></th><th>單號</th><th>申請人</th><th>送貨站</th><th>目前班次</th></tr></thead><tbody>
@@ -2498,9 +2524,9 @@ RENDER.a_driver = function () {
     }).join('');
     return `<div class="card">
       <div class="card-title" style="justify-content:space-between;">
-        <span>🚚 <b>${date}</b>${date === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}｜${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
+        <span>🚚 <b>${brName(sh.branch)}</b>｜<b>${date}</b>${date === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}｜${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
         <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
-      <div class="card-desc">沿固定 10 站路線<b>一次通過</b>，於 <b>${ordered.length}</b> 個停靠站依序<b>卸貨／取貨</b>；本班 <b>${list.length}</b> 筆、總貨量約 <b>${totalVol.toFixed(0)}L</b>。</div>
+      <div class="card-desc">沿分公司固定 9 站路線<b>一次通過</b>，於 <b>${ordered.length}</b> 個停靠站依序<b>卸貨／取貨</b>；本班 <b>${list.length}</b> 筆、總貨量約 <b>${totalVol.toFixed(0)}L</b>。</div>
       <div class="table-wrap"><table class="dt"><thead><tr>
         <th>順序</th><th>停靠站</th><th>抵達</th><th>作業（卸貨／取貨）</th>
       </tr></thead><tbody>${body}</tbody></table></div></div>`;

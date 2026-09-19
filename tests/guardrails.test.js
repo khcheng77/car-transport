@@ -86,7 +86,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
   function submit(H, over) {
     if (!H.ModuleA.__fixed) { fixNow(H); H.ModuleA.__fixed = true; }
     return H.ModuleA.submit(Object.assign({
-      applicant: '業務部-周雅婷', station: 'S3', building: '一號月台',
+      applicant: '業務部-周雅婷', station: 'BR1-300', building: '一號月台',
       items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15,
     }, over));
   }
@@ -105,8 +105,8 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const H = fresh();
     const a1 = submit(H).app, a2 = submit(H).app, a3 = submit(H).app; // 各 15 分，額度 40
     eq([a1.submitSeq, a2.submitSeq, a3.submitSeq].join(','), '1,2,3', '送出序應遞增');
-    eq(a1.assignedShift, 'R-A1'); eq(a2.assignedShift, 'R-A1');
-    eq(a3.assignedShift, 'R-A2', '第三單 45>40 應順延下一班（G16/G17）');
+    eq(a1.assignedShift, 'BR1-R1'); eq(a2.assignedShift, 'BR1-R1');
+    eq(a3.assignedShift, 'BR1-R2', '第三單 45>40 應順延下一班（G16/G17）');
   });
 
   test('太大：超過任何一班車尺寸/容量 → reason=toobig、回覆太大', () => {
@@ -155,7 +155,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const H = fresh();
     const { app } = submit(H, { loadMin: 18, unloadMin: 12, handleMin: undefined }); // 合計 30 ≤ 40
     eq(app.handleMin, 30, 'handleMin 應為上貨＋下貨加總');
-    eq(app.assignedShift, 'R-A1', '30 分在額度內應排首班');
+    eq(app.assignedShift, 'BR1-R1', '30 分在額度內應排首班');
     // 幹線同樣加總
     const o = H.ModuleB.createOrder({ applicant: 'X', site: 'D3', destSite: 'D1', direct: false,
       loadMin: 20, unloadMin: 15, items: [{ name: 'a', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }] });
@@ -165,13 +165,13 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
   test('G19 越快越好：選最早出發班次', () => {
     const H = fresh();
     const { result } = submit(H, { recvMode: 'asap' });
-    ok(result.ok, '應排入'); eq(result.shift.id, 'R-A1', 'asap 應排最早班次 R-A1（08:30）');
+    ok(result.ok, '應排入'); eq(result.shift.id, 'BR1-R1', 'asap 應排最早班次 R-A1（08:30）');
   });
 
   test('G19 指定期望時間：以交貨時間為目標，選到站時間差最小的班次（早晚都比）', () => {
     const H = fresh();
     const { result } = submit(H, { recvMode: 'exact', deliverTime: '20:00' });
-    ok(result.ok); eq(result.shift.id, 'R-A5', '期望 20:00 應選最接近的末班（5 班制）');
+    ok(result.ok); eq(result.shift.id, 'BR1-R5', '期望 20:00 應選最接近的末班（5 班制）');
   });
 
   test('指定期望時間不再需要期望到站時間欄位（expectTime 已移除）', () => {
@@ -185,7 +185,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     // 越快越好模式即使貨物很小，仍應忽略交貨時間、直接排最早班次
     const { app, result } = submit(H, { recvMode: 'asap', deliverTime: '' });
     ok(result.ok, '應媒合成功'); eq(app.deliverTime, '', '越快越好不帶交貨時間');
-    eq(result.shift.id, 'R-A1', '無截止 → 排最早班次 R-A1');
+    eq(result.shift.id, 'BR1-R1', '無截止 → 排最早班次 R-A1');
   });
 
   test('A-1 期望時間非硬性截止：期望早於首班到站仍排入首班並回報時間差', () => {
@@ -193,7 +193,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     // S3 到站：R-A1＝08:00+3×12＝08:36；期望 08:00 早於任何班次 → 仍應排入最接近的 R-A1，不得退件
     const { app, result } = submit(H, { recvMode: 'exact', deliverTime: '08:00' });
     ok(result.ok, '不得因期望時間過早而失敗（無 late 退件）');
-    eq(result.shift.id, 'R-A1', '應選到站時間差最小的 R-A1');
+    eq(result.shift.id, 'BR1-R1', '應選到站時間差最小的 R-A1');
     ok(result.expectDiffMin > 0, '應回報較期望時間晚的分鐘數，實得 ' + result.expectDiffMin);
     eq(app.expectDiffMin, result.expectDiffMin, '差值應存於申請單供顯示');
   });
@@ -208,42 +208,43 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 
   test('期望時間空值：asap 排最早班；asap 不受期望時間影響', () => {
     const H = fresh();
-    eq(submit(H, { deliverTime: '' }).result.shift.id, 'R-A1', '空值應排最早班');
-    eq(submit(fresh(), { recvMode: 'asap', deliverTime: '23:59' }).result.shift.id, 'R-A1', 'asap 模式不用期望時間');
+    eq(submit(H, { deliverTime: '' }).result.shift.id, 'BR1-R1', '空值應排最早班');
+    eq(submit(fresh(), { recvMode: 'asap', deliverTime: '23:59' }).result.shift.id, 'BR1-R1', 'asap 模式不用期望時間');
   });
 
   test('A-2 先卸後裝：站區間不重疊的兩張大單可同班次（卸貨釋放容量）', () => {
     const H = fresh();
     // 每張有效體積 ≈8886L（V-L01 容量 ≈14364L 的 62%）：舊邏輯兩張累計必爆
     const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
-    const a1 = submit(H, { pickStation: 'S1', station: 'S3', items: [big()], handleMin: 1 }).app; // 佔 [1,3)
-    const a2 = submit(H, { pickStation: 'S5', station: 'S8', items: [big()], handleMin: 1 }).app; // 佔 [5,8)
-    eq(a1.assignedShift, 'R-A1', '第一張排首班');
-    eq(a2.assignedShift, 'R-A1', '區間不重疊 → 第二張也應排同一班（容量已於 S3 釋放）');
+    const a1 = submit(H, { pickStation: 'BR1-100', station: 'BR1-300', items: [big()], handleMin: 1 }).app; // 佔 [1,3)
+    const a2 = submit(H, { pickStation: 'BR1-500', station: 'BR1-800', items: [big()], handleMin: 1 }).app; // 佔 [5,8)
+    eq(a1.assignedShift, 'BR1-R1', '第一張排首班');
+    eq(a2.assignedShift, 'BR1-R1', '區間不重疊 → 第二張也應排同一班（容量已於 S3 釋放）');
   });
 
   test('A-2 區間重疊仍受容量限制：跨越整段的大單須順延', () => {
     const H = fresh();
     const big = () => item({ name: '大箱', l: 240, w: 170, h: 180, qty: 1, category: 'BOX', weight: 50 });
-    submit(H, { pickStation: 'S1', station: 'S3', items: [big()], handleMin: 1 });
-    submit(H, { pickStation: 'S5', station: 'S8', items: [big()], handleMin: 1 });
-    const a3 = submit(H, { pickStation: 'S1', station: 'S9', items: [big()], handleMin: 1 }).app; // 佔 [1,9) 與兩張皆重疊
-    ok(a3.assignedShift !== 'R-A1', '與既有單重疊區間容量不足 → 不得排首班，實得 ' + a3.assignedShift);
+    submit(H, { pickStation: 'BR1-100', station: 'BR1-300', items: [big()], handleMin: 1 });
+    submit(H, { pickStation: 'BR1-500', station: 'BR1-800', items: [big()], handleMin: 1 });
+    const a3 = submit(H, { pickStation: 'BR1-100', station: 'BR1-900', items: [big()], handleMin: 1 }).app; // 佔 [1,9) 與兩張皆重疊
+    ok(a3.assignedShift !== 'BR1-R1', '與既有單重疊區間容量不足 → 不得排首班，實得 ' + a3.assignedShift);
   });
 
   test('A-2 額度計於各自站點：上貨計收貨站、卸貨計送貨站', () => {
     const H = fresh();
     // 兩張同收貨站 S4、上貨各 30 分：S4 上貨額度 30+30>40 → 第二張順延班次
-    const a1 = submit(H, { pickStation: 'S4', station: 'S7', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
-    const a2 = submit(H, { pickStation: 'S4', station: 'S8', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
-    eq(a1.assignedShift, 'R-A1', '第一張排首班');
-    ok(a2.assignedShift !== 'R-A1', '收貨站 S4 上貨額度不足 → 第二張應順延，實得 ' + a2.assignedShift);
+    const a1 = submit(H, { pickStation: 'BR1-400', station: 'BR1-700', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
+    const a2 = submit(H, { pickStation: 'BR1-400', station: 'BR1-800', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
+    eq(a1.assignedShift, 'BR1-R1', '第一張排首班');
+    ok(a2.assignedShift !== 'BR1-R1', '收貨站 S4 上貨額度不足 → 第二張應順延，實得 ' + a2.assignedShift);
   });
 
   test('班次主檔為每日 5 班（早到晚）', () => {
     const H = fresh();
-    eq(H.DB.regionalShifts.length, 5, '應有 5 個班次');
-    const deps = H.DB.regionalShifts.map(s => s.depart);
+    const br1Shifts = H.DB.regionalShifts.filter(s => s.branch === 'BR1');
+    eq(br1Shifts.length, 5, '每分公司應有 5 個班次');
+    const deps = br1Shifts.map(s => s.depart);
     eq(deps.join(','), '08:00,10:30,13:00,15:00,17:00', '班次時間應由早到晚');
     for (let i = 1; i < deps.length; i++) {
       ok(H.hhmmToMin(deps[i]) > H.hhmmToMin(deps[i - 1]), '班次須遞增');
@@ -270,18 +271,18 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
   test('今天過去的時間不可媒合：已出發班次不採計，只排之後的班次', () => {
     const H = fresh(); fixNow(H, 11, 0); H.ModuleA.__fixed = true; // 現在 11:00
     // S1 收貨、S3 送貨：R-A1 08:00、R-A2 10:30 抵 S1 時已過 → 應排 13:00 的 R-A3
-    const { app, result } = submit(H, { pickStation: 'S1', station: 'S3' });
+    const { app, result } = submit(H, { pickStation: 'BR1-100', station: 'BR1-300' });
     ok(result.ok, '仍應媒合到之後的班次');
-    eq(result.shift.id, 'R-A3', '11:00 時 R-A1/R-A2 已過 → 應排 R-A3');
+    eq(result.shift.id, 'BR1-R3', '11:00 時 R-A1/R-A2 已過 → 應排 R-A3');
     eq(app.serviceDate, FIX_DATE);
   });
 
   test('卡發車時間：已發車但尚未抵收貨站的班次也不可媒合（司機出發後不知新單）', () => {
     const H = fresh(); fixNow(H, 10, 40); H.ModuleA.__fixed = true; // 現在 10:40
     // 收貨 S3、送貨 S6；R-A2 已於 10:30 發車（雖未抵 S3）→ 不可再排 → 應排 13:00 的 R-A3
-    const { result } = submit(H, { pickStation: 'S3', station: 'S6' });
+    const { result } = submit(H, { pickStation: 'BR1-300', station: 'BR1-600' });
     ok(result.ok, '應媒合到尚未發車的班次');
-    eq(result.shift.id, 'R-A3', 'R-A2 已發車（10:30）雖未到 S3 仍不可排 → 應排未發車的 R-A3');
+    eq(result.shift.id, 'BR1-R3', 'R-A2 已發車（10:30）雖未到 S3 仍不可排 → 應排未發車的 R-A3');
   });
 
   test('今天班次全數過後 → reason=past，提示改指定未來日期', () => {
@@ -295,9 +296,9 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 
   test('車次異動：改派班次更新 assignedShift 並重算到站時間', () => {
     const H = fresh();
-    const { app } = submit(H, { pickStation: 'S1', station: 'S3' });
+    const { app } = submit(H, { pickStation: 'BR1-100', station: 'BR1-300' });
     ok(app.status === 'matched' && app.assignedShift, '先媒合成功');
-    const target = H.DB.regionalShifts.find(s => s.id !== app.assignedShift);
+    const target = H.DB.regionalShifts.find(s => s.branch === app.branch && s.id !== app.assignedShift);
     const st = H.DB.stations.find(s => s.id === app.station);
     H.ModuleA.reassignShift(app, target.id);
     eq(app.assignedShift, target.id, '班次應改為目標班次');
@@ -306,7 +307,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 
   test('車次異動：移出班次 → 回未排入、清空班次與到站', () => {
     const H = fresh();
-    const { app } = submit(H, { pickStation: 'S1', station: 'S3' });
+    const { app } = submit(H, { pickStation: 'BR1-100', station: 'BR1-300' });
     H.ModuleA.removeFromShift(app);
     eq(app.status, 'unscheduled', '移出後回未排入');
     eq(app.assignedShift, null, '班次應清空');
@@ -330,7 +331,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const H = fresh(); fixNow(H, 23, 0); H.ModuleA.__fixed = true;
     const { result } = submit(H, { recvMode: 'exact', deliverTime: '09:00', serviceDate: '2026-09-03' });
     ok(result.ok, '未來日期應可媒合');
-    eq(result.shift.id, 'R-A1', '期望 09:00 應選最接近的首班');
+    eq(result.shift.id, 'BR1-R1', '期望 09:00 應選最接近的首班');
   });
 
   test('不同日期互不佔用同一班次的容量與站內額度', () => {
@@ -339,15 +340,15 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     // 今天把 R-A1 佔到滿（同站區間、額度 1 分避免額度先擋）
     const d1 = [];
     for (let i = 0; i < 3; i++) d1.push(submit(H, { items: [big()], handleMin: 1 }).app);
-    ok(d1.some(a => a.assignedShift === 'R-A1'), '今天應有單佔用 R-A1');
+    ok(d1.some(a => a.assignedShift === 'BR1-R1'), '今天應有單佔用 R-A1');
     // 未來日期同樣條件 → 應可再次排入 R-A1（容量獨立計算）
     const fut = submit(H, { items: [big()], handleMin: 1, recvMode: 'exact', deliverTime: '08:30', serviceDate: '2026-09-20' }).app;
-    eq(fut.assignedShift, 'R-A1', '不同日期不應共用容量，未來日期仍可排 R-A1');
+    eq(fut.assignedShift, 'BR1-R1', '不同日期不應共用容量，未來日期仍可排 R-A1');
     // 額度亦然：同站上貨 30 分，今天與未來各自計算
-    const q1 = submit(H, { pickStation: 'S4', station: 'S7', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
-    const q2 = submit(H, { pickStation: 'S4', station: 'S7', loadMin: 30, unloadMin: 5, handleMin: undefined,
+    const q1 = submit(H, { pickStation: 'BR1-400', station: 'BR1-700', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
+    const q2 = submit(H, { pickStation: 'BR1-400', station: 'BR1-700', loadMin: 30, unloadMin: 5, handleMin: undefined,
       recvMode: 'exact', deliverTime: '08:30', serviceDate: '2026-09-21' }).app;
-    eq(q1.assignedShift, 'R-A1'); eq(q2.assignedShift, 'R-A1', '不同日期額度獨立，皆可排首班');
+    eq(q1.assignedShift, 'BR1-R1'); eq(q2.assignedShift, 'BR1-R1', '不同日期額度獨立，皆可排首班');
   });
 
   test('接收人資訊（單位/姓名/電話/代理人）隨申請單保存', () => {

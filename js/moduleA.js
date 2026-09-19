@@ -29,6 +29,7 @@ const ModuleA = {
     const app = {
       id: 'LA' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
+      branch: data.branch || (DB.branches[0] && DB.branches[0].id), // 分公司據點（收送貨同一分公司；獨立路線）
       station: data.station,            // 送貨站（迄）
       building: data.building,
       pickStation: data.pickStation || null, // 收貨站（起）站 id；未帶＝自路線起點載運（相容）
@@ -95,7 +96,7 @@ const ModuleA = {
      - removeFromShift：把申請單移出班次（回未排入，待重新指定）。
      ============================================================ */
   shiftPlans: {}, // key `${date}|${shiftId}` -> { vehicle, driver(id) }
-  logiVehicles() { return DB.vehicles.filter(v => v.pool === 'LOGI' && v.homeSite && v.homeSite[0] === 'S'); },
+  logiVehicles() { return DB.vehicles.filter(v => v.pool === 'LOGI' && !v.sizeClass); }, // 區域物流車（排除幹線大/小車 sizeClass）
   logiDrivers() { return DB.drivers.filter(d => d.pool === 'LOGI'); },
   defaultVehicleFor(shiftId) { const sh = DB.regionalShifts.find(s => s.id === shiftId); return sh ? sh.vehicle : null; },
   // 預設司機：物流車與物流司機依序對應（與司機任務單 logiDriverName 一致）
@@ -198,8 +199,10 @@ const ModuleA = {
     const isToday = (date === today);
     const cutoff = isToday ? this.nowMin() : -1; // 未來日期不受今日時間限制
     trace.push(`<span class="dim">排班日期：${date}${isToday ? `（今天，現在 ${minToHHMM(cutoff)}；已發車班次不採計）` : '（未來日期，全日班次皆可）'}</span>`);
+    // 僅本分公司的班次可媒合（各分公司獨立路線）
+    const branchShifts = DB.regionalShifts.filter(sh => sh.branch === app.branch);
     const vehiclePool = {}; // 各班次車輛容量
-    DB.regionalShifts.forEach(sh => {
+    branchShifts.forEach(sh => {
       vehiclePool[sh.id] = DB.vehicles.find(v => v.id === sh.vehicle);
     });
 
@@ -207,7 +210,7 @@ const ModuleA = {
     const expect = (app.recvMode === 'exact' && app.deliverTime) ? hhmmToMin(app.deliverTime) : null;
 
     // 依收貨模式決定嘗試班次順序（G19）
-    let shifts = [...DB.regionalShifts];
+    let shifts = [...branchShifts];
     if (expect != null) {
       shifts.sort((a, b) => {
         const da = Math.abs(this.shiftArrivalAtStation(a, station.order) - expect);
@@ -222,7 +225,7 @@ const ModuleA = {
     }
 
     const seg = this.segmentOf(app);
-    const segFrom = DB.stations.find(s => s.order === seg.from);
+    const segFrom = DB.stations.find(s => s.order === seg.from && s.branch === app.branch);
     trace.push(`<span class="dim">佔用站區間：${segFrom ? segFrom.name + ' 上貨' : '路線起點載運'} → ${station.name} 卸貨（先卸後裝，體積/重量/地板到站釋放）</span>`);
 
     // 逐班次嘗試（時間軸最近的下一班 G10）
@@ -294,7 +297,7 @@ const ModuleA = {
         app.expectDiffMin = diff; // 與期望收貨時間的差（分，正=晚、負=早、null=未指定）
         return { ok: true, shift: sh, trace, arrival: minToHHMM(arr), expectDiffMin: diff };
       }
-      const fs = failStation != null ? DB.stations.find(x => x.order === failStation) : null;
+      const fs = failStation != null ? DB.stations.find(x => x.order === failStation && x.branch === app.branch) : null;
       trace.push(`  <span class="no">✗ 裝不下${fs ? `（於 ${fs.name} 前區段容量不足）` : ''} → pass 下一班（G11）</span>`);
     }
 

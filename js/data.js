@@ -15,28 +15,22 @@ const DB = {
   ],
   wasteDefault: 1.30, // 保底值：查無類別使用（不中斷流程）
 
-  /* ---- 區域內物流 10 站固定路線（G14）依固定地理順序 ---- */
+  /* ---- 區域內物流「分公司據點」（站點之上一階）----
+     每個分公司據點內都有同樣編號的站點（100~900）與建物（N00~N10），
+     各分公司為獨立路線：媒合、班次、車次僅在同一分公司內進行。 */
+  branches: [
+    { id: 'BR1', name: '台北分公司' },
+    { id: 'BR2', name: '台中分公司' },
+    { id: 'BR3', name: '高雄分公司' },
+  ],
+  /* 站點主檔：由 branches 展開（見檔尾 buildRegionalNetwork）。
+     站點編號 100~900（order 1~9）；建物 100-110／200-210…（N00~N10）。 */
   stations: [
-    { id: 'S1', name: '總部倉', order: 1, buildings: ['A棟收發', 'B棟倉庫'] },
-    { id: 'S2', name: '五股廠', order: 2, buildings: ['原料倉', '成品倉'] },
-    { id: 'S3', name: '林口物流中心', order: 3, buildings: ['一號月台', '二號月台'] },
-    { id: 'S4', name: '龜山營業所', order: 4, buildings: ['門市', '後倉'] },
-    { id: 'S5', name: '桃園配送站', order: 5, buildings: ['主倉'] },
-    { id: 'S6', name: '中壢據點', order: 6, buildings: ['北棟', '南棟'] },
-    { id: 'S7', name: '楊梅倉', order: 7, buildings: ['冷藏區', '常溫區'] },
-    { id: 'S8', name: '新豐廠', order: 8, buildings: ['生產線倉'] },
-    { id: 'S9', name: '竹北營業所', order: 9, buildings: ['門市倉'] },
-    { id: 'S10',name: '新竹科園站', order: 10,buildings: ['收貨區'] },
   ],
 
-  /* ---- 區域內物流班次（人工每日排定 G18）：每日 5 班，兩台車輪替 ---- */
-  regionalShifts: [
-    { id: 'R-A1', label: '第一班 08:00', depart: '08:00', vehicle: 'V-L01' },
-    { id: 'R-A2', label: '第二班 10:30', depart: '10:30', vehicle: 'V-L02' },
-    { id: 'R-A3', label: '第三班 13:00', depart: '13:00', vehicle: 'V-L01' },
-    { id: 'R-A4', label: '第四班 15:00', depart: '15:00', vehicle: 'V-L02' },
-    { id: 'R-A5', label: '末班 17:00',   depart: '17:00', vehicle: 'V-L01' },
-  ],
+  /* ---- 區域內物流班次（人工每日排定 G18）：每分公司每日 5 班、兩台車輪替 ----
+     由 branches 展開為分公司專屬班次（id 前綴分公司，見檔尾 buildRegionalNetwork）。 */
+  regionalShifts: [],
 
   /* ---- 南北幹線 10 據點（G30）南→北一直線固定順序 ---- */
   // 據點內建物清單（G31：系統只給清單，順序由司機自行決定）示意
@@ -122,9 +116,9 @@ const DB = {
      currentSite＝當前位置：排班可用性判斷依據（G59）；無進行中多天任務時兩者相同 */
   vehicles: [
     // 物流池（模組 A/B）
-    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', homeSite: 'S1', currentSite: 'S1',
+    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1',
       dims: { l: 420, w: 180, h: 190 }, volume: 420*180*190/1000, weight: 3000 },
-    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'S1', currentSite: 'S1',
+    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1',
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
     // sizeClass：3.1 天數表查表維度（大車 big／小車 small）；決定方式待業務確認（Q3）
     { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
@@ -141,8 +135,8 @@ const DB = {
   /* ---- 司機主檔（獨立資源 G61）---- */
   // homeSite＝歸屬據點（C-2）；currentSite＝當前位置（G59）
   drivers: [
-    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'S1',  currentSite: 'S1' },
-    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10' },
+    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1' },
+    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1' },
     { id: 'DR3', name: '王建國', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
     { id: 'DR4', name: '張美華', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
     { id: 'DR5', name: '李俊宏', pool: 'BIZ',  homeSite: 'D6',  currentSite: 'D6' },
@@ -209,6 +203,28 @@ const DB = {
     DB.siteTravel.small[key] = small;
     DB.siteTravel.big[key] = small <= U ? small : small + DB.bigExtraMin;
   }));
+})();
+
+/* 展開區域內物流網路：每個分公司據點各有 100~900 九個站點（order 1~9），
+   每站建物為 N00~N10（如 100 站＝100..110）；每分公司各有專屬 5 班班次（獨立路線）。 */
+(function buildRegionalNetwork() {
+  const buildingsOf = num => Array.from({ length: 11 }, (_, i) => String(num + i)); // 100..110
+  DB.branches.forEach(b => {
+    for (let n = 1; n <= 9; n++) {
+      const num = n * 100;
+      DB.stations.push({ id: `${b.id}-${num}`, branch: b.id, name: String(num), order: n, buildings: buildingsOf(num) });
+    }
+  });
+  // 班次模板（每分公司相同時刻表、兩台物流車輪替；各分公司班次 id 獨立＝獨立路線／容量）
+  const shiftTpl = [
+    ['R1', '第一班 08:00', '08:00', 'V-L01'],
+    ['R2', '第二班 10:30', '10:30', 'V-L02'],
+    ['R3', '第三班 13:00', '13:00', 'V-L01'],
+    ['R4', '第四班 15:00', '15:00', 'V-L02'],
+    ['R5', '末班 17:00',   '17:00', 'V-L01'],
+  ];
+  DB.branches.forEach(b => shiftTpl.forEach(([sfx, label, depart, vehicle]) =>
+    DB.regionalShifts.push({ id: `${b.id}-${sfx}`, branch: b.id, label, depart, vehicle })));
 })();
 
 /* 工具：格式化體積（公升） */
