@@ -58,11 +58,12 @@ body {
 
 .main { margin-left: 232px; min-width: 0; }
 .topbar {
-  background: var(--card); border-bottom: 1px solid var(--line); padding: 16px 32px;
-  display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10;
+  background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
+  padding: 16px 32px; margin: 10px 16px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: space-between; position: sticky; top: 10px; z-index: 10;
 }
-.topbar h1 { font-size: 19px; margin: 0; color: var(--navy); font-weight: 700; }
-.topbar .crumb { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.topbar h1 { font-size: 19px; margin: 0; color: #fff; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.topbar .crumb { display: none; }  /* 麵包屑漸層列：隱藏下方小字說明（沿用資訊卡試做樣式） */
 .topbar .clock { font-family: var(--mono); font-size: 13px; color: var(--ink-soft);
   background: var(--paper); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); }
 .content { padding: 28px 32px 80px; max-width: 1160px; }
@@ -95,14 +96,6 @@ body {
 .card-desc { font-size: 13px; color: var(--ink-soft); margin: 0 0 18px; }
 .section-h { font-size: 20px; color: var(--navy); font-weight: 700; margin: 0 0 6px; }
 .section-sub { font-size: 13.5px; color: var(--ink-soft); margin: 0 0 22px; }
-/* 試作：頂列改為橫條橘色漸層（左最橘、往右漸淡），並隱藏麵包屑小字 */
-.topbar.grad {
-  background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
-  border-bottom-color: transparent;
-  margin: 10px 16px; border-radius: 10px; top: 10px;
-}
-.topbar.grad h1 { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
-.topbar.grad .crumb { display: none; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
