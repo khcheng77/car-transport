@@ -80,14 +80,15 @@ body {
 .card > h2, .card > h3 { margin-top: 0; }
 .card-title { font-size: 15.5px; font-weight: 700; color: var(--navy); margin: 0 0 4px;
   display: flex; align-items: center; gap: 8px; }
-/* 試作：卡片標題列改橘色漸層，左側白色直條略偏右幾 px */
-.card-title.grad {
+/* 卡片標題列：橘色漸層列（左橘漸淡至右）＋左側白色 ^；貼齊卡片上緣與左右緣。
+   套用於每張卡片的第一個標題（排除儀表板可點擊導覽卡 [data-go]）。 */
+.card:not([data-go]) > .card-title:first-child {
   position: relative; color: #fff; margin: -22px -24px 16px; /* 貼齊卡片上緣與左右緣 */
   border-radius: 10px 10px 0 0;                              /* 上緣圓角對齊卡片、下緣切齊 */
   padding: 12px 16px 12px 26px; text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
   background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
 }
-.card-title.grad::before {
+.card:not([data-go]) > .card-title:first-child::before {
   content: '^'; position: absolute; left: 9px; top: 50%; transform: translateY(-58%);
   color: #fff; font-weight: 800; font-size: 20px; line-height: 1;
 }
