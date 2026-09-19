@@ -1110,7 +1110,7 @@ RENDER.a_masonry = function () {
 
   p.innerHTML = `
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>收貨申請 · ${a.id}</span>
+      <div class="card-title grad" style="justify-content:space-between;"><span>收貨申請 · ${a.id}</span>
         <button class="btn btn-ghost btn-sm" id="m-relayout">↻ 重新排版</button></div>
       <div class="fgrid" id="m-grid">
         <div class="grid-sizer"></div>
