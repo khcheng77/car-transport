@@ -650,7 +650,7 @@ function renderAApplyNew(p) {
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       ${infoGrid('aa-fields', [
         fInput('申請人', `<input type="text" id="aa-applicant" value="業務部-周雅婷">`),
-        fInput('分公司據點 <span class="hint">收送貨須同一分公司</span>', `<select id="aa-branch">${brOpts}</select>`),
+        fInput('分公司據點', `<select id="aa-branch">${brOpts}</select>`),
         fInput('收貨地點站點（起）', `<select id="aa-pickuploc">${stOpts}</select>`),
         fInput('收貨建物', `<select id="aa-pickbldg"></select><input type="text" id="aa-pickother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
         fInput('送貨地點站點（迄）', `<select id="aa-station">${stOpts}</select>`),
