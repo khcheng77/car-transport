@@ -82,12 +82,13 @@ body {
   display: flex; align-items: center; gap: 8px; }
 /* 試作：卡片標題列改橘色漸層，左側白色直條略偏右幾 px */
 .card-title.grad {
-  position: relative; color: #fff; border-radius: 8px; margin: 0 0 14px;
-  padding: 10px 14px 10px 22px; text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+  position: relative; color: #fff; margin: -22px -24px 16px; /* 貼齊卡片上緣與左右緣 */
+  border-radius: 10px 10px 0 0;                              /* 上緣圓角對齊卡片、下緣切齊 */
+  padding: 12px 16px 12px 22px; text-shadow: 0 1px 2px rgba(0, 0, 0, .25);
   background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
 }
 .card-title.grad::before {
-  content: ''; position: absolute; left: 8px; top: 8px; bottom: 8px; width: 4px;
+  content: ''; position: absolute; left: 8px; top: 9px; bottom: 9px; width: 4px;
   background: #fff; border-radius: 2px;
 }
 .card-desc { font-size: 13px; color: var(--ink-soft); margin: 0 0 18px; }
