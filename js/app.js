@@ -1107,8 +1107,7 @@ RENDER.a_masonry = function () {
   ].join('');
 
   p.innerHTML = `
-    <div class="section-h">資訊卡試做（Masonry）</div>
-    <div class="section-sub">把一張收貨申請拆成多個獨立「資訊區塊」，每塊 <b>label + value</b>，交給 Masonry 依可用寬度自動排列、換行（1280＝一列 3 塊，窄螢幕自動降 2／1 欄）。value 相容<b>純文字</b>與<b>Kendo 元件掛載</b>（此處以原生下拉／日期／時間示範同一掛載點）。</div>
+    <div class="section-h hbar-grad">資訊卡試做（Masonry）</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>收貨申請 · ${a.id}</span>
         <button class="btn btn-ghost btn-sm" id="m-relayout">↻ 重新排版</button></div>
