@@ -40,7 +40,23 @@ body {
 .sidebar {
   width: 232px; background: var(--navy-deep); color: #fff;
   display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 20;
+  transition: transform .2s ease;
 }
+/* 漢堡鈕：固定畫面左上角，白底深藍字，在深藍側欄／橘色頂列／淺色內容上都清楚 */
+.menu-toggle {
+  position: fixed; top: 12px; left: 12px; z-index: 30;
+  width: 38px; height: 34px; padding: 0; border: none; border-radius: 8px;
+  background: #fff; color: var(--navy); font-size: 18px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+.menu-toggle:hover { background: #F0F3F8; }
+/* 側欄收合時：側欄滑出畫面、主內容補滿、品牌區讓開漢堡鈕 */
+.brand { transition: padding-left .2s ease; }
+body:not(.nav-collapsed) .brand { padding-left: 58px; }
+body.nav-collapsed .sidebar { transform: translateX(-100%); }
+body.nav-collapsed .main { margin-left: 0; }
+body.nav-collapsed .topbar { padding-left: 62px; } /* 讓開左上角漢堡鈕 */
 .brand { padding: 22px 20px 18px; border-bottom: 1px solid rgba(255,255,255,.12); }
 .brand .logo { font-size: 17px; font-weight: 700; letter-spacing: .01em; }
 .brand .sub { font-size: 11.5px; color: #9FB4CF; margin-top: 4px; letter-spacing: .06em; }
@@ -56,7 +72,7 @@ body {
 .nav-item .ico { width: 18px; text-align: center; font-size: 15px; }
 .sidebar-foot { padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.12); font-size: 11px; color: #7891B5; }
 
-.main { margin-left: 232px; min-width: 0; }
+.main { margin-left: 232px; min-width: 0; transition: margin-left .2s ease; }
 .topbar {
   background: linear-gradient(90deg, var(--accent) 0%, #DBA271 48%, #F5E7D8 100%);
   padding: 16px 32px; margin: 10px 16px; border-radius: 10px;

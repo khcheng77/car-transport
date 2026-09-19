@@ -2619,5 +2619,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('#swal-cancel').onclick = () => _swalClose(false);
   $('#swal-mask').onclick = (e) => { if (e.target.id === 'swal-mask') _swalClose(false); };
   tick(); setInterval(tick, 1000);
+  const mt = $('#menu-toggle'); // 漢堡鈕：收合／展開左側功能選單
+  if (mt) mt.onclick = () => document.body.classList.toggle('nav-collapsed');
   goto('dashboard');
 });
