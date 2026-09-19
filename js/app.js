@@ -513,9 +513,9 @@ function renderAApplyList(p) {
   $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
   $('#aq-demo').onclick = () => {
     // [分公司, 收貨站(起), 送貨站(迄), 模式, 上貨分, 下貨分, 貨物, 接收人]（收貨站須在送貨站之前）
-    [['BR1', 'BR1-200', 'BR1-300', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
-     ['BR1', 'BR1-200', 'BR1-600', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
-     ['BR2', 'BR2-300', 'BR2-900', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
+    [['D10', 'D10-200', 'D10-300', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
+     ['D10', 'D10-200', 'D10-600', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
+     ['D6', 'D6-300', 'D6-900', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
     ].forEach(([branch, pick, s, mode, lm, um, items, recipient]) => { const pSt = DB.stations.find(x => x.id === pick);
       ModuleA.submit({
         applicant: '業務部-周雅婷', branch, station: s, building: DB.stations.find(x => x.id === s).buildings[0],

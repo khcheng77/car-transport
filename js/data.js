@@ -16,14 +16,11 @@ const DB = {
   wasteDefault: 1.30, // 保底值：查無類別使用（不中斷流程）
 
   /* ---- 區域內物流「分公司據點」（站點之上一階）----
-     每個分公司據點內都有同樣編號的站點（100~900）與建物（N00~N10），
-     各分公司為獨立路線：媒合、班次、車次僅在同一分公司內進行。 */
-  branches: [
-    { id: 'BR1', name: '台北分公司' },
-    { id: 'BR2', name: '台中分公司' },
-    { id: 'BR3', name: '高雄分公司' },
-  ],
-  /* 站點主檔：由 branches 展開（見檔尾 buildRegionalNetwork）。
+     直接沿用既有據點清單 DB.sites（屏東～台北 10 據點）作為分公司據點：
+     每個據點內都有同樣編號的站點（100~900）與建物（N00~N10），
+     各據點為獨立路線：媒合、班次、車次僅在同一據點內進行。
+     （branches 於檔尾 buildRegionalNetwork 指向 DB.sites） */
+  /* 站點主檔：由 branches(=sites) 展開（見檔尾 buildRegionalNetwork）。
      站點編號 100~900（order 1~9）；建物 100-110／200-210…（N00~N10）。 */
   stations: [
   ],
@@ -116,9 +113,9 @@ const DB = {
      currentSite＝當前位置：排班可用性判斷依據（G59）；無進行中多天任務時兩者相同 */
   vehicles: [
     // 物流池（模組 A/B）
-    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1',
+    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 420, w: 180, h: 190 }, volume: 420*180*190/1000, weight: 3000 },
-    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1',
+    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
     // sizeClass：3.1 天數表查表維度（大車 big／小車 small）；決定方式待業務確認（Q3）
     { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
@@ -135,8 +132,8 @@ const DB = {
   /* ---- 司機主檔（獨立資源 G61）---- */
   // homeSite＝歸屬據點（C-2）；currentSite＝當前位置（G59）
   drivers: [
-    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1' },
-    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'BR1', currentSite: 'BR1' },
+    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10' },
+    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10' },
     { id: 'DR3', name: '王建國', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
     { id: 'DR4', name: '張美華', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
     { id: 'DR5', name: '李俊宏', pool: 'BIZ',  homeSite: 'D6',  currentSite: 'D6' },
@@ -208,6 +205,7 @@ const DB = {
 /* 展開區域內物流網路：每個分公司據點各有 100~900 九個站點（order 1~9），
    每站建物為 N00~N10（如 100 站＝100..110）；每分公司各有專屬 5 班班次（獨立路線）。 */
 (function buildRegionalNetwork() {
+  DB.branches = DB.sites; // 分公司據點＝既有據點清單（屏東～台北 10 據點）
   const buildingsOf = num => Array.from({ length: 11 }, (_, i) => String(num + i)); // 100..110
   DB.branches.forEach(b => {
     for (let n = 1; n <= 9; n++) {
