@@ -101,12 +101,13 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     ok(/^\d{2}:\d{2}$/.test(result.arrival), '應告知到站時間');
   });
 
-  test('G16 同站多單依「送出先後」累計時間額度，超額者順延下一班', () => {
+  test('G16 每班次上下貨合計上限＝班距 60 分，累計超額者順延下一班', () => {
     const H = fresh();
-    const a1 = submit(H).app, a2 = submit(H).app, a3 = submit(H).app; // 各 15 分，額度 40
+    // 每單 handleMin 30；本班預算 60：a1(30)、a2(60) 同班，a3 累計 90>60 應順延
+    const a1 = submit(H, { handleMin: 30 }).app, a2 = submit(H, { handleMin: 30 }).app, a3 = submit(H, { handleMin: 30 }).app;
     eq([a1.submitSeq, a2.submitSeq, a3.submitSeq].join(','), '1,2,3', '送出序應遞增');
     eq(a1.assignedShift, 'D1-R1'); eq(a2.assignedShift, 'D1-R1');
-    eq(a3.assignedShift, 'D1-R2', '第三單 45>40 應順延下一班（G16/G17）');
+    eq(a3.assignedShift, 'D1-R2', '第三單累計 90>60 應順延下一班（G16/G17）');
   });
 
   test('太大：超過任何一班車尺寸/容量 → reason=toobig、回覆太大', () => {
@@ -171,7 +172,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
   test('G19 指定期望時間：以交貨時間為目標，選到站時間差最小的班次（早晚都比）', () => {
     const H = fresh();
     const { result } = submit(H, { recvMode: 'exact', deliverTime: '20:00' });
-    ok(result.ok); eq(result.shift.id, 'D1-R5', '期望 20:00 應選最接近的末班（5 班制）');
+    ok(result.ok); eq(result.shift.id, 'D1-R11', '期望 20:00 應選最接近的末班（每小時一班、末班 18:00）');
   });
 
   test('指定期望時間不再需要期望到站時間欄位（expectTime 已移除）', () => {
@@ -231,21 +232,21 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     ok(a3.assignedShift !== 'D1-R1', '與既有單重疊區間容量不足 → 不得排首班，實得 ' + a3.assignedShift);
   });
 
-  test('A-2 額度計於各自站點：上貨計收貨站、卸貨計送貨站', () => {
+  test('G16 上下貨合計計入班次預算：兩單合計超過 60 分，第二張順延', () => {
     const H = fresh();
-    // 兩張同收貨站 S4、上貨各 30 分：S4 上貨額度 30+30>40 → 第二張順延班次
+    // 兩張各 上貨30+下貨5＝handleMin 35：第一張 35≤60；第二張累計 70>60 → 順延
     const a1 = submit(H, { pickStation: 'D1-400', station: 'D1-700', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
     const a2 = submit(H, { pickStation: 'D1-400', station: 'D1-800', loadMin: 30, unloadMin: 5, handleMin: undefined }).app;
-    eq(a1.assignedShift, 'D1-R1', '第一張排首班');
-    ok(a2.assignedShift !== 'D1-R1', '收貨站 S4 上貨額度不足 → 第二張應順延，實得 ' + a2.assignedShift);
+    eq(a1.assignedShift, 'D1-R1', '第一張排首班（35≤60）');
+    ok(a2.assignedShift !== 'D1-R1', '累計 70>60 分 → 第二張應順延，實得 ' + a2.assignedShift);
   });
 
-  test('班次主檔為每日 5 班（早到晚）', () => {
+  test('班次主檔為每據點每小時一班（早到晚）', () => {
     const H = fresh();
     const br1Shifts = H.DB.regionalShifts.filter(s => s.branch === 'D1');
-    eq(br1Shifts.length, 5, '每分公司應有 5 個班次');
+    eq(br1Shifts.length, 11, '每據點應有 11 個班次（08:00~18:00 每小時一班）');
     const deps = br1Shifts.map(s => s.depart);
-    eq(deps.join(','), '08:00,10:30,13:00,15:00,17:00', '班次時間應由早到晚');
+    eq(deps.join(','), '08:00,09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00,18:00', '班次時間應由早到晚每小時一班');
     for (let i = 1; i < deps.length; i++) {
       ok(H.hhmmToMin(deps[i]) > H.hhmmToMin(deps[i - 1]), '班次須遞增');
     }
@@ -270,19 +271,19 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
 
   test('今天過去的時間不可媒合：已出發班次不採計，只排之後的班次', () => {
     const H = fresh(); fixNow(H, 11, 0); H.ModuleA.__fixed = true; // 現在 11:00
-    // S1 收貨、S3 送貨：R-A1 08:00、R-A2 10:30 抵 S1 時已過 → 應排 13:00 的 R-A3
+    // 每小時一班：08~11:00 皆已發車 → 應排 12:00 的 R5
     const { app, result } = submit(H, { pickStation: 'D1-100', station: 'D1-300' });
     ok(result.ok, '仍應媒合到之後的班次');
-    eq(result.shift.id, 'D1-R3', '11:00 時 R-A1/R-A2 已過 → 應排 R-A3');
+    eq(result.shift.id, 'D1-R5', '11:00 時 08~11:00 班皆已發車 → 應排 12:00 的 R5');
     eq(app.serviceDate, FIX_DATE);
   });
 
-  test('卡發車時間：已發車但尚未抵收貨站的班次也不可媒合（司機出發後不知新單）', () => {
+  test('卡發車時間：已發車的班次不可媒合（司機出發後不知新單）', () => {
     const H = fresh(); fixNow(H, 10, 40); H.ModuleA.__fixed = true; // 現在 10:40
-    // 收貨 S3、送貨 S6；R-A2 已於 10:30 發車（雖未抵 S3）→ 不可再排 → 應排 13:00 的 R-A3
+    // 10:00 班已於 10:00 發車（雖未抵收貨站）→ 不可再排 → 應排 11:00 的 R4
     const { result } = submit(H, { pickStation: 'D1-300', station: 'D1-600' });
     ok(result.ok, '應媒合到尚未發車的班次');
-    eq(result.shift.id, 'D1-R3', 'R-A2 已發車（10:30）雖未到 S3 仍不可排 → 應排未發車的 R-A3');
+    eq(result.shift.id, 'D1-R4', '10:00 班已發車雖未到收貨站仍不可排 → 應排未發車的 11:00 R4');
   });
 
   test('今天班次全數過後 → reason=past，提示改指定未來日期', () => {

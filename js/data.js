@@ -213,14 +213,13 @@ const DB = {
       DB.stations.push({ id: `${b.id}-${num}`, branch: b.id, name: String(num), order: n, buildings: buildingsOf(num) });
     }
   });
-  // 班次模板（每分公司相同時刻表、兩台物流車輪替；各分公司班次 id 獨立＝獨立路線／容量）
-  const shiftTpl = [
-    ['R1', '第一班 08:00', '08:00', 'V-L01'],
-    ['R2', '第二班 10:30', '10:30', 'V-L02'],
-    ['R3', '第三班 13:00', '13:00', 'V-L01'],
-    ['R4', '第四班 15:00', '15:00', 'V-L02'],
-    ['R5', '末班 17:00',   '17:00', 'V-L01'],
-  ];
+  // 班次模板：每據點每小時一班（08:00~18:00，共 11 班），兩台物流車輪替；
+  // 各據點班次 id 獨立＝獨立路線／容量。班距 60 分＝站內處理時間上限（見 moduleA SHIFT_HANDLE_BUDGET）。
+  const shiftTpl = [];
+  for (let h = 8; h <= 18; h++) {
+    const depart = pad2(h) + ':00';
+    shiftTpl.push(['R' + (h - 7), depart + ' 班', depart, (h % 2 === 0) ? 'V-L01' : 'V-L02']);
+  }
   DB.branches.forEach(b => shiftTpl.forEach(([sfx, label, depart, vehicle]) =>
     DB.regionalShifts.push({ id: `${b.id}-${sfx}`, branch: b.id, label, depart, vehicle })));
 })();

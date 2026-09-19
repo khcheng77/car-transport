@@ -138,8 +138,10 @@ const ModuleA = {
     return hhmmToMin(shift.depart) + stationOrder * 12; // 每站 12 分鐘遞增（示意）
   },
 
-  /* 站內時間額度（分鐘）：每站每班次固定額度，示意 */
-  STATION_QUOTA: 40,
+  /* 每班次站內處理時間預算（分鐘）＝班距（每小時一班）。
+     一張單的「上貨＋下貨合計（handleMin）」＋本班已排各單合計若超過此上限，
+     代表趕不上下一班車到站前完成 → 順延下一班（G16/G17）。 */
+  SHIFT_HANDLE_BUDGET: 60,
 
   /* 貨物在路線上的佔用站區間 [from, to)：收貨站序上貨 → 送貨站序抵達即卸（先卸後裝）
      未帶收貨站或順序不合（收貨站不在送貨站之前）→ 自路線起點(0)載運，抵送貨站卸（相容） */
@@ -166,18 +168,12 @@ const ModuleA = {
       }, { volume: 0, weight: 0, floor: 0 });
   },
 
-  /* 某班次於某站的時間額度已用量：卸貨（送貨站）與上貨（收貨站）的 handleMin 都計入該站佔用 */
-  quotaUsedAt(shiftId, stationId, date) {
+  /* 某班次（同日）已排各單的站內處理時間合計（上貨＋下貨＝handleMin 累加） */
+  shiftHandleUsed(shiftId, date) {
     return this.applications
       .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status)
-        && (date == null || a.serviceDate === date)) // 僅同日期的單互相佔用站內額度
-      .reduce((sum, a) => {
-        const split = (a.loadMin || a.unloadMin) > 0;
-        let t = 0;
-        if (a.station === stationId) t += split ? a.unloadMin : a.handleMin; // 卸貨佔用
-        if (a.pickStation === stationId) t += a.loadMin || 0;               // 上貨佔用
-        return sum + t;
-      }, 0);
+        && (date == null || a.serviceDate === date))
+      .reduce((sum, a) => sum + (a.handleMin || 0), 0);
   },
 
   /* 媒合迴圈（G10/G11/G12/G19）— 回傳 trace 與結果
@@ -250,23 +246,11 @@ const ModuleA = {
       if (emptyRes.ok) fitsSomeEmpty = true;
       else trace.push(`  <span class="no">✗ 本班車即使空車也放不下（尺寸／容量太大）</span>`);
 
-      // --- 站內時間額度（G16）：上貨站與卸貨站各自累計（卸與裝都計入該站佔用）---
-      const split = (app.loadMin || app.unloadMin) > 0;
-      const dropDemand = split ? app.unloadMin : app.handleMin;
-      const dropUsed = this.quotaUsedAt(sh.id, app.station, date);
-      let quotaFail = null;
-      if (dropDemand > this.STATION_QUOTA - dropUsed) {
-        quotaFail = `送貨站 ${station.name} 額度不足：已用 ${dropUsed} 分、剩 ${this.STATION_QUOTA - dropUsed} 分 < 本單卸貨 ${dropDemand} 分`;
-      }
-      if (!quotaFail && app.pickStation && (app.loadMin || 0) > 0) {
-        const pickUsed = this.quotaUsedAt(sh.id, app.pickStation, date);
-        if (app.loadMin > this.STATION_QUOTA - pickUsed) {
-          const ps = DB.stations.find(s => s.id === app.pickStation);
-          quotaFail = `收貨站 ${ps ? ps.name : app.pickStation} 額度不足：已用 ${pickUsed} 分、剩 ${this.STATION_QUOTA - pickUsed} 分 < 本單上貨 ${app.loadMin} 分`;
-        }
-      }
-      if (quotaFail) {
-        trace.push(`  <span class="no">✗ 站內時間額度：${quotaFail} → 跳過此班（G16/G17）</span>`);
+      // --- 站內處理時間預算（G16）：每班次上限＝班距 60 分（每小時一班）---
+      // 本單上下貨合計（handleMin）＋本班已排各單合計，若超過 60 分 → 趕不上下一班到站，順延下一班
+      const used = this.shiftHandleUsed(sh.id, date);
+      if (app.handleMin > this.SHIFT_HANDLE_BUDGET - used) {
+        trace.push(`  <span class="no">✗ 站內處理時間：本班已用 ${used} 分、剩 ${this.SHIFT_HANDLE_BUDGET - used} 分 < 本單上下貨合計 ${app.handleMin} 分（超過班距 ${this.SHIFT_HANDLE_BUDGET} 分）→ 順延下一班（G16/G17）</span>`);
         continue; // 順延下一班（G17）
       }
 
