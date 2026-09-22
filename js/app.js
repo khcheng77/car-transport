@@ -2628,37 +2628,56 @@ RENDER.a_driver = function () {
 RENDER.b_driver = function () {
   const p = $('#page-b_driver');
   const rows = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status) && o.dispatchVehicle);
-  const byVeh = {};
-  rows.forEach(o => { (byVeh[o.dispatchVehicle] = byVeh[o.dispatchVehicle] || []).push(o); });
-  let cards = Object.keys(byVeh).map(vid => {
+  // 一張任務單＝一趟「車輛×方向」：去程（南下）與回程（北返）是兩段不同的實體行程，
+  // 各有獨立時間軸，不可併在同一條路線上排序（否則同一車會「同時」出現在南北兩地）。
+  const byTrip = {};
+  rows.forEach(o => {
+    const dir = o.dispatchDir || 'south';
+    const key = o.dispatchVehicle + '\u0001' + dir;
+    (byTrip[key] = byTrip[key] || { vid: o.dispatchVehicle, dir, list: [] }).list.push(o);
+  });
+  // 去程排前、回程排後；同方向依車號
+  const tripKeys = Object.keys(byTrip).sort((ka, kb) => {
+    const A = byTrip[ka], B = byTrip[kb];
+    return ((A.dir === 'south' ? 0 : 1) - (B.dir === 'south' ? 0 : 1)) || (A.vid < B.vid ? -1 : A.vid > B.vid ? 1 : 0);
+  });
+  let cards = tripKeys.map(key => {
+    const { vid, dir, list } = byTrip[key];
     const veh = DB.vehicles.find(v => v.id === vid);
-    const list = byVeh[vid];
+    const south = dir === 'south';
     const events = [];
     list.forEach(o => {
-      events.push({ siteId: o.pickSite, type: 'pick', time: o.pickupTime, o });
-      events.push({ siteId: o.dropSite, type: 'drop', time: o.dispatchDropTime, o });
+      events.push({ siteId: o.pickSite, type: 'pick', time: o.pickupTime, day: o.dispatchDay || 1, o });
+      events.push({ siteId: o.dropSite, type: 'drop', time: o.dispatchDropTime, day: o.dispatchDay || 1, o });
     });
     const bySite = {};
     events.forEach(e => { (bySite[e.siteId] = bySite[e.siteId] || []).push(e); });
+    const minTime = sid => Math.min(...bySite[sid].map(e => e.time ? hhmmToMin(e.time) : 9999));
+    const dayOf = sid => Math.min(...bySite[sid].map(e => e.day || 1));
     const siteIds = Object.keys(bySite).sort((a, b) => {
-      const ta = Math.min(...bySite[a].map(e => e.time ? hhmmToMin(e.time) : 9999));
-      const tb = Math.min(...bySite[b].map(e => e.time ? hhmmToMin(e.time) : 9999));
-      return ta - tb || ModuleB.siteById(a).order - ModuleB.siteById(b).order;
+      // 先依趟次日、再依當日到站時間；同時間才以「路線行進方向」的據點順序打破平手。
+      // 據點序北大南小（屏東1…台北10）：南下先北後南（序遞減）、北返先南後北（序遞增）。
+      const geo = south ? (ModuleB.siteById(b).order - ModuleB.siteById(a).order)
+                        : (ModuleB.siteById(a).order - ModuleB.siteById(b).order);
+      return (dayOf(a) - dayOf(b)) || (minTime(a) - minTime(b)) || geo;
     });
+    const multiDay = siteIds.some(sid => dayOf(sid) > 1);
     const stopRows = siteIds.map((sid, idx) => {
       const site = ModuleB.siteById(sid);
       const evs = bySite[sid];
       const arrive = evs.map(e => e.time).filter(Boolean).sort()[0] || '—';
+      const dayTag = multiDay ? `<span class="hint">D${dayOf(sid)} </span>` : '';
       const detail = [
         ...evs.filter(e => e.type === 'pick').map(e => `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${e.time || ''} ${e.o.id}｜${e.o.pickupLoc || '—'}｜${itemsSummary(e.o.items)}</div>`),
         ...evs.filter(e => e.type === 'drop').map(e => `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${e.time || ''} ${e.o.id}｜${e.o.deliverLoc || '—'}｜接收：${recipientDisplay(e.o.recipient)}</div>`),
       ].join('');
-      return `<tr><td>${idx + 1}</td><td><b>${site.name}</b></td><td>${arrive}</td><td style="text-align:left;">${detail}</td></tr>`;
+      return `<tr><td>${idx + 1}</td><td>${dayTag}<b>${site.name}</b></td><td>${arrive}</td><td style="text-align:left;">${detail}</td></tr>`;
     }).join('');
-    const modeLabel = list.some(o => o.dispatchMode === '直達') && list.every(o => o.dispatchMode === '直達') ? '直達' : (list.every(o => o.dispatchMode === '非直達') ? '非直達（沿線收送）' : '混合');
+    const modeLabel = list.every(o => o.dispatchMode === '直達') ? '直達' : (list.every(o => o.dispatchMode === '非直達') ? '非直達（沿線收送）' : '混合');
+    const legLabel = south ? '去程（南下）' : '回程（北返）';
     return `<div class="card">
       <div class="card-title" style="justify-content:space-between;">
-        <span>🚛 車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）<span class="hint" style="margin-left:6px;">${modeLabel}</span></span>
+        <span>🚛 車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）<span class="badge ${south ? 'b-navy' : 'b-green'}" style="margin-left:6px;">${legLabel}</span><span class="hint" style="margin-left:6px;">${modeLabel}</span></span>
         <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
       <div class="card-desc">本趟共 <b>${list.length}</b> 張託運單、<b>${siteIds.length}</b> 個停靠據點；依派車決策沿線<b>取貨／卸貨</b>。</div>
       <div class="table-wrap"><table class="dt"><thead><tr>
@@ -2668,7 +2687,7 @@ RENDER.b_driver = function () {
   if (!cards) cards = `<div class="card"><div class="empty">今日尚無已派車的幹線任務。於「B｜派車調度」執行派車後，這裡會依車輛顯示沿線取貨／卸貨的司機任務單。</div></div>`;
   p.innerHTML = `
     <div class="section-h">南北幹線 · 司機任務單（駕駛）</div>
-    <div class="section-sub">以「車輛」為單位，顯示這一趟要停靠哪些據點、在每個據點<b>取貨</b>或<b>卸貨</b>哪些託運單、收貨/送貨地點與接收人。</div>
+    <div class="section-sub">以「車輛×趟次（去程南下／回程北返）」為單位，各為一張任務單；同一趟沿線依<b>到站時間＋路線方向</b>排序停靠據點。去程與回程是兩段獨立行程、時間軸<b>不混疊</b>，避免同一車在南北兩地同時出現。</div>
     ${cards}`;
 };
 

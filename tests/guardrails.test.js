@@ -543,6 +543,20 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(g.dispatchVehicle && d.dispatchVehicle && rn.dispatchVehicle, '每張已載單應有車號');
   });
 
+  test('派車方向標記 dispatchDir：去程=south、回程=north（司機任務單依此分趟，不混疊時間軸）', () => {
+    const H = fresh();
+    const g = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false, volume: 2000, category: 'BOX', weight: 300, handleMin: 30 });
+    const d = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D2', direct: true, volume: 2000, category: 'BOX', weight: 300, handleMin: 20 });
+    const rn = H.ModuleB.createOrder({ applicant: 'C', site: 'D6', direct: false, volume: 1000, category: 'BOX', weight: 200, handleMin: 20 }); // 北上（→ homeSite）
+    [g, d, rn].forEach(o => H.ModuleB.approve(o));
+    H.ModuleB.dispatch('V-T02', 'greedy');      // 去程非直達
+    H.ModuleB.dispatch('V-T01', 'direct');      // 去程直達（急件）
+    H.ModuleB.dispatchReturn('V-T02', 'D6', false, 0); // 回程（沿線收送）
+    eq(g.dispatchDir, 'south', '去程非直達單應標記 south，實得 ' + g.dispatchDir);
+    eq(d.dispatchDir, 'south', '去程直達單應標記 south，實得 ' + d.dispatchDir);
+    eq(rn.dispatchDir, 'north', '回程單應標記 north，實得 ' + rn.dispatchDir);
+  });
+
   test('來收時間依收貨據點：同據點同車相同、不同據點不同（沿線現場收）', () => {
     const H = fresh();
     // 同一收貨據點 D6 兩張 + 另一據點 D3 一張，皆非直達、同車貪婪

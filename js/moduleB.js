@@ -466,7 +466,7 @@ const ModuleB = {
           continue;
         }
         o.status = 'loaded'; o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
-        o.dispatchOrigin = origin;
+        o.dispatchOrigin = origin; o.dispatchDir = 'south';
         carried.push(o);
         trace.push(`  <span class="ok">✓ 載入 ${o.id}（申報 ${o.volume}L → 有效 ${this.effVolume(o).toFixed(0)}L${rc.wait ? `，早到等待 ${rc.wait} 分至 ${o.wantReceiveTime}` : ''}）</span>`);
       }
@@ -520,7 +520,7 @@ const ModuleB = {
     for (const o of carried) {
       const inf = sim.info.get(o.id) || {};
       o.status = 'loaded'; o.dispatchVehicle = veh.id; o.dispatchMode = '非直達';
-      o.dispatchEndpoint = o.dropSite; o.dispatchOrigin = origin;
+      o.dispatchEndpoint = o.dropSite; o.dispatchOrigin = origin; o.dispatchDir = 'south';
       o.pickupTime = inf.pickupTime; o.dispatchDay = inf.day;
       if (inf.dropTime) { o.dispatchDropTime = inf.dropTime; deliveredHere.push(o); }
     }
@@ -627,6 +627,7 @@ const ModuleB = {
         if (net + ev <= veh.volume && wt + o.weight <= veh.weight) {
           net += ev; wt += o.weight; carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = endpoint;
+          o.dispatchDir = 'north';
           o.pickupTime = collideInfo[o.id].passEta;
           trace.push(`  <span class="ok">✓ 載直達回程單 ${o.id}（${this.siteById(o.pickSite).name} 上車 ${o.pickupTime}，有效 ${ev.toFixed(0)}L）淨值 ${net.toFixed(0)}L</span>`);
         }
@@ -691,6 +692,7 @@ const ModuleB = {
           net += ev; wt += o.weight; clock.addWork(lt); stopLoaded += ev; nLoad++;
           carried.push(o); onboard.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = o.dropSite;
+          o.dispatchDir = 'north';
           const w = this.receiveWindow(o);
           o.pickupTime = minToHHMM(w ? Math.max(arriveMin, w.start) : arriveMin);
           waitMax = Math.max(waitMax, rc.wait);
