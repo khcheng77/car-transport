@@ -1787,6 +1787,7 @@ function renderBDispatchResult(r, startLabel) {
   $('#br-dispatch-result').innerHTML = `
     <div class="result ${r.carried && r.carried.length ? 'ok' : 'warn'}" style="margin-top:16px;">
       <div class="r-head">派車模式：${modeBadge}　${r.origin ? `出發：${ModuleB.siteById(r.origin) ? ModuleB.siteById(r.origin).name : r.origin}　` : ''}終點：${endpoint}${r.days && r.days !== '—' ? `　出勤天數：${r.days} 天 <span class="g-tag">G37</span>` : ''}</div>
+      ${r.sizeDecision ? `<div style="margin-top:6px;"><span class="badge ${r.sizeDecision.sizeClass === 'big' ? 'b-amber' : 'b-navy'}">車型 ${r.sizeDecision.sizeClass === 'big' ? '大車' : '小車'} ${r.sizeDecision.vehicle}</span> <span class="hint">2.17：${r.sizeDecision.reason}</span></div>` : ''}
       <div>觸發原因：${r.reason || '—'}｜容量使用 <b>${r.capUsed || 0}L</b> / ${r.capTotal || 0}L${
         r.timeUsed != null ? `｜當日在勤 <b>${r.timeUsed}分</b> / ${r.timeTotal}分（${r.timeTotal / 60}h，2.13）` : ''}${
         r.dutyDays ? `｜精算出勤 <b>${r.dutyDays}</b> 天` : ''}</div>
@@ -1806,11 +1807,13 @@ function renderBDispatchResult(r, startLabel) {
   updateBMatrix(r.matrixRow);
 }
 function dispatchB(mode) {
-  const veh = mode === 'direct' ? 'V-T02' : 'V-T01';
   const dateEl = $('#br-dispatch-date');
-  const r = ModuleB.dispatch(veh, mode, dateEl && dateEl.value ? dateEl.value : null);
+  const date = dateEl && dateEl.value ? dateEl.value : null;
+  const dec = ModuleB.decideSizeClass(mode, date, null, 'south'); // 2.17 依當日總貨量自動選車型
+  const r = ModuleB.dispatch(dec.vehicle, mode, date);
+  r.sizeDecision = dec;
   renderBDispatchResult(r, ModuleB.siteById(DB.homeSite).name);
-  toast(`${r.modeLabel || ''} 派車完成`, 'ok');
+  toast(`${r.modeLabel || ''}｜2.17 自動派${dec.sizeClass === 'big' ? '大車' : '小車'} ${dec.vehicle}`, 'ok');
   renderBr_approved(); renderBaList(); renderBr_tracking();
 }
 function dispatchBReturn(originallyDirect) {
@@ -1821,9 +1824,11 @@ function dispatchBReturn(originallyDirect) {
   let turnaround = DB.sites.reduce((m, s) => s.order < m.order ? s : m, DB.sites[0]).id;
   if (rets.length) turnaround = rets.reduce((min, o) =>
     ModuleB.siteById(o.pickSite).order < ModuleB.siteById(min).order ? o.pickSite : min, rets[0].pickSite);
-  const r = ModuleB.dispatchReturn('V-T02', turnaround, originallyDirect, 0);
+  const dec = ModuleB.decideSizeClass(originallyDirect ? 'direct' : 'greedy', null, null, 'north'); // 2.17 回程亦依總貨量選車型
+  const r = ModuleB.dispatchReturn(dec.vehicle, turnaround, originallyDirect, 0);
+  r.sizeDecision = dec;
   renderBDispatchResult(r, ModuleB.siteById(turnaround).name);
-  toast(`${r.modeLabel} 派車完成`, 'ok');
+  toast(`${r.modeLabel}｜2.17 自動派${dec.sizeClass === 'big' ? '大車' : '小車'} ${dec.vehicle}`, 'ok');
   renderBr_approved(); renderBaList(); renderBr_tracking();
 }
 

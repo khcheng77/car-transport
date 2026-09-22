@@ -645,6 +645,39 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     eq(r.origin, H.DB.homeSite, '未指定出發據點 → 預設主檔 homeSite');
   });
 
+  test('2.17 車型決定：總貨量未超過小車容量上限 → 派小車', () => {
+    const H = fresh();
+    const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    H.ModuleB.approve(o);
+    const dec = H.ModuleB.decideSizeClass('greedy', null, null, 'south');
+    eq(dec.sizeClass, 'small', '小量 → 小車');
+    eq(dec.vehicle, H.ModuleB.trunkVehicle('small').id, '代表車＝主檔小車');
+  });
+
+  test('2.17 車型決定：總貨量超過小車容量上限 → 派大車（單純門檻，不做填載率最佳化）', () => {
+    const H = fresh();
+    const small = H.ModuleB.trunkVehicle('small');
+    // 單張有效體積即超過小車容積上限
+    const bigOrder = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false,
+      volume: Math.ceil(small.volume), category: 'BOX', weight: 50, handleMin: 10 }); // ×1.1 必超過
+    H.ModuleB.approve(bigOrder);
+    const dec = H.ModuleB.decideSizeClass('greedy', null, null, 'south');
+    eq(dec.sizeClass, 'big', '總貨量超過小車容量上限 → 大車');
+    eq(dec.vehicle, H.ModuleB.trunkVehicle('big').id, '代表車＝主檔大車');
+    ok(dec.totalVol > dec.threshVol, 'totalVol 應大於小車門檻');
+  });
+
+  test('2.17 車型決定：重量超過小車載重上限亦派大車', () => {
+    const H = fresh();
+    const small = H.ModuleB.trunkVehicle('small');
+    const heavy = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: small.weight + 100, handleMin: 10 });
+    H.ModuleB.approve(heavy);
+    const dec = H.ModuleB.decideSizeClass('greedy', null, null, 'south');
+    eq(dec.sizeClass, 'big', '總重量超過小車載重上限 → 大車');
+  });
+
   test('2.20/2.21 統一媒合：候選單若排擠既定行程收貨時間窗 → 媒合不到，既定行程不受影響', () => {
     const H = fresh();
     // 既定行程 A（先核准）：D6 取貨、窗 11:00–15:00，車無 B 時 11:00 抵 D6 → 收得到

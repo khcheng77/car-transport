@@ -146,7 +146,8 @@ const DB = {
       dims: { l: 420, w: 180, h: 190 }, volume: 420*180*190/1000, weight: 3000 },
     { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
-    // sizeClass：3.1 天數表查表維度（大車 big／小車 small）；決定方式待業務確認（Q3）
+    // sizeClass：3.1 天數表查表維度＋2.17 車型自動判斷之代表車（大車 big／小車 small）
+    //   2.17（暫定）：依當日該路線總貨量門檻自動選車，超過小車容量上限即派大車（見 ModuleB.decideSizeClass）
     { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
       dims: { l: 600, w: 240, h: 240 }, volume: 600*240*240/1000, weight: 8000 },
     { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'small',

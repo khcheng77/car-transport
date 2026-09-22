@@ -164,6 +164,40 @@ const ModuleB = {
     return loadDoneMin <= hhmmToMin(s.returnLoadBy);
   },
 
+  /* ---- 幹線車輛主檔查表：依 sizeClass 取代表車（LOGI 池）---- */
+  trunkVehicle(sizeClass) {
+    return DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass === sizeClass);
+  },
+
+  /* ---- 2.17 車型（大車／小車）決定（業務單位暫定）----
+     依「目標日當天該路線的總貨量」自動判斷：統計當天待載貨量（依 2.16 車輛主檔容量參數），
+     總貨量超過小車容量上限 → 派大車，否則派小車。單純門檻判斷，不做填載率精算最佳化。
+     leg：'south'（去程南下貨）／'north'（回程北上貨）；mode：'direct' 只計急件直達、否則計非直達貨。 */
+  decideSizeClass(mode, dispatchDate, originId, leg) {
+    const origin = originId || DB.homeSite;
+    const small = this.trunkVehicle('small');
+    const big = this.trunkVehicle('big');
+    let pool = this.orders.filter(o => o.status === 'approved'
+      && (leg === 'north' ? !this.isSouthbound(o) : this.isSouthbound(o))
+      && this.isServable(o, leg === 'north' ? DB.homeSite : origin));
+    if (dispatchDate) pool = pool.filter(o => this.meetsCutoff(o, dispatchDate));
+    pool = pool.filter(o => (mode === 'direct' ? o.direct : !o.direct));
+    const totalVol = pool.reduce((s, o) => s + this.effVolume(o), 0);
+    const totalWt = pool.reduce((s, o) => s + (+o.weight || 0), 0);
+    // 依 2.16 以小車「這台車」的容量參數為門檻（容積與載重上限任一超過即需大車）
+    const needBig = totalVol > small.volume || totalWt > small.weight;
+    const veh = needBig ? big : small;
+    return {
+      sizeClass: needBig ? 'big' : 'small',
+      vehicle: veh.id, vehicleName: veh.name,
+      totalVol: Math.round(totalVol), totalWt: Math.round(totalWt), count: pool.length,
+      threshVol: Math.round(small.volume), threshWt: small.weight,
+      reason: needBig
+        ? `當日該路線待載總貨量 ${Math.round(totalVol)}L／${Math.round(totalWt)}kg 超過小車容量上限（${Math.round(small.volume)}L／${small.weight}kg）→ 派大車（2.17）`
+        : `當日該路線待載總貨量 ${Math.round(totalVol)}L／${Math.round(totalWt)}kg 未超過小車容量上限（${Math.round(small.volume)}L／${small.weight}kg）→ 派小車（2.17）`,
+    };
+  },
+
   /* ---- 3.1 最短天數表：依 車型 × 目的地 查表（寬鬆估計值，僅供顯示，不參與運算） ---- */
   minTripDaysFor(vehicle, endpointId) {
     const cls = (vehicle && vehicle.sizeClass) || 'small';
