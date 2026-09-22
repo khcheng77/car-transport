@@ -693,6 +693,18 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(r.unmatched.includes(B), 'B 應列於媒合不到清單');
   });
 
+  test('2.21 媒合以「當趟送得到」為準：simulateSouthbound 同時回傳 served 與 delivered', () => {
+    const H = fresh();
+    const big = () => [{ name: '大箱', l: 200, w: 200, h: 300, qty: 1, category: 'BOX', weight: 100 }];
+    const o1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D6', direct: false, handleMin: 20, items: big() });
+    const o2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D3', direct: false, handleMin: 20, items: big() });
+    [o1, o2].forEach(o => H.ModuleB.approve(o));
+    const veh = H.DB.vehicles.find(v => v.id === 'V-T02');
+    const sim = H.ModuleB.simulateSouthbound([o1, o2], veh, 'D9');
+    ok(sim.served.has(o1.id) && sim.served.has(o2.id), 'served 應含兩者（已收）');
+    ok(sim.delivered.has(o1.id) && sim.delivered.has(o2.id), '兩單皆於沿線卸貨 → delivered 應含兩者（媒合以送達為準）');
+  });
+
   test('2.20/2.21 候選單不排擠既定行程時正常納入', () => {
     const H = fresh();
     const A = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false,

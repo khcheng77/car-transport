@@ -297,7 +297,7 @@ const ModuleB = {
     const start = hhmmToMin(DB.shiftStartDefault);
     const seq = this.southboundFrom(originId);
     let netVol = 0, netWt = 0, peakVol = 0;
-    const onboard = [], served = new Set(), info = new Map(), stops = [];
+    const onboard = [], served = new Set(), delivered = new Set(), info = new Map(), stops = [];
     let stopReason = null;
 
     // 建物集合鍵（收貨用 pickupLoc、送貨用 deliverLoc；空值歸為據點預設一棟）
@@ -316,7 +316,7 @@ const ModuleB = {
         if (o.dropSite === siteId) {
           const ev = this.effVolume(o);
           netVol -= ev; netWt -= o.weight; clock.addWork(o.unloadMin || 0);
-          unloaded += ev; onboard.splice(i, 1);
+          unloaded += ev; onboard.splice(i, 1); delivered.add(o.id);
           const inf = info.get(o.id); if (inf) { inf.dropTime = arriveEta; inf.dropDay = clock.day; }
           bldgs.add(bkey(o.deliverLoc)); activity = true;
         }
@@ -406,7 +406,7 @@ const ModuleB = {
     carried.forEach(o => { endOrder = Math.min(endOrder, this.siteById(o.dropSite).order); });
     const endpoint = DB.sites.find(s => s.order === endOrder).id;
 
-    return { served, info, stops, endpoint, clock, peakVol, stopReason, carried, onboard };
+    return { served, delivered, info, stops, endpoint, clock, peakVol, stopReason, carried, onboard };
   },
 
   /* 派車：對某台車 + 一批待處理單跑貪婪 / 直達邏輯，回傳決策
@@ -501,11 +501,14 @@ const ModuleB = {
     for (const o of nonDirect) {
       const trial = committed.concat(o);
       const sim = this.simulateSouthbound(trial, veh, origin);
-      const allServed = trial.every(x => sim.served.has(x.id));
-      if (allServed) {
-        committed.push(o); // 不排擠既定行程、且自身卡進時間窗 → 正式媒合
+      // 2.21：候選單須「不排擠既定行程」——既定行程與候選單皆須完整服務（收得到＋當趟送得到，
+      // 送不到終點即屬排擠），且候選單自身卡進 2.19 收貨時間窗。以「已送達 delivered」為準，
+      // 避免只上車卻因終點縮短而送不到卻誤判媒合成功。
+      const allDelivered = trial.every(x => sim.delivered.has(x.id));
+      if (allDelivered) {
+        committed.push(o); // 正式媒合
       } else {
-        unmatched.push(o); // 排擠既定行程或卡不進 2.19 時間窗 → 媒合不到（2.21）
+        unmatched.push(o); // 排擠既定行程／卡不進時間窗／當趟送不到 → 媒合不到（2.21）
       }
     }
 
