@@ -1304,7 +1304,7 @@ function renderBApplyList(p) {
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
       ModuleB.createOrder({ applicant: '研發部-吳承恩', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
-        deliverTime: '18:00', loadMin: lm, unloadMin: handleMin - lm }); });
+        wantReceiveTime: '09:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
   };
   $('#bq-demo-ret').onclick = () => {
@@ -1315,7 +1315,7 @@ function renderBApplyList(p) {
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
       ModuleB.createOrder({ applicant: '業務部-周雅婷', site: pick, destSite: drop, direct, items, recipient,
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
-        deliverTime: '19:00', loadMin: lm, unloadMin: handleMin - lm }); });
+        wantReceiveTime: '09:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
@@ -1381,7 +1381,7 @@ function renderBApplyDetail(p, id) {
         fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
         fItem('送貨地點（建物）', o.deliverLoc || '<span class="muted">—</span>'),
         fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
-        fItem('交貨時間', o.deliverTime || '<span class="muted">—</span>'),
+        fItem('希望收貨時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', o.wantReceiveTime ? `${o.wantReceiveTime}<span class="hint" style="margin-left:6px;">～${minToHHMM(hhmmToMin(o.wantReceiveTime) + DB.receiveWindowMin)}</span>` : '<span class="muted">—</span>'),
         fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
         fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
         fItem('上貨 / 下貨時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
@@ -1442,7 +1442,7 @@ function renderBApplyNew(p) {
           </div>`, { stack: true, full: true }),
       ].join(''))}
       ${infoGrid('ba-fields2', [
-        fInput('交貨時間（幾點交貨）', `<input type="time" id="ba-deliver" value="15:00">`),
+        fInput('希望收貨時間 <span class="hint">收貨時間窗起點，＋4h 為窗尾（2.19）</span>', `<input type="time" id="ba-want" value="10:00">`),
         fInput('上貨時間 (分，G35)', `<input type="number" id="ba-load" value="20">`),
         fInput('下貨時間 (分，G35)', `<input type="number" id="ba-unload" value="10">`),
       ].join(''))}
@@ -1495,7 +1495,7 @@ function renderBApplyNew(p) {
       destSite: $('#ba-dest').value,
       pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),
       deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),
-      deliverTime: $('#ba-deliver').value,
+      wantReceiveTime: $('#ba-want').value,
       recipient: recipientVal('ba'),
       direct: $('#page-b_apply input[value="1"]').checked,
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
@@ -1598,7 +1598,7 @@ function renderBApproveDetail(p, id) {
         fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
         fItem('送貨地點（建物）', o.deliverLoc || '<span class="muted">—</span>'),
         fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
-        fItem('交貨時間', o.deliverTime || '<span class="muted">—</span>'),
+        fItem('希望收貨時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', o.wantReceiveTime ? `${o.wantReceiveTime}<span class="hint" style="margin-left:6px;">～${minToHHMM(hhmmToMin(o.wantReceiveTime) + DB.receiveWindowMin)}</span>` : '<span class="muted">—</span>'),
         fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
         fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
         fItem('上貨 / 下貨時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
@@ -1786,16 +1786,17 @@ function renderBDispatchResult(r, startLabel) {
     ? `<div style="margin-top:6px;">被排擠順延（G42）：${r.deferred.map(o => o.id).join(', ')}</div>` : '';
   $('#br-dispatch-result').innerHTML = `
     <div class="result ${r.carried && r.carried.length ? 'ok' : 'warn'}" style="margin-top:16px;">
-      <div class="r-head">派車模式：${modeBadge}　終點：${endpoint}${r.days && r.days !== '—' ? `　出勤天數：${r.days} 天 <span class="g-tag">G37</span>` : ''}</div>
+      <div class="r-head">派車模式：${modeBadge}　${r.origin ? `出發：${ModuleB.siteById(r.origin) ? ModuleB.siteById(r.origin).name : r.origin}　` : ''}終點：${endpoint}${r.days && r.days !== '—' ? `　出勤天數：${r.days} 天 <span class="g-tag">G37</span>` : ''}</div>
       <div>觸發原因：${r.reason || '—'}｜容量使用 <b>${r.capUsed || 0}L</b> / ${r.capTotal || 0}L${
-        r.timeUsed != null ? `｜當日在勤 <b>${r.timeUsed}分</b> / ${r.timeTotal}分（12.5h，2.13）` : ''}${
+        r.timeUsed != null ? `｜當日在勤 <b>${r.timeUsed}分</b> / ${r.timeTotal}分（${r.timeTotal / 60}h，2.13）` : ''}${
         r.dutyDays ? `｜精算出勤 <b>${r.dutyDays}</b> 天` : ''}</div>
       ${r.breaks && r.breaks.length ? `<div style="margin-top:6px;">司機休息用餐（2.12）：${r.breaks.join('、')}</div>` : ''}
       ${r.refDays != null ? `<div style="margin-top:6px;">最短天數表參考（3.1，不參與運算）：<b>${r.refDays} 天</b>${
         r.daysOver ? ' <span class="badge b-amber">▲ 本趟預估天數超出表定值，以精算為準照常派車</span>' : ''}</div>` : ''}
       ${r.naturalDirect ? `<div style="margin-top:6px;"><span class="badge b-gray">自然直達</span> 時間額度不足以順路停靠，屬排程結果，不觸發獨立派車或回程鎖定（3.2）</div>` : ''}
       ${r.stopReason ? `<div style="margin-top:6px;" class="muted">終點停止延伸原因：${r.stopReason}</div>` : ''}
-      ${r.lateOrders && r.lateOrders.length ? `<div style="margin-top:6px;">逾媒合截止自動順延（2.14）：${r.lateOrders.map(o => o.id + (o.deferredToDate ? '→' + o.deferredToDate : '')).join('、')}</div>` : ''}
+      ${r.lateOrders && r.lateOrders.length ? `<div style="margin-top:6px;">逾媒合截止自動順延（2.15）：${r.lateOrders.map(o => o.id + (o.deferredToDate ? '→' + o.deferredToDate : '')).join('、')}</div>` : ''}
+      ${r.unmatched && r.unmatched.length ? `<div style="margin-top:6px;"><span class="badge b-amber">媒合不到（2.21）</span> ${r.unmatched.map(o => o.id + (o.direct ? '（急件→當地據點另派 2.22）' : '')).join('、')}</div>` : ''}
       ${r.carried ? `<div style="margin-top:6px;">載運：${r.carried.map(o => o.id).join(', ') || '（無）'}</div>` : ''}
       ${r.delivered && r.delivered.length ? `<div style="margin-top:6px;">沿線卸貨送達（G33）：${r.delivered.map(o => o.id + '→' + ModuleB.siteById(o.dropSite).name).join('、')}</div>` : ''}
       ${deferredHtml}
@@ -2531,7 +2532,7 @@ RENDER.master = function () {
 
     <div class="grid-2">
       <div class="card"><div class="card-title">3.1 各據點最短天數表 <span class="g-tag">示意</span></div>
-        <div class="card-desc">依車型 × 目的地查表；寬鬆估計、僅供排班參考顯示，不參與運算、不反向限制 12.5 小時精算。</div>
+        <div class="card-desc">依車型 × 目的地查表；寬鬆估計、僅供排班參考顯示，不參與運算、不反向限制 13.5 小時精算。</div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>目的地據點</th><th>大車</th><th>小車</th></tr></thead><tbody>${dayBody}</tbody></table></div></div>
 
       <div class="card"><div class="card-title">2.12 司機休息／用餐門檻</div>

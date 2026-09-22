@@ -468,20 +468,19 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
       '天數查「車型×目的地」最短天數表（3.1，僅參考值）');
   });
 
-  test('直達(a)：抵達迄點時間納入沿途上貨時間，交貨門檻不再低估', () => {
+  test('直達(a)：2.19 收貨時間窗以「行經取貨據點時間」判定，超窗媒合不到', () => {
     const H = fresh();
     const veh = H.DB.vehicles.find(v => v.id === 'V-T01'); // 大車
-    const drive = H.ModuleB.travelMin('D9', 'D1', veh.sizeClass); // 基地→迄點直達行駛
     const base = H.hhmmToMin(H.DB.shiftStartDefault) + H.DB.prepMin;
-    const loadMin = 60;
-    // 交貨時間落在「不含上貨」與「含上貨」抵達時間之間：唯有納入上貨才會被正確擋下
-    const dt = H.minToHHMM(base + drive + Math.floor(loadMin / 2));
+    const passD6 = base + H.ModuleB.travelMin('D9', 'D6', veh.sizeClass); // 行經取貨據點 D6 的時間
+    // 希望收貨時間設得夠早，使行經時間超出〔希望時間＋4h〕→ 媒合不到（急件另派 2.22）
+    const want = H.minToHHMM(passD6 - H.DB.receiveWindowMin - 30);
     const item = [{ name: 'x', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }];
     const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D1', direct: true,
-      loadMin, unloadMin: 0, deliverTime: dt, items: item });
+      loadMin: 20, unloadMin: 0, wantReceiveTime: want, items: item });
     H.ModuleB.approve(o);
     const r = H.ModuleB.dispatch('V-T01', 'direct');
-    ok(!r.carried.some(x => x.id === o.id), '含上貨後抵達晚於交貨時間 → 應留下一班（若漏計上貨會誤放行）');
+    ok(!r.carried.some(x => x.id === o.id), '行經取貨據點時間超出收貨窗 → 應媒合不到');
     eq(o.status, 'approved', '未排入者狀態不應改為 loaded');
   });
 
@@ -557,34 +556,119 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(H.hhmmToMin(c.pickupTime) > H.hhmmToMin(a.pickupTime), 'D3 比 D6 南 → 來收時間應更晚');
   });
 
-  test('交貨時間接進派車：估算送達晚於交貨時間 → 該單不排（留下一班）', () => {
+  test('2.19 收貨時間窗：抵達晚於〔希望收貨時間＋4h〕→ 媒合不到（留下一班）', () => {
     const H = fresh();
-    // D6 上車（≈11:40 到）、送 D2；D6→D2 再走 220 分 → 送達 ≈15:40，晚於 12:00
+    // V-T02 自 D9 08:30 出發，抵 D6 為 11:00；希望收貨 06:00 → 窗口 06:00–10:00，11:00 已超窗
     const late = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
-      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, deliverTime: '12:00' });
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, wantReceiveTime: '06:00' });
     H.ModuleB.approve(late);
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
-    ok(!r.carried.includes(late), '預計送達晚於 12:00 → 不應排入');
-    eq(late.status, 'approved', '未排入者狀態不應改為 loaded');
+    ok(!r.carried.includes(late), '抵達 11:00 晚於收貨窗 06:00＋4h（10:00）→ 不應排入');
+    eq(late.status, 'approved', '媒合不到者狀態不應改為 loaded');
+    ok(r.unmatched && r.unmatched.includes(late), '應列入媒合不到清單（2.21）');
   });
 
-  test('交貨時間寬鬆：估算可於交貨時間前送達 → 正常排入', () => {
+  test('2.19 收貨時間窗：抵達落在窗內 → 正常收貨排入', () => {
     const H = fresh();
+    // 抵 D6 為 11:00；希望收貨 08:00 → 窗口 08:00–12:00，11:00 在窗內
     const good = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
-      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, deliverTime: '17:00' });
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, wantReceiveTime: '08:00' });
     H.ModuleB.approve(good);
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
-    ok(r.carried.includes(good), '17:00 前可送達 → 應排入');
+    ok(r.carried.includes(good), '11:00 落在 08:00–12:00 窗內 → 應排入');
     eq(good.status, 'loaded', '排入後狀態為 loaded');
   });
 
-  test('交貨時間空值＝不設限：派車行為與既有相容', () => {
+  test('2.19 收貨時間窗：早到須等待至希望收貨時間，等待計入在勤', () => {
+    const H = fresh();
+    // 抵 D6 為 11:00；希望收貨 12:00 → 早到 60 分，須等待至 12:00 才收貨
+    const early = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20, wantReceiveTime: '12:00' });
+    H.ModuleB.approve(early);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.includes(early), '早到窗前仍可收（等待即可）→ 應排入');
+    eq(early.pickupTime, '12:00', '來收時間＝希望收貨時間（早到須等待，不得提前收貨）');
+  });
+
+  test('2.19 收貨時間窗空值＝不設限：派車行為與既有相容', () => {
     const H = fresh();
     const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D2', direct: false,
-      volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }); // 無 deliverTime
+      volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }); // 無 wantReceiveTime
     H.ModuleB.approve(o);
     const r = H.ModuleB.dispatch('V-T02', 'greedy');
-    ok(r.carried.includes(o), '未設交貨時間應照常排入');
+    ok(r.carried.includes(o), '未設收貨時間窗應照常排入');
+  });
+
+  test('2.18 站內建物間移動時間 =（拜訪棟數−1）×每棟增量', () => {
+    const H = fresh();
+    eq(H.ModuleB.intraSiteMoveMin(1), 0, '僅一棟不移動');
+    eq(H.ModuleB.intraSiteMoveMin(2), H.DB.intraSiteMovePerBuildingMin, '兩棟移動一段');
+    eq(H.ModuleB.intraSiteMoveMin(3), 2 * H.DB.intraSiteMovePerBuildingMin, '三棟移動兩段');
+  });
+
+  test('2.18 站內移動時間計入當日在勤：同站多棟較單棟多耗（棟數−1）×增量', () => {
+    const perBldg = fresh().DB.intraSiteMovePerBuildingMin;
+    // 兩單同站 D9 取貨、同送 D1；不同收貨建物 → D9 需 2 棟移動一段；相同建物 → 不移動
+    const two = (pb1, pb2) => {
+      const H = fresh();
+      const mk = pb => H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D1', direct: false,
+        volume: 500, category: 'BOX', weight: 50, handleMin: 10, pickupLoc: pb, deliverLoc: 'A 棟倉庫' });
+      const a = mk(pb1), b = mk(pb2); [a, b].forEach(o => H.ModuleB.approve(o));
+      return H.ModuleB.dispatch('V-T02', 'greedy');
+    };
+    const diff = two('北棟月台', '南棟倉');   // 兩棟
+    const same = two('北棟月台', '北棟月台'); // 一棟
+    eq(diff.timeUsed - same.timeUsed, perBldg,
+      '不同建物較同建物多一段站內移動時間（2.18）');
+  });
+
+  test('2.22 出發據點不限龍潭：可指定任一據點為出發點', () => {
+    const H = fresh();
+    // 自 D6 出發：D6→D3 可服務；D9→D3（收貨據點 D6 以北）不可服務
+    const okOrder = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    const northOrder = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    [okOrder, northOrder].forEach(o => H.ModuleB.approve(o));
+    const r = H.ModuleB.dispatch('V-T02', 'greedy', null, 'D6'); // 出發據點 = D6
+    eq(r.origin, 'D6', '出發據點應為指定的 D6');
+    ok(r.carried.includes(okOrder), 'D6→D3 自 D6 出發可服務');
+    ok(!r.carried.includes(northOrder), 'D9（D6 以北）之貨不排入自 D6 出發之車次');
+  });
+
+  test('2.22 未指定出發據點時預設主檔 homeSite', () => {
+    const H = fresh();
+    const o = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, handleMin: 10 });
+    H.ModuleB.approve(o);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    eq(r.origin, H.DB.homeSite, '未指定出發據點 → 預設主檔 homeSite');
+  });
+
+  test('2.20/2.21 統一媒合：候選單若排擠既定行程收貨時間窗 → 媒合不到，既定行程不受影響', () => {
+    const H = fresh();
+    // 既定行程 A（先核准）：D6 取貨、窗 11:00–15:00，車無 B 時 11:00 抵 D6 → 收得到
+    const A = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, loadMin: 10, unloadMin: 10, wantReceiveTime: '11:00' });
+    // 候選 B（後核准）：D9 取貨、上貨 250 分，會把抵 D6 時間拖到 15:10（超出 A 的窗）
+    const B = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D1', direct: false,
+      volume: 500, category: 'BOX', weight: 50, loadMin: 250, unloadMin: 10, wantReceiveTime: '08:30' });
+    H.ModuleB.approve(A); H.ModuleB.approve(B);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.includes(A), '既定行程 A 不受候選單排擠，仍應收到（2.21）');
+    ok(!r.carried.includes(B), '候選 B 會排擠 A 的收貨時間窗 → 媒合不到，不上車（2.21）');
+    ok(r.unmatched.includes(B), 'B 應列於媒合不到清單');
+  });
+
+  test('2.20/2.21 候選單不排擠既定行程時正常納入', () => {
+    const H = fresh();
+    const A = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D3', direct: false,
+      volume: 500, category: 'BOX', weight: 50, loadMin: 10, unloadMin: 10, wantReceiveTime: '11:00' });
+    const B = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D1', direct: false,
+      volume: 500, category: 'BOX', weight: 50, loadMin: 10, unloadMin: 10 }); // 上貨短，不拖累 A
+    H.ModuleB.approve(A); H.ModuleB.approve(B);
+    const r = H.ModuleB.dispatch('V-T02', 'greedy');
+    ok(r.carried.includes(A) && r.carried.includes(B), '不排擠 → 兩張皆媒合');
   });
 
   test('B-1 出發據點走主檔 homeSite，不寫死 D10（改中段基地仍正確）', () => {
@@ -677,15 +761,15 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     eq(H.ModuleB.minTripDaysFor(small, 'D1'), H.DB.minTripDays.small.D1, '停靠與否不影響查表結果');
   });
 
-  test('2.13 時間上限改為每日 12.5 小時在勤模型（非天數×工時）', () => {
+  test('2.13 時間上限每日 13.5 小時在勤模型（本版修正 12.5→13.5，非天數×工時）', () => {
     const H = fresh();
-    eq(H.DB.dailyDutyMin, 12.5 * 60, '每日在勤上限 12.5 小時');
+    eq(H.DB.dailyDutyMin, 13.5 * 60, '每日在勤上限 13.5 小時（2.13 本版修正）');
     const c = H.ModuleB.newDutyClock();
     eq(c.day, 1); eq(c.dayElapsed, H.DB.prepMin, '起始即含出勤前緩衝');
     // 剩餘量須扣掉收工緩衝與返回休息地
     const rem = c.remaining('D1');
     eq(rem, H.DB.dailyDutyMin - H.DB.prepMin - H.DB.closeMin - H.ModuleB.returnToRestMin('D1'),
-      '剩餘＝12.5h −已用 −收工緩衝 −返回休息地');
+      '剩餘＝13.5h −已用 −收工緩衝 −返回休息地');
   });
 
   test('2.9 行駛時間改查據點相互路程表（非單一常數×段數）', () => {
