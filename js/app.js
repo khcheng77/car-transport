@@ -84,6 +84,7 @@ const NAV = [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
     { id: 'a_review', ico: '🗂', label: 'A｜車次追蹤（業務）' },
     { id: 'a_dispatch', ico: '🔧', label: 'A｜已排定車次異動（業務）' },
+    { id: 'a_route', ico: '🚌', label: 'A｜路線與班次（業務）' },
     { id: 'a_masonry', ico: '🧩', label: 'A｜資訊卡試做（Masonry）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
   ] },
@@ -107,6 +108,7 @@ const PAGE_META = {
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
   a_review: { title: '區域內物流 · 車次追蹤（業務單位）', crumb: '模組 A · 調度端 · G18/G20' },
   a_dispatch: { title: '區域內物流 · 已排定車次異動（業務單位）', crumb: '模組 A · 調度端 · 車次班次/車輛/司機調整' },
+  a_route: { title: '區域內物流 · 路線與班次（業務單位）', crumb: '模組 A · 調度端 · 固定路線 / 每小時班次（查詢）' },
   a_masonry: { title: '區域內物流 · 資訊卡試做（Masonry）', crumb: '模組 A · label+value 資訊區塊 · 自適應排版 POC' },
   a_driver: { title: '區域內物流 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
   b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
@@ -171,7 +173,8 @@ RENDER.dashboard = function () {
     <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">業務單元（申請端 ｜ 主管 ｜ 審核/調度端）</div>
     <div class="grid-3">
       ${unitCard('📝 A｜收貨申請', '使用者填收貨單，送出即自動媒合並告知班次時間與車號；查看狀態、接受排班與交貨確認。', 'a_apply', '申請端')}
-      ${unitCard('🗂 A｜車次追蹤', '追蹤已自動排定車次與交貨狀態、路線班次、駕駛異常回報。', 'a_review', '審核端')}
+      ${unitCard('🗂 A｜車次追蹤', '追蹤已自動排定車次與交貨狀態（路線班次、駕駛異常回報已各自獨立／整併）。', 'a_review', '審核端')}
+      ${unitCard('🚌 A｜路線與班次', '獨立單元：各分公司固定 9 站路線與每小時班次／車輛對應查詢。', 'a_route', '審核端')}
       ${unitCard('🧑‍✈️ A｜司機任務單', '駕駛端：以班次（車輛）為單位，沿據點 9 站路線的收送任務、到站時間、接收人。', 'a_driver', '駕駛')}
       ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
       ${unitCard('✅ B｜主管准駁', '直屬主管准駁幹線託運單，駁回保留紀錄不進派車池。', 'b_approve', '主管')}
@@ -850,22 +853,17 @@ RENDER.a_review = function () {
   const p = $('#page-a_review');
   p.innerHTML = `
     <div class="section-h">車次追蹤（業務單位）</div>
-    <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合；供業務單位追蹤已排定車次與交貨狀態、維護路線班次、進行駕駛異常回報。</div>
-    <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="ar-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
-    <div class="pill-tabs">
-      <div class="pill-tab active" data-tab="review">① 已排定車次</div>
-      <div class="pill-tab" data-tab="route">② 路線與班次</div>
-      <div class="pill-tab" data-tab="incident">③ 駕駛異常回報</div>
+    <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合；供業務單位追蹤已排定車次與交貨狀態。<b>路線與班次</b>查詢已獨立為單獨單元；<b>駕駛異常回報</b>整併於「已排定車次異動」的車次明細內。</div>
+    <div style="margin:-4px 0 14px;">
+      <button class="btn btn-ghost btn-sm" id="ar-goto-driver">🧑‍✈️ 查看司機任務單</button>
+      <button class="btn btn-ghost btn-sm" id="ar-goto-route">🚌 路線與班次</button>
+      <button class="btn btn-ghost btn-sm" id="ar-goto-dispatch">🔧 車次異動／異常回報</button>
     </div>
-    <div id="ar-tab-review"></div>
-    <div id="ar-tab-route" style="display:none;"></div>
-    <div id="ar-tab-incident" style="display:none;"></div>`;
-  $$('#page-a_review .pill-tab').forEach(t => t.onclick = () => {
-    $$('#page-a_review .pill-tab').forEach(x => x.classList.toggle('active', x === t));
-    ['review', 'route', 'incident'].forEach(k => $('#ar-tab-' + k).style.display = k === t.dataset.tab ? 'block' : 'none');
-  });
+    <div id="ar-tab-review"></div>`;
   $('#ar-goto-driver').onclick = () => goto('a_driver');
-  renderAr_review(); renderA_route(); renderA_incident();
+  $('#ar-goto-route').onclick = () => goto('a_route');
+  $('#ar-goto-dispatch').onclick = () => goto('a_dispatch');
+  renderAr_review();
 };
 function renderAr_review() {
   // 媒合已於使用者送出時自動完成，本頁僅追蹤結果
@@ -905,7 +903,12 @@ function renderAr_scheduled() {
     <div class="card-desc">媒合成功即完成排班（免確認接受）。顯示每張已排班申請單的班次、車輛與到站時間。</div>
     ${body}</div>`;
 }
-function renderA_route() {
+/* ============================================================
+   模組 A · 路線與班次（業務單位）— 獨立單元（查詢）
+   自「車次追蹤」拆出：各分公司據點固定 9 站路線 + 每小時班次／車輛對應。
+   ============================================================ */
+RENDER.a_route = function () {
+  const p = $('#page-a_route');
   // 每個分公司據點各有 9 站固定路線（100~900）與專屬 5 班班次（獨立路線）
   const perBranch = DB.branches.map(b => {
     const sts = DB.stations.filter(s => s.branch === b.id);
@@ -922,14 +925,18 @@ function renderA_route() {
       </tbody></table></div>
     </div>`;
   }).join('');
-  $('#ar-tab-route').innerHTML = perBranch;
-}
+  p.innerHTML = `
+    <div class="section-h">路線與班次（業務單位）</div>
+    <div class="section-sub">各分公司據點的固定 9 站路線與每小時班次／車輛對應。本單元自「車次追蹤」獨立拆出（查詢）；站點順序、班次時間、對應車輛的<b>維護（編輯）</b>於後續版本開放。<b>個別車次</b>的車輛／司機覆寫，請至「已排定車次異動」。</div>
+    ${perBranch}`;
+};
 // 異常回報選項（value → 顯示）；'' ＝正常運送（預設）
 const INCIDENT_OPTS = [['', '正常運送'], ['使用者不準時', '不準時'], ['使用者沒出現', '沒出現']];
 function incidentLabel(v) { const m = INCIDENT_OPTS.find(o => o[0] === (v || '')); return m ? m[1] : v; }
 
 // 編輯異常回報：下拉選單（預設帶入目前值），送出即存檔；選到異常則寄信（雛形空 function）
-function openIncidentEditor(a) {
+// onDone：送出後的重繪回呼（整併於「已排定車次異動」車次明細，故預設重繪 a_dispatch）
+function openIncidentEditor(a, onDone) {
   const st = DB.stations.find(s => s.id === a.station);
   const cur = a.incident || '';
   const opts = INCIDENT_OPTS.map(([v, t]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`).join('');
@@ -948,33 +955,8 @@ function openIncidentEditor(a) {
     ModuleA.reportIncident(a, val); // 存檔；異常時 sendIncidentMail（雛形空 function）
     closeModal();
     toast(val ? `${a.id} 異常已回報（${incidentLabel(val)}）並寄信（示意）` : `${a.id} 已設為正常運送`, 'ok');
-    renderA_incident();
+    (onDone || RENDER.a_dispatch)();
   };
-}
-
-function renderA_incident() {
-  const matched = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
-  $('#ar-tab-incident').innerHTML = `
-    <div class="card">
-      <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>
-      <div class="card-desc">跑完整趟回總部後回報，只標異常站點，記錄到申請單層級。<b>每張單預設為「正常運送」</b>；如有異常，點該筆最左的<b>編輯</b>鈕，於下拉選單選取異常類別（不準時／沒出現）送出，存檔並立即自動寄信給申請人＋直屬主管（沿用審批對應）。一單一信。</div>
-      ${matched.length === 0 ? `<div class="empty">尚無已排班申請單可回報。先於「審核與排班」核准並執行媒合。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th></th><th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>物品運輸單狀態</th></tr></thead><tbody>
-        ${matched.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
-          const badge = a.incident
-            ? `<span class="badge b-red">${incidentLabel(a.incident)}</span>`
-            : `<span class="badge b-green">正常運送</span>`;
-          return `<tr>
-            <td><button class="btn btn-ghost btn-sm" data-edit="${a.id}">編輯</button></td>
-            <td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}</td><td>${sh.label}</td>
-            <td>${badge}</td></tr>`; }).join('')}
-      </tbody></table></div>`}
-    </div>`;
-  $$('#ar-tab-incident [data-edit]').forEach(b => b.onclick = () => {
-    const a = ModuleA.applications.find(x => x.id === b.dataset.edit);
-    if (a) openIncidentEditor(a);
-  });
 }
 
 /* ============================================================
@@ -1102,6 +1084,21 @@ function renderADispatchDetail() {
         <th></th><th>物品運輸單號</th><th>申請人</th><th>收貨站點（起）</th><th>送貨站點（迄）</th><th>貨物</th></tr></thead><tbody>${body}</tbody></table></div>
       <div class="muted" style="margin-top:6px;">「刪除」＝將該單移出本班次（回未排入，待重新指定）；「新增」＝把同日其他班次或未排入的單改派到本班次。</div>
     </div>
+    <div class="card">
+      <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>
+      <div class="card-desc">駕駛跑完整趟回總部後回報，只標異常單、記錄到申請單層級（整併於本車次明細，不再另開頁籤）。<b>每張單預設「正常運送」</b>；如有異常，點該筆<b>編輯</b>選取類別（不準時／沒出現）送出，存檔並自動寄信通知申請人＋直屬主管（一單一信）。</div>
+      ${orders.length === 0 ? `<div class="empty">此車次目前沒有申請單可回報。</div>` : `
+      <div class="table-wrap"><table class="dt"><thead><tr>
+        <th></th><th>物品運輸單號</th><th>申請人</th><th>送貨站點</th><th>回報狀態</th></tr></thead><tbody>
+        ${orders.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          const badge = a.incident
+            ? `<span class="badge b-red">${incidentLabel(a.incident)}</span>`
+            : `<span class="badge b-green">正常運送</span>`;
+          return `<tr>
+            <td><button class="btn btn-ghost btn-sm" data-inc="${a.id}">編輯</button></td>
+            <td>${a.id}</td><td>${a.applicant}</td><td>${st.name} / ${a.building}</td><td>${badge}</td></tr>`; }).join('')}
+      </tbody></table></div>`}
+    </div>
     ${backBar('add-back')}`;
   $('#add-back').onclick = () => { aDispatch.view = 'list'; RENDER.a_dispatch(); };
   $('#add-save').onclick = () => {
@@ -1116,6 +1113,10 @@ function renderADispatchDetail() {
     }));
   const add = $('#add-add');
   if (add) add.onclick = () => openDispatchAdd(date, shiftId);
+  $$('#page-a_dispatch [data-inc]').forEach(b => b.onclick = () => {
+    const a = ModuleA.applications.find(x => x.id === b.dataset.inc);
+    if (a) openIncidentEditor(a, () => RENDER.a_dispatch());
+  });
   initMasonry(p);
 }
 
