@@ -29,6 +29,29 @@ const DB = {
      由 branches 展開為分公司專屬班次（id 前綴分公司，見檔尾 buildRegionalNetwork）。 */
   regionalShifts: [],
 
+  /* ---- 登入使用者（示意；正式版由登入 session 帶入）：供申請人／申請單位／申請人分機預設 ---- */
+  currentUser: { name: '周雅婷', unit: '業務部', ext: '2201' },
+
+  /* ---- 人事組織（事業部 → 組別 → 組員）----
+     供委運人／接收人／代理人「姓名」連動下拉（事業部→組別→組員），
+     並自動帶入「單位＝事業部·組別」「分機＝人事資料分機」。 */
+  orgUnits: [
+    { id: 'BU1', name: '生產事業部', groups: [
+      { id: 'BU1-G1', name: '一組', members: [{ name: '林建志', ext: '210' }, { name: '陳志明', ext: '211' }, { name: '王大同', ext: '212' }] },
+      { id: 'BU1-G2', name: '二組', members: [{ name: '黃美玲', ext: '220' }, { name: '李國華', ext: '221' }] },
+    ] },
+    { id: 'BU2', name: '研發事業部', groups: [
+      { id: 'BU2-G1', name: '研發一組', members: [{ name: '吳承恩', ext: '410' }, { name: '林曉琪', ext: '411' }] },
+      { id: 'BU2-G2', name: '研發二組', members: [{ name: '張裕明', ext: '420' }, { name: '周雅琳', ext: '421' }] },
+    ] },
+    { id: 'BU3', name: '行政事業部', groups: [
+      { id: 'BU3-G1', name: '總務組', members: [{ name: '鄭文彬', ext: '310' }, { name: '蔡宗翰', ext: '311' }] },
+      { id: 'BU3-G2', name: '人資組', members: [{ name: '許雅雯', ext: '320' }, { name: '潘俊傑', ext: '321' }] },
+    ] },
+  ],
+  /* ---- 館別清單（院區內館別；委運人／接收人／代理人手動選填）---- */
+  halls: ['A 館', 'B 館', 'C 館', '行政館', '門診館'],
+
   /* ---- 南北幹線 10 據點（G30）南→北一直線固定順序 ---- */
   // 據點內建物清單（G31：系統只給清單，順序由司機自行決定）示意
   sites: [

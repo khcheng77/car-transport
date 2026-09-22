@@ -458,6 +458,65 @@ const brName = id => { const b = DB.branches.find(x => x.id === id); return b ? 
 const branchStationOpts = (branchId, sel) => DB.stations.filter(s => s.branch === branchId)
   .map(s => `<option value="${s.id}"${s.id === sel ? ' selected' : ''}>${s.name}</option>`).join('');
 
+/* ============================================================
+   人員選取器（委運人／接收人／代理人）— A-specific
+   姓名＝事業部→組別→組員 三段連動下拉；單位（事業部·組別）與分機自動由人事資料帶入；
+   院區、館別為手動選填（院區沿用車屬院區清單、館別為 DB.halls）。
+   人員物件：{ bu, group, name, ext, unit, campus, hall }
+   ============================================================ */
+const _buOpts = sel => DB.orgUnits.map(b => `<option value="${b.id}"${b.id === sel ? ' selected' : ''}>${b.name}</option>`).join('');
+const _groupOpts = (buId, sel) => { const b = DB.orgUnits.find(x => x.id === buId); return (b ? b.groups : []).map(g => `<option value="${g.id}"${g.id === sel ? ' selected' : ''}>${g.name}</option>`).join(''); };
+const _memberOpts = (buId, groupId, sel) => { const b = DB.orgUnits.find(x => x.id === buId); const g = b && b.groups.find(x => x.id === groupId); return (g ? g.members : []).map(m => `<option value="${m.name}"${m.name === sel ? ' selected' : ''}>${m.name}</option>`).join(''); };
+const _campusOpts = sel => ['<option value="">請選擇院區</option>'].concat(DB.branches.map(b => `<option value="${b.id}"${b.id === sel ? ' selected' : ''}>${b.name}</option>`)).join('');
+const _hallOpts = sel => ['<option value="">請選擇館別</option>'].concat(DB.halls.map(h => `<option value="${h}"${h === sel ? ' selected' : ''}>${h}</option>`)).join('');
+
+// 人員欄位（回傳 infoGrid 內用的 items 字串）；prefix＝欄位 id 前綴、role＝角色中文
+function personFieldItems(prefix, role) {
+  const b0 = DB.orgUnits[0].id, g0 = DB.orgUnits[0].groups[0].id;
+  return [
+    fInput(`${role}姓名 <span class="hint">事業部／組別／姓名</span>`,
+      `<select id="${prefix}-bu" style="margin-bottom:4px;">${_buOpts(b0)}</select>
+       <select id="${prefix}-group" style="margin-bottom:4px;">${_groupOpts(b0, g0)}</select>
+       <select id="${prefix}-member">${_memberOpts(b0, g0)}</select>`, { stack: true, full: true }),
+    fItem(`${role}單位`, `<span id="${prefix}-unit" class="muted">—</span>`),
+    fItem(`${role}分機`, `<span id="${prefix}-ext" class="muted">—</span>`),
+    fInput(`${role}院區`, `<select id="${prefix}-campus">${_campusOpts()}</select>`),
+    fInput(`${role}館別`, `<select id="${prefix}-hall">${_hallOpts()}</select>`),
+  ].join('');
+}
+// 掛連動：切事業部→重填組別→重填組員；選組員→自動帶單位/分機
+function wirePerson(prefix, relayoutRoot) {
+  const bu = $('#' + prefix + '-bu'), group = $('#' + prefix + '-group'), member = $('#' + prefix + '-member');
+  if (!bu) return;
+  const syncAuto = () => {
+    const b = DB.orgUnits.find(x => x.id === bu.value);
+    const g = b && b.groups.find(x => x.id === group.value);
+    const m = g && g.members.find(x => x.name === member.value);
+    $('#' + prefix + '-unit').textContent = (b && g) ? `${b.name}·${g.name}` : '—';
+    $('#' + prefix + '-ext').textContent = m ? m.ext : '—';
+    if (relayoutRoot) initMasonry(relayoutRoot);
+  };
+  const fillMembers = () => { member.innerHTML = _memberOpts(bu.value, group.value); syncAuto(); };
+  const fillGroups = () => { group.innerHTML = _groupOpts(bu.value); fillMembers(); };
+  bu.onchange = fillGroups; group.onchange = fillMembers; member.onchange = syncAuto;
+  syncAuto();
+}
+// 讀取人員欄位值
+function personVal(prefix) {
+  const bu = $('#' + prefix + '-bu').value, group = $('#' + prefix + '-group').value, name = $('#' + prefix + '-member').value;
+  const b = DB.orgUnits.find(x => x.id === bu);
+  const g = b && b.groups.find(x => x.id === group);
+  const m = g && g.members.find(x => x.name === name);
+  return { bu, group, name, ext: m ? m.ext : '', unit: (b && g) ? `${b.name}·${g.name}` : '',
+    campus: $('#' + prefix + '-campus').value, hall: $('#' + prefix + '-hall').value };
+}
+// 明細顯示：姓名·分機｜單位｜院區·館別
+function personDisplay(pn) {
+  if (!pn || !pn.name) return '<span class="muted">—</span>';
+  const loc = [brName(pn.campus), pn.hall].filter(Boolean).join('·');
+  return [pn.name + (pn.ext ? '（分機 ' + pn.ext + '）' : ''), pn.unit, loc].filter(Boolean).join('　·　');
+}
+
 function fmtTime(d) {
   if (!d) return '—';
   const dt = new Date(d);
@@ -495,9 +554,9 @@ function renderAApplyList(p) {
       </div>
       ${infoGrid('aq-fields', [
         fInput('申請人（模糊）', `<input type="text" id="aq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
-        fInput('分公司據點', `<select id="aq-branch">${brOpts}</select>`),
+        fInput('車屬院區', `<select id="aq-branch">${brOpts}</select>`),
         fInput('目的地站點', `<select id="aq-station">${stOpts}</select>`),
-        fInput('狀態', `<select id="aq-status">${statusOpts}</select>`),
+        fInput('物品運輸單狀態', `<select id="aq-status">${statusOpts}</select>`),
         fInput('收貨模式', `<select id="aq-mode">${modeOpts}</select>`),
       ].join(''))}
     </div>
@@ -512,15 +571,20 @@ function renderAApplyList(p) {
   $('#aq-search').onclick = () => { runAQuery(); };
   $('#aq-new').onclick = () => { aApply.view = 'new'; RENDER.a_apply(); };
   $('#aq-demo').onclick = () => {
-    // [分公司, 收貨站(起), 送貨站(迄), 模式, 上貨分, 下貨分, 貨物, 接收人]（收貨站須在送貨站之前）
-    [['D10', 'D10-200', 'D10-300', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], { unit: '生產部', name: '林建志', phone: '03-1234567#210', agentName: '陳怡君', agentPhone: '0912-345-678' }],
-     ['D10', 'D10-200', 'D10-600', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], { unit: '倉儲課', name: '黃美玲', phone: '03-2345678#118' }],
-     ['D6', 'D6-300', 'D6-900', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '工務組', name: '吳志豪', phone: '03-3456789#305', agentName: '李國華', agentPhone: '0922-111-222' }]
-    ].forEach(([branch, pick, s, mode, lm, um, items, recipient]) => { const pSt = DB.stations.find(x => x.id === pick);
+    // 由人事資料組出人員物件（示意）
+    const P = (buId, gId, name, campus, hall) => { const b = DB.orgUnits.find(x => x.id === buId); const g = b.groups.find(x => x.id === gId); const m = g.members.find(x => x.name === name);
+      return { bu: buId, group: gId, name, ext: m.ext, unit: `${b.name}·${g.name}`, campus, hall }; };
+    // [院區, 收貨站(起), 送貨站(迄), 模式, 上貨分, 下貨分, 貨物, 委運人, 接收人, 接收代理人]
+    [['D10', 'D10-200', 'D10-300', 'asap', 10, 5, [{ name: '零件箱', l: 50, w: 40, h: 30, qty: 6, category: 'BOX', weight: 12 }], P('BU1', 'BU1-G1', '林建志', 'D10', 'A 館'), P('BU2', 'BU2-G1', '吳承恩', 'D10', 'B 館'), P('BU3', 'BU3-G1', '鄭文彬', 'D10', '行政館')],
+     ['D10', 'D10-200', 'D10-600', 'exact', 12, 8, [{ name: '棧板', l: 110, w: 90, h: 120, qty: 1, category: 'PALLET', weight: 200 }], P('BU1', 'BU1-G2', '黃美玲', 'D10', 'A 館'), P('BU2', 'BU2-G2', '張裕明', 'D10', 'C 館'), null],
+     ['D6', 'D6-300', 'D6-900', 'asap', 15, 10, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], P('BU1', 'BU1-G1', '陳志明', 'D6', 'B 館'), P('BU3', 'BU3-G2', '許雅雯', 'D6', '門診館'), null]
+    ].forEach(([branch, pick, s, mode, lm, um, items, consignor, recipient, recipientAgent]) => { const pSt = DB.stations.find(x => x.id === pick);
       ModuleA.submit({
-        applicant: '業務部-周雅婷', branch, station: s, building: DB.stations.find(x => x.id === s).buildings[0],
+        applicant: DB.currentUser.name, applyUnit: DB.currentUser.unit, applyExt: DB.currentUser.ext,
+        branch, station: s, building: DB.stations.find(x => x.id === s).buildings[0],
         pickStation: pick, pickupLoc: pSt.name + ' / ' + pSt.buildings[0],
-        deliverTime: mode === 'exact' ? '14:00' : '', recipient, items, recvMode: mode, loadMin: lm, unloadMin: um }); });
+        deliverTime: mode === 'exact' ? '14:00' : '', consignor, recipient, recipientAgent,
+        items, recvMode: mode, loadMin: lm, unloadMin: um }); });
     aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
@@ -554,7 +618,7 @@ function renderAGrid() {
   $('#aq-count').textContent = `${rows.length} 筆`;
   $('#aq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>模式</th><th>班次</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      <th></th><th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>模式</th><th>班次</th><th>物品運輸單狀態</th><th>申請日期</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         return `<tr>
@@ -586,21 +650,30 @@ function renderAApplyDetail(p, id) {
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status)}</div>
       ${infoGrid('ad-basic', [
-        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('物品運輸單號', `<b style="color:var(--navy);">${a.id}</b>`),
         fItem('申請人', a.applicant),
-        fItem('分公司據點', brName(a.branch)),
-        fItem('收貨地點（起）', a.pickupLoc || '<span class="muted">—</span>'),
-        fItem('送貨地點（迄）', `${st ? st.name : '—'} / ${a.building}`),
+        fItem('申請單位', a.applyUnit || '<span class="muted">—</span>'),
+        fItem('申請人分機', a.applyExt || '<span class="muted">—</span>'),
+        fItem('車屬院區', brName(a.branch)),
+        fItem('收貨站點（起）', a.pickupLoc || '<span class="muted">—</span>'),
+        fItem('送貨站點（迄）', `${st ? st.name : '—'} / ${a.building}`),
         fItem('收貨模式', a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'),
         fItem('排班日期', `<b>${a.serviceDate || '—'}</b>${a.serviceDate === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}`),
         fItem('期望收貨時間', a.deliverTime || '<span class="muted">—</span>'),
         fItem('上貨 / 下貨時間', `${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）`),
-        fItem('建立時間', fmtTime(a.createdAt)),
+        fItem('申請日期', fmtTime(a.createdAt)),
       ].join(''))}
     </div>
     <div class="card">
+      <div class="card-title">委運人資訊</div>
+      ${infoGrid('ad-cons', fItem('委運人', personDisplay(a.consignor), { full: true, tall: true }))}
+    </div>
+    <div class="card">
       <div class="card-title">接收人資訊</div>
-      ${infoGrid('ad-recv', fItem('接收人', recipientDisplay(a.recipient), { full: true, tall: true }))}
+      ${infoGrid('ad-recv', [
+        fItem('接收人', personDisplay(a.recipient), { full: true, tall: true }),
+        fItem('接收代理人', personDisplay(a.recipientAgent), { full: true, tall: true }),
+      ].join(''))}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目（總體積約 ${totalVol.toFixed(0)}L）</span>
@@ -649,11 +722,13 @@ function renderAApplyNew(p) {
     <div class="card">
       <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
       ${infoGrid('aa-fields', [
-        fInput('申請人', `<input type="text" id="aa-applicant" value="業務部-周雅婷">`),
-        fInput('分公司據點', `<select id="aa-branch">${brOpts}</select>`),
-        fInput('收貨地點站點（起）', `<select id="aa-pickuploc">${stOpts}</select>`),
+        fItem('申請人', DB.currentUser.name),
+        fItem('申請單位', DB.currentUser.unit),
+        fItem('申請人分機', DB.currentUser.ext),
+        fInput('車屬院區', `<select id="aa-branch">${brOpts}</select>`),
+        fInput('收貨站點（起）', `<select id="aa-pickuploc">${stOpts}</select>`),
         fInput('收貨建物', `<select id="aa-pickbldg"></select><input type="text" id="aa-pickother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
-        fInput('送貨地點站點（迄）', `<select id="aa-station">${stOpts}</select>`),
+        fInput('送貨站點（迄）', `<select id="aa-station">${stOpts}</select>`),
         fInput('送貨建物', `<select id="aa-building"></select><input type="text" id="aa-destother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
         fInput('收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span>', `
           <div class="radio-group">
@@ -671,14 +746,13 @@ function renderAApplyNew(p) {
         fInput('下貨時間（分，自填 G15）', `<input type="number" id="aa-unload" value="5">`),
       ].join(''))}
       <div class="divider"></div>
+      <div class="card-title">委運人資訊</div>
+      ${infoGrid('aa-cons', personFieldItems('acon', '委運人'))}
+      <div class="divider"></div>
       <div class="card-title">接收人資訊</div>
-      ${infoGrid('aa-recv', [
-        fInput('單位', `<input type="text" id="aa-runit" placeholder="收貨單位／部門">`),
-        fInput('姓名', `<input type="text" id="aa-rname" placeholder="接收人姓名">`),
-        fInput('電話', `<input type="text" id="aa-rphone" placeholder="聯絡電話">`),
-        fInput('代理人姓名 <span class="hint">選填</span>', `<input type="text" id="aa-aname" placeholder="代理人姓名">`),
-        fInput('代理人電話 <span class="hint">選填</span>', `<input type="text" id="aa-aphone" placeholder="代理人電話">`),
-      ].join(''))}
+      ${infoGrid('aa-recv', personFieldItems('arec', '接收人'))}
+      <div class="card-title" style="font-size:14px;margin-top:6px;">接收代理人資訊 <span class="hint">選填</span></div>
+      ${infoGrid('aa-rag', personFieldItems('arag', '接收代理人'))}
       <div class="divider"></div>
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="aa-add">＋ 新增</button></div>
@@ -714,6 +788,9 @@ function renderAApplyNew(p) {
   // 期望日期預設今天、不可早於今天
   const _today = ModuleA.todayStr();
   $('#aa-date').value = _today; $('#aa-date').min = _today;
+  wirePerson('acon', p); // 委運人：姓名連動下拉＋自動帶單位/分機
+  wirePerson('arec', p); // 接收人
+  wirePerson('arag', p); // 接收代理人
   renderAaItems(); // 一開始顯示空白清單
   initMasonry(p);  // 表單資訊區塊自適應排版（與顯示頁一致）
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
@@ -736,14 +813,16 @@ function renderAApplyNew(p) {
       if (d < ModuleA.todayStr()) { toast('期望日期不可早於今天', 'err'); return; }
     }
     const { app, result } = ModuleA.submit({
-      applicant: $('#aa-applicant').value, branch: $('#aa-branch').value, station: $('#aa-station').value,
+      applicant: DB.currentUser.name, applyUnit: DB.currentUser.unit, applyExt: DB.currentUser.ext,
+      branch: $('#aa-branch').value, station: $('#aa-station').value,
       building: bldgVal('aa-building', 'aa-destother'),
       pickStation: $('#aa-pickuploc').value,
       pickupLoc: (pickSt ? pickSt.name : '') + ' / ' + bldgVal('aa-pickbldg', 'aa-pickother'),
       deliverTime: mode === 'exact' ? $('#aa-deliver').value : '', // 期望收貨時間（僅 exact 用於排序）
       serviceDate: mode === 'exact' ? $('#aa-date').value : ModuleA.todayStr(), // 排班日期（asap＝今天）
-
-      recipient: recipientVal('aa'),
+      consignor: personVal('acon'),        // 委運人
+      recipient: personVal('arec'),        // 接收人
+      recipientAgent: personVal('arag'),   // 接收代理人
       items: aaItems.map(x => ({ ...x })), recvMode: mode,
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
@@ -795,7 +874,7 @@ function renderAr_review() {
     <div class="card">
       <div class="card-title">未排入·待使用者改期 <span class="g-tag">G12/G17</span></div>
       <div class="card-desc">自動媒合時當日各班次皆裝不下或時間額度已滿，系統已即時提醒該使用者改期（不留候補、不排隔日 G12）。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>目的地</th><th>原因</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>原因</th></tr></thead><tbody>
         ${unsched.map(a => { const st = DB.stations.find(s => s.id === a.station);
           return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td><td class="muted">${a.note || '—'}</td></tr>`; }).join('')}
       </tbody></table></div>
@@ -813,7 +892,7 @@ function renderAr_scheduled() {
   const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
   const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。使用者送出申請並自動媒合成功後即會出現在此。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>班次</th><th>車輛</th><th>到站</th></tr></thead><tbody>
+      <th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>班次</th><th>車輛</th><th>到站</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
@@ -880,7 +959,7 @@ function renderA_incident() {
       <div class="card-title">駕駛異常回報 <span class="g-tag">G20</span></div>
       <div class="card-desc">跑完整趟回總部後回報，只標異常站點，記錄到申請單層級。<b>每張單預設為「正常運送」</b>；如有異常，點該筆最左的<b>編輯</b>鈕，於下拉選單選取異常類別（不準時／沒出現）送出，存檔並立即自動寄信給申請人＋直屬主管（沿用審批對應）。一單一信。</div>
       ${matched.length === 0 ? `<div class="empty">尚無已排班申請單可回報。先於「審核與排班」核准並執行媒合。</div>` : `
-      <div class="table-wrap"><table class="dt"><thead><tr><th></th><th>單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>狀態</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="dt"><thead><tr><th></th><th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>班次</th><th>物品運輸單狀態</th></tr></thead><tbody>
         ${matched.map(a => { const st = DB.stations.find(s => s.id === a.station);
           const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
           const badge = a.incident
@@ -1007,7 +1086,7 @@ function renderADispatchDetail() {
     <div class="card">
       <div class="card-title">班次車輛資訊</div>
       ${infoGrid('add-info', [
-        fItem('分公司據點', brName(sh.branch)),
+        fItem('車屬院區', brName(sh.branch)),
         fItem('班次', `<b>${sh.label}</b>`),
         fItem('收貨日期', date),
         fInput('車輛 <span class="hint">可修改</span>', `<select id="add-veh">${vehOpts}</select>`),
@@ -1020,7 +1099,7 @@ function renderADispatchDetail() {
       <div class="card-title" style="justify-content:space-between;"><span>本車次申請單（${orders.length} 筆）</span>
         <button class="btn btn-accent btn-sm" id="add-add">＋ 新增</button></div>
       <div class="table-wrap"><table class="dt"><thead><tr>
-        <th></th><th>單號</th><th>申請人</th><th>收貨地點（起）</th><th>送貨站（迄）</th><th>貨物</th></tr></thead><tbody>${body}</tbody></table></div>
+        <th></th><th>物品運輸單號</th><th>申請人</th><th>收貨站點（起）</th><th>送貨站點（迄）</th><th>貨物</th></tr></thead><tbody>${body}</tbody></table></div>
       <div class="muted" style="margin-top:6px;">「刪除」＝將該單移出本班次（回未排入，待重新指定）；「新增」＝把同日其他班次或未排入的單改派到本班次。</div>
     </div>
     ${backBar('add-back')}`;
@@ -1047,7 +1126,7 @@ function openDispatchAdd(date, shiftId) {
     a.serviceDate === date && a.branch === sh.branch && a.assignedShift !== shiftId && ['matched', 'unscheduled'].includes(a.status));
   const rows = cands.length === 0
     ? `<div class="callout" style="margin-top:6px;">同日沒有可加入的申請單（其他班次或未排入）。</div>`
-    : `<div class="table-wrap"><table class="dt"><thead><tr><th></th><th>單號</th><th>申請人</th><th>送貨站</th><th>目前班次</th></tr></thead><tbody>
+    : `<div class="table-wrap"><table class="dt"><thead><tr><th></th><th>物品運輸單號</th><th>申請人</th><th>送貨站點</th><th>目前班次</th></tr></thead><tbody>
         ${cands.map(a => { const st = DB.stations.find(s => s.id === a.station);
           const cur = a.assignedShift ? (DB.regionalShifts.find(s => s.id === a.assignedShift) || {}).label : '未排入';
           return `<tr><td><button class="btn btn-accent btn-sm" data-pick="${a.id}">加入</button></td>
@@ -1128,7 +1207,7 @@ RENDER.a_masonry = function () {
     fItem('期望收貨時間', `<input type="time" id="m-time" value="${a.deliverTime || '14:00'}">`, { widget: 'timepicker' }),
     fItem('上貨 / 下貨時間', `${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分`),
     fItem('排定班次', sh ? sh.label : '尚未排班'),
-    fItem('接收人', recipientDisplay(a.recipient), { tall: true }),
+    fItem('接收人', personDisplay(a.recipient), { tall: true }),
     fItem('貨物摘要', (a.items || []).map(it => `${it.name || '貨物'} × ${it.qty || 1}`).join('\n') || '—', { tall: true }),
   ].join('');
 
@@ -2514,7 +2593,7 @@ RENDER.a_driver = function () {
       const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order));
       const dropLines = stp.drops.map(a => {
         const del = a.status === 'delivered' ? ' <span class="badge b-green">已交貨</span>' : '';
-        return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${stp.name} / ${a.building}｜接收：${recipientDisplay(a.recipient)}${del}</div>`;
+        return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${stp.name} / ${a.building}｜接收：${personDisplay(a.recipient)}${del}</div>`;
       }).join('');
       const pickLines = stp.picks.map(a =>
         `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${a.id}｜${a.pickupLoc || stp.name}｜${itemsSummary(a.items)}</div>`).join('');

@@ -29,14 +29,18 @@ const ModuleA = {
     const app = {
       id: 'LA' + String(this.seq++).padStart(3, '0'),
       applicant: data.applicant,
-      branch: data.branch || (DB.branches[0] && DB.branches[0].id), // 分公司據點（收送貨同一分公司；獨立路線）
+      applyUnit: data.applyUnit || '',  // 申請單位（登入使用者）
+      applyExt: data.applyExt || '',    // 申請人分機（登入使用者）
+      branch: data.branch || (DB.branches[0] && DB.branches[0].id), // 車屬院區（收送貨同一院區；獨立路線）
       station: data.station,            // 送貨站（迄）
       building: data.building,
       pickStation: data.pickStation || null, // 收貨站（起）站 id；未帶＝自路線起點載運（相容）
       pickupLoc: data.pickupLoc || '',  // 收貨地點顯示字串
       deliverTime: data.deliverTime || '', // 期望收貨時間 HH:MM（exact 模式僅用於挑班次，非硬性截止 4.1）
       serviceDate: data.serviceDate || this.todayStr(), // 排班日期（exact 可指定今天或未來；asap＝當天）
-      recipient: data.recipient || {},  // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
+      consignor: data.consignor || null,       // 委運人：{ bu, group, name, ext, unit, campus, hall }
+      recipient: data.recipient || {},         // 接收人：同委運人結構
+      recipientAgent: data.recipientAgent || null, // 接收代理人：同委運人結構
       items: data.items,
       recvMode: data.recvMode,       // 'exact'（依期望收貨時間挑最近班次）| 'asap'（越快越好）
       loadMin, unloadMin,            // 上貨/下貨時間（分）
