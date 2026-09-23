@@ -165,6 +165,14 @@ const ModuleC = {
     this.applications
       .filter(a => ['matched', 'boarded', 'completed'].includes(a.status) && a.vehicle && a.driver)
       .forEach(a => this.occupy(occupied, a, a.vehicle, a.driver));
+    // 共用資源池（G71/G72 先佔先贏）：一般用車（模組 D）已派出的車輛/司機，於其用車日期同樣視為已佔用
+    if (typeof ModuleD !== 'undefined') {
+      const dOcc = ModuleD.dayOccupancy();
+      dOcc.veh.forEach((_, k) => occupied.veh.add(k));
+      dOcc.drv.forEach((_, k) => occupied.drv.add(k));
+      const held = [...new Set([...dOcc.veh.values(), ...dOcc.drv.values()])];
+      if (held.length) trace.push(`<span class="dim">共用資源池：一般用車已派出 ${held.join('、')} 佔用之車輛/司機（先佔先贏 G72）不重複指派</span>`);
+    }
 
     // 資源檢核透明化：列出本批次範圍內受影響的保修車輛與請假司機（G60/G61）
     const fromStr = fromDate, toStr = end.toISOString().slice(0, 10);

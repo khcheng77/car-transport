@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>一般用車模組 — 需求討論報告 v1</title>
+<style>
+  :root {
+    --ink: #1f2430;
+    --ink-soft: #4a5164;
+    --line: #dde1e8;
+    --bg: #ffffff;
+    --bg-alt: #f6f7f9;
+    --accent: #2c5282;
+    --accent-soft: #ebf2fa;
+    --good: #2f6f4f;
+    --good-bg: #eaf5ee;
+    --warn: #9a5b13;
+    --warn-bg: #fbf1e3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    background: var(--bg-alt);
+    line-height: 1.75;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    background: var(--bg);
+    padding: 48px 56px 80px;
+    min-height: 100vh;
+  }
+  header.doc-header {
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 20px;
+    margin-bottom: 36px;
+  }
+  header.doc-header .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  header.doc-header h1 {
+    font-size: 28px;
+    margin: 8px 0 6px;
+  }
+  header.doc-header .meta {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  nav.toc {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 24px;
+    margin-bottom: 40px;
+    font-size: 14.5px;
+  }
+  nav.toc h2 {
+    font-size: 14px;
+    margin: 0 0 10px;
+    color: var(--ink-soft);
+    letter-spacing: 0.03em;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 32px;
+  }
+  nav.toc li { margin-bottom: 4px; break-inside: avoid; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 20px;
+    border-left: 5px solid var(--accent);
+    padding-left: 12px;
+    margin: 0 0 18px;
+  }
+  h3 {
+    font-size: 16.5px;
+    margin: 26px 0 10px;
+    color: var(--ink);
+  }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 14px 0 22px;
+  }
+  caption {
+    text-align: left;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    caption-side: top;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--accent-soft);
+    font-weight: 700;
+    color: var(--accent);
+  }
+  tr:nth-child(even) td { background: #fbfbfc; }
+
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+  }
+  .badge.decided { background: var(--good-bg); color: var(--good); }
+  .badge.provisional { background: var(--warn-bg); color: var(--warn); }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    margin: 16px 0;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-bg);
+  }
+  .callout strong { color: var(--accent); }
+  .callout.warn strong { color: var(--warn); }
+
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin: 18px 0 24px;
+    font-size: 13.5px;
+  }
+  .flow .step {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 120px;
+    text-align: center;
+    font-weight: 600;
+  }
+  .flow .arrow {
+    color: var(--ink-soft);
+    font-size: 16px;
+  }
+
+  .matrix-highlight-yes { background: var(--good-bg) !important; color: var(--good); font-weight: 700; }
+  .matrix-highlight-no { background: var(--warn-bg) !important; color: var(--warn); font-weight: 700; }
+
+  .qa {
+    border-bottom: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  .qa:last-child { border-bottom: none; }
+  .qa .q { font-weight: 700; margin-bottom: 4px; }
+  .qa .q::before { content: "Q： "; color: var(--accent); }
+  .qa .a::before { content: "A： "; color: var(--ink-soft); font-weight: 700; }
+  .qa .rationale {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    padding-left: 20px;
+    border-left: 2px solid var(--line);
+  }
+
+  code {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+  }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 28px 18px 60px; }
+    nav.toc ol { columns: 1; }
+    header.doc-header h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header">
+    <div class="eyebrow">車輛派遣系統整合案 · 第四模組需求討論報告</div>
+    <h1>一般用車模組</h1>
+    <div class="meta">
+      版本 v1　｜　討論日期 2026-09-23　｜　狀態：核心決策已定案，待進入實作規劃　｜　所屬專案：車輛派遣系統整合案（khcheng77/car-transport）
+    </div>
+  </header>
+
+  <nav class="toc">
+    <h2>目錄</h2>
+    <ol>
+      <li><a href="#scope">1. 模組定位與範疇</a></li>
+      <li><a href="#resource">2. 資源池與佔用規則</a></li>
+      <li><a href="#flow">3. 申請與簽核流程</a></li>
+      <li><a href="#application">4. 申請單欄位規格</a></li>
+      <li><a href="#matrix">5. 派車判斷矩陣</a></li>
+      <li><a href="#vehicle">6. 車型指派邏輯</a></li>
+      <li><a href="#cancel">7. 撤回與異動規則</a></li>
+      <li><a href="#notify">8. 通知機制</a></li>
+      <li><a href="#summary">9. 決策摘要表</a></li>
+      <li><a href="#qa">10. Q&amp;A 討論紀錄</a></li>
+      <li><a href="#glossary">11. 名詞表</a></li>
+      <li><a href="#open">12. 待辦與未決事項</a></li>
+    </ol>
+  </nav>
+
+  <section id="scope">
+    <h2>1. 模組定位與範疇</h2>
+    <p>
+      「一般用車」是車輛派遣系統新增的<strong>第四個獨立模組</strong>，與既有三模組（差旅共乘、區域內物流、南北幹線）並列。
+      用途是彈性時長的臨時用車申請——可以短至幾小時，也可以長達多天——流程核心是「使用者申請 → 調度人工確認資源可用性 → 派車」，
+      而不是差旅共乘模組的自動同路線併車媒合。
+    </p>
+    <div class="callout">
+      <strong>與差旅共乘模組的區別：</strong>差旅共乘的核心邏輯是「自動媒合＋併車」（比對出發地、目的地、時間做同路線併車判斷）；
+      一般用車的核心邏輯是「單純資源可用性確認＋人工派車」（只看當下時段有沒有空的車／司機）。
+      兩者媒合機制不同，因此設計為獨立模組，避免混在一起讓差旅共乘的自動媒合規則複雜化。
+    </div>
+    <table>
+      <caption>四模組定位對照</caption>
+      <thead>
+        <tr><th>模組</th><th>核心邏輯</th><th>資源池</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>差旅共乘</td><td>自動同路線併車媒合</td><td>與一般用車共用</td></tr>
+        <tr><td><strong>一般用車（本文件）</strong></td><td>人工資源確認＋派車</td><td>與差旅共乘共用</td></tr>
+        <tr><td>區域內物流</td><td>固定循環路線裝載</td><td>獨立</td></tr>
+        <tr><td>南北幹線</td><td>貪婪端點演算法</td><td>獨立</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="resource">
+    <h2>2. 資源池與佔用規則</h2>
+    <p>
+      一般用車與差旅共乘<strong>共用同一批車輛與司機資源池</strong>（暫定；區域內物流、南北幹線維持各自獨立池不變）。
+      這個決定反映了實際運作現況：一般用車跟差旅共乘本來就會搶用同一批人與車，不像物流模組使用特定噸位車型、調度邏輯本質不同。
+    </p>
+    <div class="callout">
+      <span class="badge provisional">暫定</span>
+      「只有一般用車跟差旅共乘共用資源池、物流兩模組維持獨立」這個範圍界定目前標記為暫定，日後如有需要可再調整。
+    </div>
+    <h3>2.1　佔用判定原則：先佔先贏</h3>
+    <p>
+      車輛／司機在某時段一旦被<strong>任一模組</strong>確定佔用（不論是差旅共乘的自動媒合結果，或一般用車調度人工確認的派車結果），
+      另一邊在做媒合／派車判斷時都必須讀到「已被佔用」，不能重複指派。<strong>不設模組間優先權</strong>，純粹以派出／確認的時間先後決定。
+    </p>
+    <h3>2.2　撤回即釋放</h3>
+    <p>
+      申請被撤回（不論是調度確認前使用者自行拿回修改，或確認後的整單撤回）時，原本佔用的時段<strong>立刻釋放</strong>回資源池，
+      供其他申請即時搶用，避免資源池顯示「被佔用」但實際沒人使用的卡死狀態。
+    </p>
+  </section>
+
+  <section id="flow">
+    <h2>3. 申請與簽核流程</h2>
+    <div class="flow">
+      <div class="step">① 使用者送出申請</div>
+      <span class="arrow">→</span>
+      <div class="step">② 主管簽核</div>
+      <span class="arrow">→</span>
+      <div class="step">③ 調度確認資源</div>
+      <span class="arrow">→</span>
+      <div class="step">④ 派車結果</div>
+      <span class="arrow">→</span>
+      <div class="step">⑤ Email 通知</div>
+    </div>
+    <p>
+      <strong>簽核在調度判斷之前</strong>：申請送出後先走簽核（沿用既有核准者關係表機制），
+      簽核通過才會進入調度人工判斷資源池可用性的階段。這樣可以先確認用車的必要性，避免簽核未通過卻已經做了無效的資源佔用判斷。
+    </p>
+  </section>
+
+  <section id="application">
+    <h2>4. 申請單欄位規格</h2>
+    <table>
+      <caption>一般用車申請單欄位</caption>
+      <thead>
+        <tr><th>欄位</th><th>必填</th><th>說明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>用車起訖時間</td><td>必填</td><td>明確日期＋時間（起、迄），作為調度查詢資源池可用性的必要輸入</td></tr>
+        <tr><td>人數</td><td>必填，最少 1 人</td><td>一般用車必定有人隨行辦事；不存在純載貨情境（純載貨走運輸申請或巡迴物流）</td></tr>
+        <tr><td>是否自駕</td><td>必填（勾選）</td><td>使用者自行決定是否具備駕駛能力並願意自駕；系統不做資格檢核</td></tr>
+        <tr><td>隨行貨物明細</td><td>選填（有貨才填）</td><td>比照既有物流運輸申請單規格，欄位如下</td></tr>
+      </tbody>
+    </table>
+    <h3>4.1　隨行貨物明細欄位（比照既有物流運輸申請規格）</h3>
+    <table>
+      <thead>
+        <tr><th>子欄位</th><th>說明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>長 / 寬 / 高</td><td>單件貨物尺寸</td></tr>
+        <tr><td>重量</td><td>單件或整批重量</td></tr>
+        <tr><td>件數</td><td>數量</td></tr>
+        <tr><td>品類</td><td>貨物類別</td></tr>
+        <tr><td>是否為危險品</td><td>是／否勾選</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>危險品註記的定位：</strong>此標記純粹是給調度人員判斷派車方式的提示，系統<strong>不寫死任何自動限制規則</strong>
+      （例如不會自動強制指定某種車型或某位司機）。是否受理、怎麼派車，完全交由調度人員依經驗與公司規定人工判斷。
+    </div>
+    <div class="callout">
+      <strong>人貨混合是常態：</strong>一般用車任務常見「人＋隨行貨物」混合（例如壓車人員順路帶文件或設備到指定公司），
+      也常見「全部都是人」（多點跑洽公，帶少量小型設備）。因此申請單<strong>不做人／貨互斥的二選一設計</strong>，
+      人數與貨物明細是各自獨立的欄位。
+    </div>
+  </section>
+
+  <section id="matrix">
+    <h2>5. 派車判斷矩陣</h2>
+    <p>調度依「車輛狀態」×「使用者是否勾選自駕」決定派車結果：</p>
+    <table>
+      <caption>派車判斷矩陣</caption>
+      <thead>
+        <tr><th>車輛狀態</th><th>使用者勾選自駕</th><th>使用者未勾選自駕</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>有車有司機</td>
+          <td class="matrix-highlight-yes">派車＋派司機</td>
+          <td class="matrix-highlight-yes">派車＋派司機</td>
+        </tr>
+        <tr>
+          <td>有車沒司機</td>
+          <td class="matrix-highlight-yes">派車（使用者自行駕駛）</td>
+          <td class="matrix-highlight-no">告知無車可派</td>
+        </tr>
+        <tr>
+          <td>沒車</td>
+          <td class="matrix-highlight-no">告知無車可派</td>
+          <td class="matrix-highlight-no">告知無車可派</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>不進候補：</strong>「有車沒司機＋未勾自駕」判定為無車可派時，<strong>不會轉入候補機制</strong>等待之後補上司機再自動派車，
+      而是直接告知使用者、資源立即釋放。這符合系統一貫「簡單優先、邊緣情況交人工協調」的設計原則——候補機制會讓共用資源池的佔用判斷變複雜
+      （插隊時機、候補逾時等問題），真有需要使用者可自行重新申請。
+    </div>
+  </section>
+
+  <section id="vehicle">
+    <h2>6. 車型指派邏輯</h2>
+    <p>
+      使用者<strong>不自行選擇車型</strong>，只填寫用途相關的需求量（人數、隨行貨物明細）。
+      實際車型由<strong>調度人員依人數與貨物明細人工判斷指派</strong>。
+    </p>
+    <p>
+      此原則與南北幹線模組既有規則一致（車型依當日貨量最大化裝載率來判斷），避免使用者選擇超過實際需求的車型，
+      或選到的車型與當前車輛庫存兜不起來。
+    </p>
+  </section>
+
+  <section id="cancel">
+    <h2>7. 撤回與異動規則</h2>
+    <p>
+      一般用車<strong>不支援「就地修改已核准申請」</strong>——任何異動（時間變更、內容變更）都視為「撤回＋重新申請」，
+      必須重新走一次完整的簽核與調度流程。這是因為車輛／司機是共用資源池、採先佔先贏判定，
+      一旦異動時間或需求，原本的資源佔用狀態就必須重新判斷，直接讓舊申請作廢、走新申請最單純。
+    </p>
+    <h3>7.1　撤回權限依「調度是否已完成確認」而不同</h3>
+    <table>
+      <thead>
+        <tr><th>階段</th><th>可執行動作</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>調度完成確認<strong>前</strong></td>
+          <td>使用者可自行將申請撤回，拿回自己手上修改後重新送出</td>
+        </tr>
+        <tr>
+          <td>調度完成確認<strong>後</strong></td>
+          <td>使用者只能<strong>整單撤回</strong>，無法直接修改，須重新申請</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      「調度完成確認」的判定點：調度做出<strong>任一種最終派車判斷</strong>（有車有司機／有車無司機自駕／無車可派）的當下即算完成確認，
+      不僅限於「已經確定派了車」才算。原因是只要調度已經讀取資源池狀態並做出判斷，這個結果就已經跟系統當下的資源狀態綁定，
+      之後若還能修改內容，等於逼系統重新判斷一次資源佔用，這與「異動即撤回＋重新申請」的原則相衝突。
+    </p>
+  </section>
+
+  <section id="notify">
+    <h2>8. 通知機制</h2>
+    <p>
+      派車結果（有車有司機／有車需自駕／無車可派）透過<strong>既有 email 通知路由機制</strong>（沿用核准者關係表基礎設施）通知使用者，
+      不另外新增站內訊息或其他管道，複用現有基礎設施，符合系統一貫「簡單優先」的設計原則。
+    </p>
+  </section>
+
+  <section id="summary">
+    <h2>9. 決策摘要表</h2>
+    <table>
+      <thead>
+        <tr><th>決策項目</th><th>決定</th><th>狀態</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>模組定位</td><td>獨立第四模組</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>資源池</td><td>與差旅共乘共用；物流兩模組獨立</td><td><span class="badge provisional">暫定</span></td></tr>
+        <tr><td>佔用判定</td><td>先佔先贏，不分模組優先權</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>有車沒司機＋不自駕</td><td>不進候補，直接告知無車可派</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>用車時段</td><td>使用者自填明確起訖日期時間</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>車型指派</td><td>調度依人數＋貨物明細人工指派</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>人貨欄位</td><td>人數必填（≥1）＋貨物選填，非互斥</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>貨物欄位規格</td><td>比照既有物流運輸申請（長寬高／重量／件數／品類／危險品）</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>危險品規則</td><td>僅作提示標記，不寫死自動派車規則</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>自駕資格</td><td>不做系統檢核，使用者自行負責</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>簽核順序</td><td>先簽核，通過才進調度</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>異動機制</td><td>撤回＋重新申請，不支援就地修改</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>撤回權限</td><td>調度確認前可拿回修改；確認後僅能整單撤回</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>撤回後資源</td><td>立刻釋放回資源池</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>通知機制</td><td>沿用既有 email 路由機制</td><td><span class="badge decided">已定案</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="qa">
+    <h2>10. Q&amp;A 討論紀錄</h2>
+
+    <div class="qa">
+      <div class="q">一般用車是獨立的第四模組，還是差旅共乘底下的一種申請類型？</div>
+      <div class="a">獨立的第四模組。</div>
+      <div class="rationale">差旅共乘核心是自動媒合併車，一般用車核心是人工資源確認派車，媒合邏輯不同，合併會讓差旅共乘規則複雜化。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">一般用車跟其他三模組共用同一個車輛／司機資源池嗎？</div>
+      <div class="a">與差旅共乘共用；物流兩模組（區域內物流、南北幹線）維持獨立池（暫定）。</div>
+      <div class="rationale">真實情況是一般用車一定會跟差旅共乘搶同一批司機與車輛資源；物流車輛型態與調度邏輯不同，不需混用。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">共用資源池的兩模組之間有沒有優先順序？</div>
+      <div class="a">沒有，以派出／確認的時間先後決定佔用，先佔先贏。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">「有車沒司機、使用者不自駕」時，是直接告知無車可派，還是轉入候補？</div>
+      <div class="a">直接告知無車可派，不進候補。</div>
+      <div class="rationale">符合系統一貫簡化原則，避免候補機制讓共用資源池判斷邏輯複雜化。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">使用者申請時是自填明確起訖時間，還是只填用途由調度決定時段？</div>
+      <div class="a">使用者自填明確起訖日期時間。</div>
+      <div class="rationale">這是調度查詢資源池可用性的必要輸入，沒有明確時段就無法自動化查詢。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">車型是使用者自選，還是依用途由系統／調度判斷？</div>
+      <div class="a">調度依人數與貨物需求量人工指派。</div>
+      <div class="rationale">與南北幹線既有原則一致，避免使用者選擇超過需求或與車輛庫存兜不起來的車型。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">申請單上「載人」「載貨」是否為互斥選項？</div>
+      <div class="a">不是。一般用車任務常見人貨混合（壓車人員順路帶貨），也常見全部都是人；不存在純載貨情境（純載貨走運輸申請或巡迴物流）。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">貨物欄位要多精細？</div>
+      <div class="a">比照既有物流運輸申請規格：長、寬、高、重量、件數、品類，並加註是否為危險品。</div>
+      <div class="rationale">調度需要這些資訊才能指派適合的車輛。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">危險品標記會不會影響車輛／司機的自動指派規則？</div>
+      <div class="a">不會寫死自動規則，僅作為提示標記讓調度知道要怎麼派車，實際判斷交由調度人工決定。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">是否自駕需要系統做駕駛資格檢核？</div>
+      <div class="a">不需要，使用者自行負責必須具備駕駛車輛的能力。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">一般用車申請需不需要主管簽核？</div>
+      <div class="a">需要，沿用既有核准者關係表機制。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">派車結果用什麼管道通知使用者？</div>
+      <div class="a">Email，沿用既有通知路由機制。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">使用者申請後想取消或異動，流程是什麼？</div>
+      <div class="a">異動視為撤回＋重新申請。調度完成確認前，使用者可自行撤回拿回修改；確認後只能整單撤回。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">「調度完成確認」的判定點是什麼？</div>
+      <div class="a">調度做出任一種最終判斷（有車有司機／有車無司機自駕／無車可派）的當下即算完成確認。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">簽核跟調度判斷的先後順序？</div>
+      <div class="a">先簽核，簽核通過才進調度。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">撤回後，原本佔用的車輛／司機時段要不要立刻釋放？</div>
+      <div class="a">立刻釋放回資源池。</div>
+      <div class="rationale">與「先佔先贏」邏輯一致，避免資源池卡死、誤擋其他共用資源的申請。</div>
+    </div>
+
+  </section>
+
+  <section id="glossary">
+    <h2>11. 名詞表</h2>
+    <table>
+      <thead>
+        <tr><th>名詞</th><th>定義</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>一般用車</td>
+          <td>派車系統第四個獨立模組，處理彈性時長的臨時用車申請，流程為「申請→簽核→調度人工確認資源→派車」，區別於差旅共乘的自動媒合機制。</td>
+        </tr>
+        <tr>
+          <td>自駕</td>
+          <td>使用者申請時勾選的意願，代表若只有車沒有司機時，使用者願意自己開車。系統不做駕駛資格檢核，由使用者自行負責是否具備開車能力。</td>
+        </tr>
+        <tr>
+          <td>有車沒司機</td>
+          <td>調度確認車輛可用但無可派司機的狀態；使用者若已勾自駕則派車給他，未勾則告知無車可派（不進候補）。</td>
+        </tr>
+        <tr>
+          <td>隨行貨物</td>
+          <td>一般用車中附帶的貨物（一定伴隨至少 1 人出行，不會是純載貨），欄位比照既有物流運輸申請填寫：長、寬、高、重量、件數、品類、是否為危險品。</td>
+        </tr>
+        <tr>
+          <td>危險品註記</td>
+          <td>純粹作為給調度人員判斷派車方式的提示標記，系統不寫死任何自動限制規則，完全交由調度人工判斷。</td>
+        </tr>
+        <tr>
+          <td>調度完成確認</td>
+          <td>調度做出任一種最終派車判斷（有車有司機／有車無司機自駕／無車可派）的當下，是撤回權限切換的判定點。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="open">
+    <h2>12. 待辦與未決事項</h2>
+    <ul>
+      <li>
+        <span class="badge provisional">暫定</span>
+        「一般用車與差旅共乘共用資源池、物流兩模組獨立」的範圍界定目前為暫定狀態，尚未最終拍板，日後可能調整。
+      </li>
+      <li>後續實作規劃階段需確認：共用資源池的資料結構（如何同時支援差旅共乘自動媒合查詢與一般用車調度人工查詢）。</li>
+      <li>貨物明細欄位的具體規格（長寬高單位、品類清單內容）需與既有物流運輸申請單的實際欄位定義做逐一核對，確保一致。</li>
+    </ul>
+  </section>
+
+  <footer>
+    本文件依「需求釐清模式」討論產出，記錄一般用車模組的核心決策與討論脈絡。與車輛派遣系統整合案其他模組文件（差旅共乘、區域內物流、南北幹線）交叉參照時，請以 Project Knowledge 中的既有名詞定義為準。
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1260,6 +1260,203 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
   });
 });
 
+/* =================================================================
+   模組 D 一般用車 — G70–G80
+   ================================================================= */
+group('模組 D 一般用車（G70–G80）', () => {
+  const DAY = '2026-10-01'; // 無保修／無請假的乾淨日期
+  function dApp(H, o) {
+    return H.ModuleD.createApp(Object.assign({ applicant: '業務部-周雅婷', startDate: DAY, startTime: '09:00',
+      endDate: DAY, endTime: '12:00', pax: 2, selfDrive: false, items: [] }, o || {}));
+  }
+  const BIZ_DRIVERS = ['DR3', 'DR4', 'DR5', 'DR6'];
+  const allDriversOnLeave = (H, date) => BIZ_DRIVERS.forEach(d =>
+    H.DB.driverLeaves.push({ driver: d, date: date || DAY, from: '07:00', to: '20:00', type: '全天' }));
+
+  test('G75 欄位驗證：起訖必填且迄晚於起、人數 ≥1 整數、是否自駕須明確選擇', () => {
+    const H = fresh(), D = H.ModuleD;
+    const good = { applicant: 'A', startDate: DAY, startTime: '09:00', endDate: DAY, endTime: '10:00', pax: 1, selfDrive: true };
+    eq(D.validate(good).length, 0, '合法資料應通過');
+    ok(D.validate(Object.assign({}, good, { endTime: '' })).some(e => e.includes('起訖')), '缺迄時間應擋');
+    ok(D.validate(Object.assign({}, good, { endTime: '09:00' })).some(e => e.includes('晚於')), '迄＝起應擋');
+    ok(D.validate(Object.assign({}, good, { pax: 0 })).some(e => e.includes('至少 1 人')), '0 人應擋（不存在純載貨）');
+    ok(D.validate(Object.assign({}, good, { pax: 1.5 })).some(e => e.includes('至少 1 人')), '人數須為整數');
+    ok(D.validate(Object.assign({}, good, { selfDrive: null })).some(e => e.includes('自駕')), '未選是否自駕應擋');
+    let threw = false; try { D.createApp(Object.assign({}, good, { pax: 0 })); } catch (e) { threw = true; }
+    ok(threw, 'createApp 對不合法資料應拋錯');
+  });
+
+  test('G75 隨行貨物選填、人貨不互斥；危險品旗標預設 false', () => {
+    const H = fresh();
+    const a = dApp(H, { items: [{ name: '箱', l: 10, w: 10, h: 10, qty: 1, category: 'BOX' }] });
+    eq(a.pax, 2); eq(a.items.length, 1); eq(a.items[0].hazardous, false, '未標示時預設非危險品');
+    eq(dApp(H).items.length, 0, '純載人可不填貨物');
+  });
+
+  test('G74 先簽核後調度：未核准不可派車；駁回單不可派車', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = dApp(H);
+    ok(!D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '待簽核不可派車');
+    D.reject(a, '非必要');
+    ok(!D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '駁回不可派車');
+    ok(!D.approve(a), '駁回後不可再核准');
+    eq(D.approverOf(a), H.DB.approvalMap['業務部-周雅婷'], '簽核主管沿用核准者關係表');
+  });
+
+  test('G76 派車判斷矩陣：3 種車輛狀態 × 是否自駕，共 6 格', () => {
+    const D = fresh().ModuleD;
+    eq(D.matrixOutcome('withDriver', true), 'withDriver');
+    eq(D.matrixOutcome('withDriver', false), 'withDriver');
+    eq(D.matrixOutcome('vehicleOnly', true), 'selfDrive');
+    eq(D.matrixOutcome('vehicleOnly', false), 'noVehicle');
+    eq(D.matrixOutcome('none', true), 'noVehicle');
+    eq(D.matrixOutcome('none', false), 'noVehicle');
+  });
+
+  test('G76 有車有司機 → 派車＋派司機（勾自駕亦同，不可只派車）', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = dApp(H, { selfDrive: true }); D.approve(a);
+    eq(D.resourceState(a), 'withDriver');
+    ok(D.decide(a, { vehicle: 'V-B01' }).error, '有可派司機時不可省略司機');
+    const r = D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' });
+    ok(r.ok); eq(r.outcome, 'withDriver'); eq(a.status, 'dispatched'); eq(a.vehicle, 'V-B01'); eq(a.driver, 'DR3');
+  });
+
+  test('G76 有車沒司機＋勾自駕 → 派車（使用者自行駕駛，不派司機）', () => {
+    const H = fresh(), D = H.ModuleD;
+    allDriversOnLeave(H);
+    const a = dApp(H, { selfDrive: true }); D.approve(a);
+    eq(D.resourceState(a), 'vehicleOnly');
+    const r = D.dispatch(a, { vehicle: 'V-B01' });
+    ok(r.ok); eq(r.outcome, 'selfDrive'); eq(a.status, 'dispatched'); eq(a.driver, null);
+  });
+
+  test('G76 有車沒司機＋未勾自駕 → 無車可派，不進候補、不佔用資源', () => {
+    const H = fresh(), D = H.ModuleD;
+    allDriversOnLeave(H);
+    const a = dApp(H, { selfDrive: false }); D.approve(a);
+    const r = D.dispatch(a, { vehicle: 'V-B01' });
+    ok(r.ok); eq(r.outcome, 'noVehicle'); eq(a.status, 'noVehicle'); eq(a.vehicle, null, '不保留車輛');
+    const b = dApp(H, { selfDrive: true }); D.approve(b);
+    eq(D.vehicleBusy('V-B01', b), null, '無車可派的單不佔用 V-B01');
+    ok(!D.approve(a) && a.status === 'noVehicle', '無候補：狀態為終局，不自動回到待調度');
+  });
+
+  test('G76 沒車 → 無車可派（保修＋座位不足皆排除）', () => {
+    const H = fresh(), D = H.ModuleD;
+    ['V-B01', 'V-B03', 'V-B04'].forEach(v => H.DB.maintenance.push({ vehicle: v, from: DAY, to: DAY, reason: '測試' }));
+    const a = dApp(H, { pax: 5, selfDrive: true }); D.approve(a); // V-B02 僅 4 座 < 5 人
+    eq(D.resourceState(a), 'none');
+    ok(D.resources(a).vehicles.find(x => x.v.id === 'V-B02').busy.type === 'seats', '座位不足應列為不可用');
+    ok(D.decide(a, {}).error, '未選車不可確認派車');
+    const r = D.dispatch(a, { noVehicle: true });
+    ok(r.ok); eq(a.status, 'noVehicle');
+  });
+
+  test('G72 一般用車之間：時段重疊不可重複指派；首尾相接可', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = dApp(H); D.approve(a); D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' });
+    const b = dApp(H, { startTime: '11:00', endTime: '13:00' }); D.approve(b);
+    ok(D.vehicleBusy('V-B01', b), '重疊時段 V-B01 應被佔用'); ok(D.driverBusy('DR3', b), '重疊時段 DR3 應被佔用');
+    ok(!D.dispatch(b, { vehicle: 'V-B01', driver: 'DR4' }).ok, '先佔先贏：不可重複指派');
+    const c = dApp(H, { startTime: '12:00', endTime: '14:00' }); D.approve(c);
+    eq(D.vehicleBusy('V-B01', c), null, '12:00 起接續 09~12 不算重疊');
+  });
+
+  test('G71/G72 共用池：差旅共乘已媒合的車/司機，一般用車同日不可用（以日為單位）', () => {
+    const H = fresh(), C = H.ModuleC, D = H.ModuleD;
+    const c = C.createApp({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1', departDate: DAY, earliestPickup: '08:00',
+      returnDate: DAY, earliestReturn: '', pax: 1, applicant: 'X', dept: 'D', ext: '1' });
+    c.status = 'matched'; c.vehicle = 'V-B01'; c.driver = 'DR3';
+    const a = dApp(H, { startTime: '18:00', endTime: '20:00' }); D.approve(a);
+    eq(D.vehicleBusy('V-B01', a).type, 'C', '同日即視為差旅共乘佔用（沿用 C 的日粒度）');
+    eq(D.driverBusy('DR3', a).type, 'C');
+    const b = dApp(H, { startDate: '2026-10-02', endDate: '2026-10-02' }); D.approve(b);
+    eq(D.vehicleBusy('V-B01', b), null, '隔日不受影響');
+    c.status = 'void';
+    eq(D.vehicleBusy('V-B01', a), null, '作廢的差旅單不佔用');
+  });
+
+  test('G72 共用池反向：差旅共乘批次媒合不指派一般用車已派出的車/司機', () => {
+    const H = fresh(), C = H.ModuleC, D = H.ModuleD;
+    const g = dApp(H, { startDate: '2026-08-28', endDate: '2026-08-28', startTime: '13:00', endTime: '15:00', pax: 1 });
+    D.approve(g); D.dispatch(g, { vehicle: 'V-B01', driver: 'DR3' });
+    const c = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
+      returnDate: '2026-08-29', earliestReturn: '16:00', pax: 2, applicant: 'Y', dept: 'D', ext: '1' });
+    C.approve(c); C.runBatch('2026-08-26', 'test');
+    eq(c.status, 'matched');
+    ok(c.vehicle !== 'V-B01' && c.driver !== 'DR3', `不可指派 D 已佔用資源，實得 ${c.vehicle}/${c.driver}`);
+  });
+
+  test('G73 撤回即釋放：整單撤回後車輛立即回到共用池（C 批次可再指派）', () => {
+    const H = fresh(), C = H.ModuleC, D = H.ModuleD;
+    // 6 人僅 V-B01（7 座）可載：D 佔用期間 C 媒合失敗，撤回後即可媒合到 V-B01
+    const g = dApp(H, { startDate: '2026-08-27', endDate: '2026-08-29', startTime: '08:00', endTime: '18:00', pax: 1 });
+    D.approve(g); D.dispatch(g, { vehicle: 'V-B01', driver: 'DR6' });
+    const mk = () => { const c = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27',
+      earliestPickup: '09:00', returnDate: '2026-08-29', earliestReturn: '16:00', pax: 6, applicant: 'Y', dept: 'D', ext: '1' });
+      C.approve(c); return c; };
+    const c1 = mk(); C.runBatch('2026-08-26', 't1');
+    eq(c1.status, 'coordinate', 'D 佔用中：C 無可用 7 座車');
+    ok(D.cancel(g, '申請人')); ok(g.releasedAt, '應記錄釋放時間');
+    const c2 = mk(); C.runBatch('2026-08-26', 't2');
+    eq(c2.status, 'matched'); eq(c2.vehicle, 'V-B01', '撤回後 V-B01 立即可再指派');
+  });
+
+  test('G79 調度確認前：可撤回修改→草稿→重新送出須重新簽核', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = dApp(H); D.approve(a);
+    ok(D.canWithdrawToEdit(a), '已核准但未調度 → 可撤回修改');
+    ok(D.withdrawToEdit(a, '申請人')); eq(a.status, 'draft'); eq(a.approvedAt, null, '撤回後核准失效');
+    ok(!D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '草稿不可派車');
+    D.resubmit(a, Object.assign({}, a, { pax: 3 }));
+    eq(a.status, 'submitted', '重新送出回到待簽核'); eq(a.pax, 3);
+    ok(!D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '須重新簽核才可調度');
+    eq(a.log.map(l => l.action).join('/'), '撤回修改/修改後重新送出');
+  });
+
+  test('G79 調度確認後（含無車可派）：不可撤回修改；派車單僅能整單撤回', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = dApp(H); D.approve(a); D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' });
+    ok(D.isConfirmed(a)); ok(!D.canWithdrawToEdit(a), '派車後不可撤回修改'); ok(!D.withdrawToEdit(a));
+    ok(D.canCancel(a), '派車後可整單撤回');
+    let threw = false; try { D.resubmit(a, a); } catch (e) { threw = true; } ok(threw, '非草稿不可重送（不支援就地修改）');
+    const b = dApp(H); D.approve(b); D.dispatch(b, { noVehicle: true });
+    ok(D.isConfirmed(b), '無車可派亦算調度完成確認'); ok(!D.canWithdrawToEdit(b));
+  });
+
+  test('G80 任一最終判斷皆寄送結果通知（收件人＝申請人）', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = dApp(H); D.approve(a); D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' });
+    const b = dApp(H, { startDate: '2026-10-05', endDate: '2026-10-05' }); D.approve(b); D.dispatch(b, { noVehicle: true });
+    eq(D.mailLog.length, 2); ok(a.notifiedAt && b.notifiedAt);
+    eq(D.mailLog[0].to, '業務部-周雅婷'); eq(D.mailLog[1].outcome, 'noVehicle');
+    ok(!D.dispatch(a, { noVehicle: true }).ok, '已確認的單不可再次判斷'); eq(D.mailLog.length, 2, '不重複寄送');
+  });
+
+  test('G61 請假重疊（多天用車跨日亦檢查）；行程完成即釋放', () => {
+    const H = fresh(), D = H.ModuleD;
+    H.DB.driverLeaves.push({ driver: 'DR5', date: '2026-10-02', from: '10:00', to: '12:00', type: '半天假' });
+    const a = dApp(H, { startDate: DAY, startTime: '09:00', endDate: '2026-10-03', endTime: '18:00' });
+    eq(D.datesOf(a).join(','), '2026-10-01,2026-10-02,2026-10-03');
+    eq(D.driverBusy('DR5', a).type, 'leave', '中間日請假應排除');
+    D.approve(a); D.dispatch(a, { vehicle: 'V-B03', driver: 'DR6' });
+    const b = dApp(H, { startDate: '2026-10-02', endDate: '2026-10-02' }); D.approve(b);
+    ok(D.vehicleBusy('V-B03', b), '多天用車期間中間日亦佔用');
+    ok(D.completeTrip(a, 'DR6')); eq(a.status, 'completed');
+    eq(D.vehicleBusy('V-B03', b), null, '行程完成後釋放');
+  });
+
+  test('G70 獨立模組：一般用車與差旅共乘申請單分開、批次媒合不處理一般用車單', () => {
+    const H = fresh();
+    const a = dApp(H); H.ModuleD.approve(a);
+    eq(H.ModuleC.applications.length, 0);
+    H.ModuleC.runBatch(DAY, 'test');
+    eq(a.status, 'approved', '差旅共乘批次不應改動一般用車單');
+    ok(/^GU\d{3}$/.test(a.id), '單號前綴 GU');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

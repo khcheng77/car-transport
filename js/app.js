@@ -3,7 +3,8 @@
    純前端記憶體版原型（無資料庫、無後端）
 
    架構：使用者「申請端」與業務單位「審核/調度端」分離，
-   三模組各拆成兩個軟體單元 → 共 6 個業務單元。
+   四模組（A 區域內物流／B 南北幹線／C 差旅共乘／D 一般用車）各拆成
+   申請／主管／調度／司機等軟體單元。
    ============================================================ */
 
 /* ---------- 工具 ---------- */
@@ -68,7 +69,14 @@ function stBadge(s, mod) {
     boarded: ['已上車', 'b-amber'],
     completed: ['行程完成', 'b-green'],
     matched: mod === 'C' ? ['已媒合待上車', 'b-navy'] : ['已排班', 'b-navy'],
+    // 模組 D 一般用車
+    draft: ['草稿·待重新送出', 'b-gray'],
+    dispatched: ['已派車', 'b-green'],
+    noVehicle: ['無車可派', 'b-red'],
+    cancelled: ['已撤回', 'b-gray'],
   };
+  if (mod === 'D' && s === 'submitted') return '<span class="badge b-gray">待主管簽核</span>';
+  if (mod === 'D' && s === 'approved') return '<span class="badge b-navy">已核准待調度</span>';
   const m = map[s];
   return m ? `<span class="badge ${m[1]}">${m[0]}</span>` : s;
 }
@@ -99,6 +107,12 @@ const NAV = [
     { id: 'c_review', ico: '🔀', label: 'C｜媒合調度（業務）' },
     { id: 'c_driver', ico: '🧑‍✈️', label: 'C｜司機任務單（駕駛）' },
   ] },
+  { group: '模組 D · 一般用車', items: [
+    { id: 'd_apply', ico: '📝', label: 'D｜一般用車申請（使用者）' },
+    { id: 'd_approve', ico: '✅', label: 'D｜主管簽核（主管）' },
+    { id: 'd_review', ico: '🚗', label: 'D｜派車調度（業務）' },
+    { id: 'd_driver', ico: '🧑‍✈️', label: 'D｜司機任務單（駕駛）' },
+  ] },
 ];
 const PAGE_META = {
   dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
@@ -117,6 +131,10 @@ const PAGE_META = {
   c_approve: { title: '差旅共乘 · 主管准駁（直屬主管）', crumb: '模組 C · 主管端 · G63' },
   c_review: { title: '差旅共乘 · 媒合調度（業務單位）', crumb: '模組 C · 調度端 · G50–G63' },
   c_driver: { title: '差旅共乘 · 司機任務單（駕駛）', crumb: '模組 C · 駕駛端 · 今日行程與乘客' },
+  d_apply: { title: '一般用車 · 一般用車申請（使用者）', crumb: '模組 D · 申請端 · G75/G79' },
+  d_approve: { title: '一般用車 · 主管簽核（直屬主管）', crumb: '模組 D · 主管端 · G74' },
+  d_review: { title: '一般用車 · 派車調度（業務單位）', crumb: '模組 D · 調度端 · G71–G78' },
+  d_driver: { title: '一般用車 · 司機任務單（駕駛）', crumb: '模組 D · 駕駛端 · 用車時段與使用人' },
 };
 
 function buildNav() {
@@ -149,17 +167,19 @@ RENDER.dashboard = function () {
   const aMatched = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status)).length;
   const bLoaded = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status)).length;
   const cMatched = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status)).length;
+  const dDispatched = ModuleD.applications.filter(a => ['dispatched', 'completed'].includes(a.status)).length;
   const pendReview = ModuleA.applications.filter(a => a.status === 'submitted').length
     + ModuleB.orders.filter(o => o.status === 'submitted').length
-    + ModuleC.applications.filter(a => a.status === 'submitted').length;
+    + ModuleC.applications.filter(a => a.status === 'submitted').length
+    + ModuleD.applications.filter(a => a.status === 'submitted').length;
   p.innerHTML = `
     <div class="section-h">系統儀表板</div>
-    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。依審批流程（G63）將「使用者申請」「主管准駁」「業務審核/調度」「司機任務單」四種角色各自獨立，三模組各拆四個單元，共 12 個業務單元。三模組資源池分開，互不搶用。</div>
+    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。依審批流程（G63）將「使用者申請」「主管准駁」「業務審核/調度」「司機任務單」四種角色各自獨立，四模組各拆成申請／主管／調度／司機等業務單元。物流（A/B）資源池獨立；差旅共乘（C）與一般用車（D）共用商務車輛／司機池，先佔先贏（G71/G72）。</div>
     <div class="stat-row">
-      <div class="stat"><div class="k">待主管准駁（三模組）</div><div class="v accent">${pendReview}</div></div>
+      <div class="stat"><div class="k">待主管准駁（各模組）</div><div class="v accent">${pendReview}</div></div>
       <div class="stat"><div class="k">物流 · 已排班</div><div class="v">${aMatched}</div></div>
       <div class="stat"><div class="k">幹線 · 已裝載</div><div class="v">${bLoaded}</div></div>
-      <div class="stat"><div class="k">共乘 · 已媒合</div><div class="v green">${cMatched}</div></div>
+      <div class="stat"><div class="k">共乘 · 已媒合／一般用車 · 已派車</div><div class="v green">${cMatched} / ${dDispatched}</div></div>
     </div>
 
     <div class="card-title" style="font-size:14px;margin:8px 0 12px;color:var(--ink-soft);">共用基礎層</div>
@@ -182,6 +202,10 @@ RENDER.dashboard = function () {
       ${unitCard('✅ C｜主管准駁', '直屬主管准駁出差用車申請，駁回保留紀錄不進排班池。', 'c_approve', '主管')}
       ${unitCard('🔀 C｜媒合調度', '批次媒合、資源檢核、逾期作廢、派車追蹤。', 'c_review', '審核端')}
       ${unitCard('🧑‍✈️ C｜司機任務單', '駕駛端：以駕駛為單位，今日整個行程要接誰、去哪裡。', 'c_driver', '駕駛')}
+      ${unitCard('📝 D｜一般用車申請', '使用者填起訖時間、人數、是否自駕與隨行貨物；可撤回修改或整單撤回。', 'd_apply', '申請端')}
+      ${unitCard('✅ D｜主管簽核', '直屬主管簽核一般用車申請，通過才進調度；駁回保留紀錄。', 'd_approve', '主管')}
+      ${unitCard('🚗 D｜派車調度', '人工確認共用商務池可用性（先佔先贏），依派車判斷矩陣派車並寄送結果通知。', 'd_review', '審核端')}
+      ${unitCard('🧑‍✈️ D｜司機任務單', '駕駛端：以駕駛為單位，用車時段、使用人、隨行貨物（含危險品提示）。', 'd_driver', '駕駛')}
     </div>
 
     <div class="callout info" style="margin-top:22px;">
@@ -324,9 +348,11 @@ function renderItemEditor(boxSel, arr, onChange) {
   $$(boxSel + ' .x-btn').forEach(b => b.onclick = () => { arr.splice(+b.dataset.del, 1); onChange(); });
 }
 
-/* ---- 貨物編輯彈窗（新增/編輯共用）：送出 → onSave(新項目)，取消 → 關閉 ---- */
-function openCargoEditor(item, onSave) {
-  const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '' }, item || {});
+/* ---- 貨物編輯彈窗（新增/編輯共用）：送出 → onSave(新項目)，取消 → 關閉 ----
+   opts.hazard：顯示「是否為危險品」（模組 D 隨行貨物 G75/G78；A/B 不帶則不顯示） */
+function openCargoEditor(item, onSave, opts) {
+  opts = opts || {};
+  const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '', hazardous: false }, item || {});
   const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
   openModal(item ? '編輯貨物內容' : '新增貨物', `
     ${infoGrid('ce-fields', [
@@ -337,12 +363,21 @@ function openCargoEditor(item, onSave) {
       fInput('類別 <span class="hint">浪費係數查表 G03</span>', `<select id="ce-cat">${catOpts}</select>`),
       fInput('數量', `<input type="number" id="ce-qty" value="${it.qty}">`),
       fInput('單件重 (kg)', `<input type="number" id="ce-wt" value="${it.weight}">`),
+      opts.hazard ? fInput('是否為危險品 <span class="hint">僅供調度判斷，系統不自動限制（G78）</span>', `
+        <div class="radio-group">
+          <label class="radio-pill${it.hazardous ? '' : ' sel'}" id="ce-hz-no-pill"><input type="radio" name="ce-hz" value="no"${it.hazardous ? '' : ' checked'}>否</label>
+          <label class="radio-pill${it.hazardous ? ' sel' : ''}" id="ce-hz-yes-pill"><input type="radio" name="ce-hz" value="yes"${it.hazardous ? ' checked' : ''}>是</label>
+        </div>`, { stack: true, full: true }) : '',
     ].join(''))}
     <div style="text-align:center;margin-top:20px;">
       <button class="btn btn-primary" id="ce-ok">▶ 送出</button>
       <button class="btn btn-ghost" id="ce-cancel">取消</button>
     </div>`);
   $('#ce-cancel').onclick = closeModal;
+  $$('#modal-body input[name=ce-hz]').forEach(r => r.onchange = () => {
+    const yes = $('#modal-body input[name=ce-hz][value=yes]').checked;
+    $('#ce-hz-yes-pill').classList.toggle('sel', yes); $('#ce-hz-no-pill').classList.toggle('sel', !yes);
+  });
   $('#ce-ok').onclick = () => {
     const name = $('#ce-name').value.trim();
     const l = +$('#ce-l').value, w = +$('#ce-w').value, h = +$('#ce-h').value;
@@ -350,25 +385,30 @@ function openCargoEditor(item, onSave) {
     if (!name) { toast('請填品名', 'err'); return; }
     if (!(l > 0 && w > 0 && h > 0)) { toast('長寬高需為正數', 'err'); return; }
     if (!(qty > 0)) { toast('數量需為正整數', 'err'); return; }
-    onSave({ name, l, w, h, qty, category: $('#ce-cat').value, weight: weight > 0 ? weight : 0 });
+    const out = { name, l, w, h, qty, category: $('#ce-cat').value, weight: weight > 0 ? weight : 0 };
+    if (opts.hazard) out.hazardous = $('#modal-body input[name=ce-hz][value=yes]').checked;
+    onSave(out);
     closeModal();
   };
 }
 
 /* ---- 貨物項目唯讀 grid；editable 時最左欄加「編輯／刪除」按鈕 ---- */
-function renderCargoGrid(sel, items, editable, onChange) {
+function renderCargoGrid(sel, items, editable, onChange, opts) {
+  opts = opts || {};
   const box = $(sel);
   if (!box) return;
   const catName = (c) => (DB.wasteFactors.find(f => f.code === c) || {}).name || c;
-  const head = `${editable ? '<th></th>' : ''}<th>品名</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>`;
+  const hz = !!opts.hazard; // 模組 D：多一欄「危險品」
+  const head = `${editable ? '<th></th>' : ''}<th>品名</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>${hz ? '<th>危險品</th>' : ''}`;
+  const cols = 5 + (editable ? 1 : 0) + (hz ? 1 : 0);
   const body = items.length === 0
-    ? `<tr><td colspan="${editable ? 6 : 5}" class="muted" style="text-align:center;padding:16px;">尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。</td></tr>`
+    ? `<tr><td colspan="${cols}" class="muted" style="text-align:center;padding:16px;">${opts.emptyText || `尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。`}</td></tr>`
     : items.map((it, i) => `<tr>
         ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-cedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-cdel="${i}">刪除</button></td>` : ''}
-        <td>${it.name}</td><td>${it.l}×${it.w}×${it.h}</td><td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td></tr>`).join('');
+        <td>${it.name}</td><td>${it.l}×${it.w}×${it.h}</td><td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td>${hz ? `<td>${it.hazardous ? '<span class="badge b-red">⚠ 是</span>' : '<span class="muted">否</span>'}</td>` : ''}</tr>`).join('');
   box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   if (editable) {
-    $$(sel + ' [data-cedit]').forEach(b => b.onclick = () => openCargoEditor(items[+b.dataset.cedit], upd => { items[+b.dataset.cedit] = upd; onChange(); }));
+    $$(sel + ' [data-cedit]').forEach(b => b.onclick = () => openCargoEditor(items[+b.dataset.cedit], upd => { items[+b.dataset.cedit] = upd; onChange(); }, opts));
     $$(sel + ' [data-cdel]').forEach(b => b.onclick = () => { items.splice(+b.dataset.cdel, 1); onChange(); });
   }
 }
@@ -2309,10 +2349,15 @@ function renderCr_batch() {
 function openOverrideDialog(id) {
   const a = ModuleC.applications.find(x => x.id === id);
   if (!a) return;
+  // 共用資源池（G71/G72）：一般用車已派出的車輛/司機，於本趟日期內不可改派（先佔先贏）
+  const dOcc = ModuleD.dayOccupancy(), cDates = ModuleC.tripDates(a);
+  const heldBy = (map, id) => { const dt = cDates.find(x => map.has(id + '|' + x)); return dt ? map.get(id + '|' + dt) : null; };
   const vOpts = DB.vehicles.filter(v => v.pool === 'BIZ')
-    .map(v => `<option value="${v.id}" ${a.vehicle === v.id ? 'selected' : ''}>${v.id}（${v.name}｜${v.seats} 座｜歸屬 ${v.homeSite}）</option>`).join('');
+    .map(v => { const h = a.vehicle === v.id ? null : heldBy(dOcc.veh, v.id);
+      return `<option value="${v.id}" ${a.vehicle === v.id ? 'selected' : ''}${h ? ' disabled' : ''}>${v.id}（${v.name}｜${v.seats} 座｜歸屬 ${v.homeSite}）${h ? `｜⚠ 一般用車 ${h} 佔用` : ''}</option>`; }).join('');
   const dOpts = DB.drivers.filter(d => d.pool === 'BIZ')
-    .map(d => `<option value="${d.id}" ${a.driver === d.id ? 'selected' : ''}>${d.id}（${d.name}｜歸屬 ${d.homeSite}）</option>`).join('');
+    .map(d => { const h = a.driver === d.id ? null : heldBy(dOcc.drv, d.id);
+      return `<option value="${d.id}" ${a.driver === d.id ? 'selected' : ''}${h ? ' disabled' : ''}>${d.id}（${d.name}｜歸屬 ${d.homeSite}）${h ? `｜⚠ 一般用車 ${h} 任務` : ''}</option>`; }).join('');
   openModal(`調度室手動改派 · ${a.id}`, `
     <div class="callout info" style="margin-bottom:12px;">
       ${a.origin} → ${a.dest}｜${a.pax} 人｜${a.departDate} ${a.earliestPickup}<br>
@@ -2476,14 +2521,14 @@ RENDER.master = function () {
         <div class="card-desc">歸屬據點＝行政/資產固定隸屬（不因出差改變）；當前位置＝排班可用性判斷依據（G59）。</div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th><th>容量/座位</th></tr></thead><tbody>
         ${DB.vehicles.map(v => `<tr><td>${v.id}</td><td>${v.name}</td>
-          <td>${v.pool === 'LOGI' ? '<span class="badge b-navy">物流</span>' : '<span class="badge b-green">商務</span>'}</td>
+          <td>${v.pool === 'LOGI' ? '<span class="badge b-navy">物流</span>' : '<span class="badge b-green">商務（C/D 共用）</span>'}</td>
           <td>${v.homeSite}</td><td>${v.currentSite}${v.currentSite !== v.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td>
           <td>${v.pool === 'BIZ' ? v.seats + ' 座' : v.volume.toFixed(0) + 'L/' + v.weight + 'kg'}</td></tr>`).join('')}
         </tbody></table></div></div>
       <div class="card"><div class="card-title">司機主檔（獨立資源）<span class="g-tag">C-2</span></div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>姓名</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th></tr></thead><tbody>
         ${DB.drivers.map(d => `<tr><td>${d.id}</td><td>${d.name}</td>
-          <td>${d.pool === 'LOGI' ? '物流' : '商務'}</td><td>${d.homeSite}</td>
+          <td>${d.pool === 'LOGI' ? '物流' : '商務（C/D 共用）'}</td><td>${d.homeSite}</td>
           <td>${d.currentSite}${d.currentSite !== d.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td></tr>`).join('')}
         </tbody></table></div></div>
     </div>
@@ -2700,6 +2745,705 @@ RENDER.c_driver = function () {
     <div class="section-h">差旅共乘 · 司機任務單（駕駛）</div>
     <div class="section-sub">以「駕駛」為單位，顯示今日整個行程：每趟出發時間、起訖地、車輛，以及要接送的乘客（單位/分機/人數）。</div>
     ${cards}`;
+};
+
+/* ============================================================
+   模組 D · 一般用車 — 共用小工具
+   ============================================================ */
+const D_STATUS_OPTS = [['', '全部狀態'], ['draft', '草稿（已撤回修改）'], ['submitted', '待主管簽核'], ['approved', '已核准待調度'],
+  ['rejected', '已駁回'], ['dispatched', '已派車'], ['noVehicle', '無車可派'], ['completed', '行程完成'], ['cancelled', '已撤回']];
+function dPeriod(a) {
+  return a.startDate === a.endDate ? `${a.startDate} ${a.startTime}～${a.endTime}`
+    : `${a.startDate} ${a.startTime} ～ ${a.endDate} ${a.endTime}`;
+}
+function dPeriodShort(a) {
+  return a.startDate === a.endDate ? `${a.startDate.slice(5)} ${a.startTime}～${a.endTime}`
+    : `${a.startDate.slice(5)} ${a.startTime}～${a.endDate.slice(5)} ${a.endTime}`;
+}
+function dOutcomeBadge(a) {
+  const m = { withDriver: ['派車＋派司機', 'b-green'], selfDrive: ['派車（自駕）', 'b-navy'], noVehicle: ['無車可派', 'b-red'] }[a.outcome];
+  return m ? `<span class="badge ${m[1]}">${m[0]}</span>` : '<span class="muted">—</span>';
+}
+function dCargoSummary(a) {
+  if (!a.items || !a.items.length) return '<span class="muted">無</span>';
+  const n = a.items.reduce((s, i) => s + (i.qty || 1), 0);
+  return `${a.items.length} 項／${n} 件${a.items.some(i => i.hazardous) ? ' <span class="badge b-red">⚠ 危險品</span>' : ''}`;
+}
+const dVehName = id => { const v = DB.vehicles.find(x => x.id === id); return v ? `${v.id}（${v.name}）` : '—'; };
+const dDrvName = id => { const d = DB.drivers.find(x => x.id === id); return d ? d.name : '—'; };
+const dHazardCallout = a => a.items.some(i => i.hazardous)
+  ? `<div class="callout" style="margin-bottom:14px;">⚠ 隨行貨物含<b>危險品</b>：此標記僅供調度判斷派車方式，系統不寫死任何自動限制，請依經驗與公司規定人工判斷（G78）。</div>` : '';
+// 相容：他單元動作後刷新申請端 grid（若目前正在查詢畫面）
+function renderDaList() { if ($('#dq-grid')) renderDGrid(); }
+
+/* ============================================================
+   模組 D · 一般用車申請（使用者）— 查詢 / 明細 / 新增（撤回修改後重新送出共用新增畫面）
+   ============================================================ */
+let dApply = { view: 'list', detailId: null, editId: null, query: { applicant: '', date: '', status: '' }, resultIds: null };
+let dDraftItems = []; // 新增／修改畫面的隨行貨物暫存
+
+RENDER.d_apply = function () {
+  const p = $('#page-d_apply');
+  if (dApply.view === 'new') return renderDApplyNew(p);
+  if (dApply.view === 'detail') return renderDApplyDetail(p, dApply.detailId);
+  return renderDApplyList(p);
+};
+
+/* ---------- 查詢畫面 ---------- */
+function renderDApplyList(p) {
+  const q = dApply.query;
+  const stOpts = D_STATUS_OPTS.map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">一般用車申請（使用者）</div>
+    <div class="section-sub">彈性時長的臨時用車（數小時到多天）。送出後先經<b>主管簽核</b>，再由<b>調度人工確認</b>共用商務車輛／司機資源並派車，結果以 Email 通知。車型由調度依人數與貨物指派，不需自選（G77）。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <span>
+          <button class="btn btn-primary btn-sm" id="dq-search">🔍 查詢</button>
+          <button class="btn btn-accent btn-sm" id="dq-new">＋ 新增</button>
+        </span>
+      </div>
+      ${infoGrid('dq-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="dq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('用車日期 <span class="hint">落在起訖期間內</span>', `<input type="date" id="dq-date" value="${q.date || ''}">`),
+        fInput('狀態', `<select id="dq-status">${stOpts}</select>`),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史用車申請</span>
+        <span><span class="muted" id="dq-count"></span>
+          <button class="btn btn-ghost btn-sm" id="dq-demo" style="margin-left:10px;">載入範例</button></span>
+      </div>
+      <div id="dq-grid"></div>
+    </div>`;
+  $('#dq-search').onclick = () => runDQuery();
+  $('#dq-new').onclick = () => { dApply.editId = null; dApply.view = 'new'; RENDER.d_apply(); };
+  $('#dq-demo').onclick = () => { loadDDemo(); dApply.resultIds = null; renderDGrid(); };
+  renderDGrid();
+  initMasonry(p);
+}
+function runDQuery() {
+  dApply.query = { applicant: $('#dq-applicant').value.trim(), date: $('#dq-date').value, status: $('#dq-status').value };
+  const q = dApply.query;
+  const res = ModuleD.applications.filter(a =>
+    (!q.applicant || a.applicant.includes(q.applicant)) &&
+    (!q.date || (a.startDate <= q.date && q.date <= a.endDate)) &&
+    (!q.status || a.status === q.status));
+  dApply.resultIds = res.map(a => a.id);
+  renderDGrid();
+  toast(`查詢完成，共 ${res.length} 筆`, 'ok');
+}
+function renderDGrid() {
+  if (!$('#dq-grid')) return;
+  const rows = dApply.resultIds == null ? ModuleD.applications
+    : dApply.resultIds.map(id => ModuleD.applications.find(a => a.id === id)).filter(Boolean);
+  $('#dq-count').textContent = `${rows.length} 筆`;
+  $('#dq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>用車時段</th><th>人</th><th>自駕</th><th>隨行貨物</th><th>狀態</th><th>派車結果</th><th>建立時間</th></tr></thead><tbody>
+      ${rows.map(a => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-ddetail="${a.id}">細節</button></td>
+        <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
+        <td>${dPeriodShort(a)}</td><td>${a.pax}</td><td>${a.selfDrive ? '是' : '否'}</td>
+        <td>${dCargoSummary(a)}</td><td>${stBadge(a.status, 'D')}</td><td>${dOutcomeBadge(a)}</td>
+        <td class="muted">${fmtTime(a.createdAt)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至申請單明細（撤回修改／整單撤回於明細操作）。</div>`;
+  $$('#dq-grid [data-ddetail]').forEach(b => b.onclick = () => {
+    dApply.detailId = b.dataset.ddetail; dApply.view = 'detail'; RENDER.d_apply();
+  });
+}
+
+/* ---------- 明細畫面 ---------- */
+function renderDApplyDetail(p, id) {
+  const a = ModuleD.applications.find(x => x.id === id);
+  if (!a) { dApply.view = 'list'; return RENDER.d_apply(); }
+  const acts = [];
+  if (ModuleD.canWithdrawToEdit(a)) acts.push(`<button class="btn btn-ghost" id="dd-withdraw">↩ 撤回修改</button>`);
+  if (a.status === 'draft') acts.push(`<button class="btn btn-primary" id="dd-edit">✎ 修改後重新送出</button>`);
+  if (ModuleD.canCancel(a)) acts.push(`<button class="btn btn-ghost" id="dd-cancel" style="color:var(--red);">✕ 整單撤回</button>`);
+  const rule = ModuleD.isConfirmed(a)
+    ? '調度已完成確認：<b>不可修改</b>，僅能<b>整單撤回</b>（已派出的車輛／司機立即釋放回資源池）；如需異動請重新申請。'
+    : '調度確認前：可<b>撤回修改</b>（拿回草稿，改完重新送出並<b>重新經主管簽核與調度</b>），或<b>整單撤回</b>。已核准的申請不支援就地修改。';
+  const endNote = {
+    rejected: '此申請已被主管駁回；如仍需用車請重新申請。',
+    noVehicle: '調度判定無車可派（不進候補、不保留資源）；如仍需用車請重新申請或改期。',
+    cancelled: '此申請已整單撤回。',
+    completed: '此趟用車已完成。',
+  }[a.status];
+  p.innerHTML = `
+    <div class="section-h">一般用車申請明細 · ${a.id}</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'D')}</div>
+      ${infoGrid('dd-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('申請人', `${a.applicant}${a.dept ? `（${a.dept}/${a.ext}）` : ''}`),
+        fItem('用車時段', dPeriod(a), { w2: true }),
+        fItem('人數', `${a.pax} 人`),
+        fItem('是否自駕', a.selfDrive ? '是（有車無司機時可自行駕駛）' : '否'),
+        fItem('建立時間', fmtTime(a.createdAt)),
+        fItem('行程說明', a.purpose || '<span class="muted">—</span>', { full: true, tall: true }),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">隨行貨物 <span class="g-tag">G75</span></div>
+      <div id="dd-items"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">簽核與派車結果</div>
+      ${infoGrid('dd-result', [
+        fItem('簽核主管', ModuleD.approverOf(a)),
+        fItem('審核備註', a.reviewNote || '<span class="muted">—</span>'),
+        fItem('派車結果', dOutcomeBadge(a)),
+        fItem('車輛', a.vehicle ? dVehName(a.vehicle) : '<span class="muted">—</span>'),
+        fItem('司機', a.driver ? dDrvName(a.driver) : (a.outcome === 'selfDrive' ? '使用者自行駕駛' : '<span class="muted">—</span>')),
+        fItem('調度完成確認', a.dispatchedAt ? `${fmtTime(a.dispatchedAt)}（${a.dispatchedBy}）` : '<span class="muted">尚未確認</span>'),
+        fItem('調度備註', a.dispatchNote || '<span class="muted">—</span>'),
+        fItem('結果通知', a.notifiedAt ? `✉ 已寄送 Email（示意）｜${fmtTime(a.notifiedAt)}` : '<span class="muted">—</span>'),
+      ].join(''))}
+    </div>
+    ${a.log.length ? `<div class="card"><div class="card-title">異動紀錄</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
+      ${a.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td>${l.note || '—'}</td></tr>`).join('')}
+      </tbody></table></div></div>` : ''}
+    <div class="card">
+      <div class="card-title">申請人操作 <span class="g-tag">G79</span></div>
+      ${acts.length ? `<div class="card-desc">${rule}</div><div>${acts.join(' ')}</div>`
+        : `<div class="card-desc" style="margin-bottom:0;">${endNote || '目前無可執行的操作。'}</div>`}
+    </div>
+    ${backBar('dd-back')}`;
+  renderCargoGrid('#dd-items', a.items, false, null, { hazard: true, emptyText: '無隨行貨物（純載人）。' });
+  $('#dd-back').onclick = () => { dApply.view = 'list'; RENDER.d_apply(); };
+  const wd = $('#dd-withdraw');
+  if (wd) wd.onclick = confirmThen({ title: '確認撤回修改？',
+    text: '申請將撤回為<b>草稿</b>，修改後需重新送出，並<b>重新經主管簽核與調度</b>。' }, () => {
+    ModuleD.withdrawToEdit(a, a.applicant);
+    toast(`${a.id} 已撤回為草稿，可修改後重新送出`, 'ok'); RENDER.d_apply();
+  });
+  const ed = $('#dd-edit');
+  if (ed) ed.onclick = () => { dApply.editId = a.id; dApply.view = 'new'; RENDER.d_apply(); };
+  const cc = $('#dd-cancel');
+  if (cc) cc.onclick = confirmThen({ title: '確認整單撤回？', text: a.status === 'dispatched'
+    ? `已派出的 <b>${dVehName(a.vehicle)}</b>${a.driver ? '／司機 <b>' + dDrvName(a.driver) + '</b>' : ''} 將<b>立即釋放</b>回共用資源池，此動作無法復原。`
+    : '此申請將作廢，此動作無法復原；如仍需用車請重新申請。' }, () => {
+    const held = a.status === 'dispatched';
+    ModuleD.cancel(a, a.applicant);
+    toast(`${a.id} 已整單撤回${held ? '，車輛／司機已釋放' : ''}`, 'ok'); RENDER.d_apply();
+  });
+  initMasonry(p);
+}
+
+/* ---------- 新增畫面（編輯草稿時預帶原內容，送出＝重新送出 G79）---------- */
+function dTomorrow() { const d = new Date(); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function renderDApplyNew(p) {
+  const editing = dApply.editId ? ModuleD.applications.find(x => x.id === dApply.editId && x.status === 'draft') : null;
+  const t = dTomorrow();
+  const src = editing || { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
+    startDate: t, startTime: '09:00', endDate: t, endTime: '12:00', pax: 1, selfDrive: null, purpose: '', items: [] };
+  dDraftItems = (src.items || []).map(i => Object.assign({}, i));
+  const v = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
+  const sd = src.selfDrive;
+  p.innerHTML = `
+    <div class="section-h">${editing ? `修改一般用車申請 · ${editing.id}` : '新增一般用車申請單'}</div>
+    ${editing ? `<div class="callout info" style="margin-bottom:14px;">此單已撤回為草稿。修改後重新送出，將<b>重新經主管簽核與調度</b>（異動＝撤回＋重新申請 G79）。</div>` : ''}
+    <div class="card">
+      <div class="card-title">用車申請 <span class="g-tag">G75</span></div>
+      ${infoGrid('da-fields', [
+        fInput('申請人', `<input type="text" id="da-applicant" value="${v(src.applicant)}">`),
+        fInput('部門', `<input type="text" id="da-dept" value="${v(src.dept)}">`),
+        fInput('分機', `<input type="text" id="da-ext" value="${v(src.ext)}">`),
+      ].join(''))}
+      <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">用車起訖（必填）</div>
+      ${infoGrid('da-period', [
+        fInput('起 · 日期', `<input type="date" id="da-sdate" value="${v(src.startDate)}">`),
+        fInput('起 · 時間', `<input type="time" id="da-stime" value="${v(src.startTime)}">`),
+        fInput('迄 · 日期', `<input type="date" id="da-edate" value="${v(src.endDate)}">`),
+        fInput('迄 · 時間', `<input type="time" id="da-etime" value="${v(src.endTime)}">`),
+      ].join(''))}
+      ${infoGrid('da-more', [
+        fInput('人數 <span class="hint">至少 1 人</span>', `<input type="number" id="da-pax" min="1" step="1" value="${v(src.pax)}">`),
+        fInput('是否自駕 <span class="hint">必填；若只有車沒有司機，選「是」可派車由您自行駕駛（系統不做駕駛資格檢核 G78）</span>', `
+          <div class="radio-group">
+            <label class="radio-pill${sd === true ? ' sel' : ''}" id="da-sd-yes-pill"><input type="radio" name="da-sd" value="yes"${sd === true ? ' checked' : ''}>是，可自駕</label>
+            <label class="radio-pill${sd === false ? ' sel' : ''}" id="da-sd-no-pill"><input type="radio" name="da-sd" value="no"${sd === false ? ' checked' : ''}>否</label>
+          </div>`, { stack: true, full: true }),
+        fInput('行程說明 <span class="hint">選填：上車地點／目的地／事由</span>', `<input type="text" id="da-purpose" value="${v(src.purpose)}" placeholder="例：新竹科學園區客戶拜訪（多點洽公）">`, { full: true }),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>隨行貨物（選填）</span>
+        <button class="btn btn-accent btn-sm" id="da-add-item">＋ 新增</button></div>
+      <div class="card-desc">有貨才填；欄位比照物流運輸申請（長寬高／重量／件數／品類），並標註<b>是否為危險品</b>（僅供調度判斷派車，系統不自動限制 G78）。人數與貨物各自獨立、不互斥。</div>
+      <div id="da-items"></div>
+    </div>
+    <div style="text-align:center;margin-top:6px;">
+      <button class="btn btn-primary" id="da-submit">▶ ${editing ? '重新送出（待主管簽核）' : '送出申請（待主管簽核）'}</button>
+      <button class="btn btn-ghost" id="da-cancel">取消</button>
+    </div>
+    ${backBar('dn-back')}`;
+  const back = () => {
+    if (editing) { dApply.view = 'detail'; dApply.detailId = editing.id; } else dApply.view = 'list';
+    dApply.editId = null; RENDER.d_apply();
+  };
+  $('#dn-back').onclick = back; $('#da-cancel').onclick = back;
+  $$('#page-d_apply input[name=da-sd]').forEach(r => r.onchange = () => {
+    $('#da-sd-yes-pill').classList.toggle('sel', $('#page-d_apply input[name=da-sd][value=yes]').checked);
+    $('#da-sd-no-pill').classList.toggle('sel', $('#page-d_apply input[name=da-sd][value=no]').checked);
+  });
+  // 迄日期不可早於起日期
+  const syncEMin = () => { $('#da-edate').min = $('#da-sdate').value || ''; };
+  $('#da-sdate').onchange = () => { if ($('#da-edate').value < $('#da-sdate').value) $('#da-edate').value = $('#da-sdate').value; syncEMin(); };
+  syncEMin();
+  const drawItems = () => {
+    renderCargoGrid('#da-items', dDraftItems, true, drawItems, { hazard: true, emptyText: '無隨行貨物（純載人可不填）；有貨請按右上角「新增」。' });
+    initMasonry(p);
+  };
+  $('#da-add-item').onclick = () => openCargoEditor(null, it => { dDraftItems.push(it); drawItems(); }, { hazard: true });
+  drawItems();
+  $('#da-submit').onclick = async () => {
+    const sdEl = $('#page-d_apply input[name=da-sd]:checked');
+    const data = {
+      applicant: $('#da-applicant').value.trim(), dept: $('#da-dept').value.trim(), ext: $('#da-ext').value.trim(),
+      startDate: $('#da-sdate').value, startTime: $('#da-stime').value, endDate: $('#da-edate').value, endTime: $('#da-etime').value,
+      pax: +$('#da-pax').value, selfDrive: sdEl ? sdEl.value === 'yes' : null,
+      purpose: $('#da-purpose').value.trim(), items: dDraftItems.map(i => Object.assign({}, i)),
+    };
+    const errs = ModuleD.validate(data);
+    if (errs.length) { toast(errs[0], 'err'); return; }
+    const ok = await confirmDialog({ title: editing ? '確認重新送出？' : '確認送出一般用車申請？',
+      text: `用車 <b>${dPeriod(data)}</b>｜${data.pax} 人｜自駕：${data.selfDrive ? '是' : '否'}`
+        + `${data.items.some(i => i.hazardous) ? '｜<b style="color:var(--red);">含危險品</b>' : ''}<br>`
+        + '送出後將等待<b>主管簽核</b>，通過後由調度確認資源並派車，結果以 Email 通知。' });
+    if (!ok) return;
+    let app;
+    try { app = editing ? ModuleD.resubmit(editing, data) : ModuleD.createApp(data); }
+    catch (e) { toast(e.message, 'err'); return; }
+    toast(`${app.id} 已${editing ? '重新' : ''}送出，等待主管簽核`, 'ok');
+    dApply.resultIds = null; dApply.editId = null; dApply.view = 'detail'; dApply.detailId = app.id;
+    RENDER.d_apply();
+  };
+  initMasonry(p);
+}
+function loadDDemo() {
+  const D1 = '2026-08-27', D2 = '2026-08-28';
+  const demos = [
+    // 一般載人＋少量設備（人貨混合）
+    { applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', startDate: D1, startTime: '09:00', endDate: D1, endTime: '12:00', pax: 3, selfDrive: false,
+      purpose: '新竹科學園區客戶拜訪（多點洽公）',
+      items: [{ name: '展示機台', l: 60, w: 40, h: 45, qty: 1, category: 'FRAG', weight: 18, hazardous: false }] },
+    // 多天＋可自駕＋危險品（壓車人員順路帶設備）
+    { applicant: '研發部-吳承恩', dept: '研發部', ext: '4102', startDate: D1, startTime: '13:00', endDate: D2, endTime: '17:00', pax: 2, selfDrive: true,
+      purpose: '台中實驗室設備送修＋隔日會議（壓車人員隨行）',
+      items: [{ name: '鋰電池模組', l: 40, w: 30, h: 20, qty: 2, category: 'BOX', weight: 12, hazardous: true }] },
+    // 純載人
+    { applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310', startDate: D2, startTime: '10:00', endDate: D2, endTime: '11:30', pax: 1, selfDrive: false,
+      purpose: '銀行送件', items: [] },
+  ];
+  demos.forEach(d => ModuleD.createApp(d));
+  toast('已載入 3 筆一般用車申請（待主管簽核）', 'ok');
+}
+
+/* ============================================================
+   模組 D · 主管簽核（直屬主管）— 獨立單元（先簽核、通過才進調度 G74）
+   ============================================================ */
+let dApprove = { view: 'list', detailId: null, query: { applicant: '', status: '' } };
+
+RENDER.d_approve = function () {
+  const p = $('#page-d_approve');
+  if (dApprove.view === 'detail') return renderDApproveDetail(p, dApprove.detailId);
+  return renderDApproveList(p);
+};
+function dApproveRows() {
+  const q = dApprove.query;
+  // 草稿（使用者撤回修改中）尚未送出，不列入主管清單
+  return ModuleD.applications.filter(a => a.status !== 'draft' &&
+    (!q.applicant || a.applicant.includes(q.applicant)) &&
+    (!q.status || a.status === q.status));
+}
+function renderDApproveList(p) {
+  const q = dApprove.query;
+  const stOpts = [['', '全部狀態'], ['submitted', '待簽核'], ['approved', '已核准待調度'], ['rejected', '已駁回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">主管簽核（直屬主管）</div>
+    <div class="section-sub">一般用車申請<b>先簽核、通過才進調度</b>（沿用核准者關係表）。點「細節」檢視用車時段、人數、是否自駕與隨行貨物後簽核；駁回保留紀錄、不進調度。（G74）</div>
+    <div class="card">
+      <div class="card-title">查詢條件</div>
+      ${infoGrid('dap-q-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="dap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('狀態', `<select id="dap-q-status">${stOpts}</select>`),
+      ].join(''))}
+      <button class="btn btn-primary btn-sm" id="dap-search">🔍 查詢</button>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>待簽核 / 已處理申請單</span>
+        <button class="btn btn-accent btn-sm" id="dap-approve-all">✓ 全部核准</button>
+      </div>
+      <div id="dap-grid"></div>
+    </div>`;
+  $('#dap-search').onclick = () => {
+    dApprove.query = { applicant: $('#dap-q-applicant').value.trim(), status: $('#dap-q-status').value };
+    renderDApproveGrid(); toast('查詢完成', 'ok');
+  };
+  $('#dap-approve-all').onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准目前清單中所有「待簽核」一般用車申請，並進入調度。' }, () => {
+    const subs = dApproveRows().filter(a => a.status === 'submitted');
+    subs.forEach(a => ModuleD.approve(a));
+    toast(`已核准 ${subs.length} 筆`, 'ok');
+    renderDApproveGrid(); renderDaList();
+  });
+  renderDApproveGrid();
+  initMasonry(p);
+}
+function renderDApproveGrid() {
+  if (!$('#dap-grid')) return;
+  const rows = dApproveRows();
+  $('#dap-grid').innerHTML = rows.length === 0 ? `<div class="empty">查無符合條件的申請單。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>簽核主管</th><th>用車時段</th><th>人</th><th>自駕</th><th>隨行貨物</th><th>狀態</th></tr></thead><tbody>
+      ${rows.map(a => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-dvdetail="${a.id}">細節</button></td>
+        <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td><td>${ModuleD.approverOf(a)}</td>
+        <td>${dPeriodShort(a)}</td><td>${a.pax}</td><td>${a.selfDrive ? '是' : '否'}</td>
+        <td>${dCargoSummary(a)}</td><td>${stBadge(a.status, 'D')}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $$('#dap-grid [data-dvdetail]').forEach(b => b.onclick = () => { dApprove.detailId = b.dataset.dvdetail; dApprove.view = 'detail'; RENDER.d_approve(); });
+}
+function renderDApproveDetail(p, id) {
+  const a = ModuleD.applications.find(x => x.id === id);
+  if (!a) { dApprove.view = 'list'; return RENDER.d_approve(); }
+  const pending = a.status === 'submitted';
+  p.innerHTML = `
+    <div class="section-h">一般用車簽核 · ${a.id}</div>
+    ${dHazardCallout(a)}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'D')}</div>
+      ${infoGrid('dap-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('申請人', `${a.applicant}${a.dept ? `（${a.dept}/${a.ext}）` : ''}`),
+        fItem('簽核主管', ModuleD.approverOf(a)),
+        fItem('用車時段', dPeriod(a), { w2: true }),
+        fItem('人數', `${a.pax} 人`),
+        fItem('是否自駕', a.selfDrive ? '是' : '否'),
+        fItem('行程說明', a.purpose || '<span class="muted">—</span>', { full: true, tall: true }),
+        a.reviewNote ? fItem('審核備註', a.reviewNote, { full: true }) : '',
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">隨行貨物</div>
+      <div id="dap-items"></div>
+    </div>
+    ${pending ? `
+    <div class="card">
+      <div class="card-title">主管簽核 <span class="g-tag">G74</span></div>
+      ${infoGrid('dsv-fields', [
+        fInput('是否同意', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="dsv-yes-pill"><input type="radio" name="dsv-agree" value="yes" checked>是</label>
+            <label class="radio-pill" id="dsv-no-pill"><input type="radio" name="dsv-agree" value="no">否</label>
+          </div>`, { stack: true, full: true }),
+        fInput('審核備註 <span class="hint" id="dsv-req" style="display:none;color:#c0392b;">（駁回時必填）</span>', `<input type="text" id="dsv-note" placeholder="請輸入審核意見（駁回為必填）">`, { full: true }),
+      ].join(''))}
+      <div style="text-align:center;margin-top:22px;">
+        <button class="btn btn-primary" id="dsv-submit">▶ 送出</button>
+        <button class="btn btn-ghost" id="dsv-cancel">取消</button>
+      </div>
+    </div>` : backBar('dsv-back')}`;
+  renderCargoGrid('#dap-items', a.items, false, null, { hazard: true, emptyText: '無隨行貨物（純載人）。' });
+  if (pending) {
+    $$('#page-d_approve input[name=dsv-agree]').forEach(r => r.onchange = () => {
+      const no = $('#page-d_approve input[name=dsv-agree][value=no]').checked;
+      $('#dsv-yes-pill').classList.toggle('sel', !no);
+      $('#dsv-no-pill').classList.toggle('sel', no);
+      $('#dsv-req').style.display = no ? 'inline' : 'none';
+    });
+    $('#dsv-submit').onclick = async () => {
+      const agree = $('#page-d_approve input[name=dsv-agree]:checked').value === 'yes';
+      const note = $('#dsv-note').value.trim();
+      if (!agree && !note) { toast('駁回時「審核備註」為必填', 'err'); $('#dsv-note').focus(); return; }
+      const ok = await confirmDialog({ title: agree ? '確認核准？' : '確認駁回？',
+        text: agree ? '核准後此申請將進入調度，由調度人工確認資源並派車。' : '駁回後保留紀錄、不進調度；申請人需重新申請。' });
+      if (!ok) return;
+      if (agree) { ModuleD.approve(a, note); toast(`${a.id} 已核准，進入調度`, 'ok'); }
+      else { ModuleD.reject(a, note); toast(`${a.id} 已駁回`, 'err'); }
+      dApprove.view = 'list'; RENDER.d_approve(); renderDaList();
+    };
+    $('#dsv-cancel').onclick = () => { dApprove.view = 'list'; RENDER.d_approve(); };
+  } else {
+    $('#dsv-back').onclick = () => { dApprove.view = 'list'; RENDER.d_approve(); };
+  }
+  initMasonry(p);
+}
+
+/* ============================================================
+   模組 D · 派車調度（業務單位）— 人工確認共用資源池＋派車判斷矩陣（G71–G80）
+   ============================================================ */
+let dReview = { view: 'list', detailId: null, query: { status: 'approved', date: '' } };
+// 調度清單：簽核通過後的單（含已派車／無車可派／完成，以及核准後才撤回者）
+const dInReviewPool = a => ['approved', 'dispatched', 'noVehicle', 'completed'].includes(a.status)
+  || (a.status === 'cancelled' && (a.approvedAt != null || a.dispatchedAt != null));
+
+RENDER.d_review = function () {
+  const p = $('#page-d_review');
+  if (dReview.view === 'detail') return renderDReviewDetail(p, dReview.detailId);
+  return renderDReviewList(p);
+};
+function renderDReviewList(p) {
+  const q = dReview.query;
+  const stOpts = [['', '全部狀態'], ['approved', '已核准待調度'], ['dispatched', '已派車'], ['noVehicle', '無車可派'],
+    ['completed', '行程完成'], ['cancelled', '已撤回']]
+    .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">派車調度（業務單位）</div>
+    <div class="section-sub">主管簽核通過的申請，由調度<b>人工確認</b>共用商務車輛／司機池在該時段是否可用（保修、請假、差旅共乘與其他一般用車佔用一併列出，先佔先贏），再依<b>派車判斷矩陣</b>做出最終判斷：派車＋派司機／派車（自駕）／無車可派。不進候補，結果自動 Email 通知申請人。</div>
+    <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="dr-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="drq-search">🔍 查詢</button></div>
+      ${infoGrid('drq-fields', [
+        fInput('狀態', `<select id="drq-status">${stOpts}</select>`),
+        fInput('用車日期 <span class="hint">落在起訖期間內</span>', `<input type="date" id="drq-date" value="${q.date || ''}">`),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>調度清單</span><span class="muted" id="drq-count"></span></div>
+      <div id="drq-grid"></div>
+    </div>`;
+  $('#dr-goto-driver').onclick = () => goto('d_driver');
+  $('#drq-search').onclick = () => {
+    dReview.query = { status: $('#drq-status').value, date: $('#drq-date').value };
+    renderDReviewGrid(); toast('查詢完成', 'ok');
+  };
+  renderDReviewGrid();
+  initMasonry(p);
+}
+function renderDReviewGrid() {
+  if (!$('#drq-grid')) return;
+  const q = dReview.query;
+  const rows = ModuleD.applications.filter(a => dInReviewPool(a) &&
+    (!q.status || a.status === q.status) &&
+    (!q.date || (a.startDate <= q.date && q.date <= a.endDate)))
+    .sort((x, y) => (x.startDate + x.startTime).localeCompare(y.startDate + y.startTime));
+  $('#drq-count').textContent = `${rows.length} 筆`;
+  $('#drq-grid').innerHTML = rows.length === 0
+    ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請。主管簽核通過後即會出現在「已核准待調度」。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>用車時段</th><th>人</th><th>自駕</th><th>隨行貨物</th><th>狀態</th><th>派車結果</th><th>車輛</th><th>司機</th></tr></thead><tbody>
+      ${rows.map(a => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-drdetail="${a.id}">${a.status === 'approved' ? '調度' : '細節'}</button></td>
+        <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
+        <td>${dPeriodShort(a)}</td><td>${a.pax}</td><td>${a.selfDrive ? '是' : '否'}</td>
+        <td>${dCargoSummary(a)}</td><td>${stBadge(a.status, 'D')}</td><td>${dOutcomeBadge(a)}</td>
+        <td>${a.vehicle || '<span class="muted">—</span>'}</td>
+        <td>${a.driver ? dDrvName(a.driver) : (a.outcome === 'selfDrive' ? '自駕' : '<span class="muted">—</span>')}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $$('#drq-grid [data-drdetail]').forEach(b => b.onclick = () => { dReview.detailId = b.dataset.drdetail; dReview.view = 'detail'; RENDER.d_review(); });
+}
+// 派車判斷矩陣（G76）：標示本單所在儲存格（車輛狀態 × 是否自駕）
+function renderDMatrix(state, selfDrive) {
+  const rows = [['withDriver', '有車有司機'], ['vehicleOnly', '有車沒司機'], ['none', '沒車']];
+  const cell = (st, sd) => {
+    const o = ModuleD.matrixOutcome(st, sd);
+    const txt = { withDriver: '派車＋派司機', selfDrive: '派車（使用者自行駕駛）', noVehicle: '告知無車可派' }[o];
+    const hit = st === state && sd === selfDrive;
+    return `<td style="font-weight:700;color:${o === 'noVehicle' ? 'var(--red)' : 'var(--green)'};`
+      + `${hit ? 'outline:2px solid var(--accent);outline-offset:-2px;' : ''}">${txt}${hit ? ' <span class="badge b-amber">本單</span>' : ''}</td>`;
+  };
+  return `<div class="table-wrap"><table class="dt"><thead><tr><th>車輛狀態</th>
+      <th>使用者勾選自駕${selfDrive ? ' ✓' : ''}</th><th>使用者未勾選自駕${selfDrive ? '' : ' ✓'}</th></tr></thead><tbody>
+    ${rows.map(([st, label]) => `<tr><td><b>${label}</b>${st === state ? ' <span class="hint">← 目前資源狀態</span>' : ''}</td>${cell(st, true)}${cell(st, false)}</tr>`).join('')}
+  </tbody></table></div>`;
+}
+function renderDReviewDetail(p, id) {
+  const a = ModuleD.applications.find(x => x.id === id);
+  if (!a) { dReview.view = 'list'; return RENDER.d_review(); }
+  const pending = a.status === 'approved';
+  let body = '';
+  if (pending) {
+    const res = ModuleD.resources(a), state = ModuleD.resourceState(a);
+    const freeV = res.vehicles.filter(x => !x.busy), freeD = res.drivers.filter(x => !x.busy);
+    const busyBadge = b => !b ? '<span class="badge b-green">可用</span>'
+      : `<span class="badge ${b.type === 'C' || b.type === 'D' ? 'b-amber' : 'b-red'}">${b.text}</span>`;
+    const vOpts = freeV.length
+      ? ['<option value="">請選擇車輛</option>'].concat(freeV.map(({ v }) => `<option value="${v.id}">${v.id}（${v.name}｜${v.seats} 座）</option>`)).join('')
+      : '<option value="">（此時段無可用車輛）</option>';
+    const dOpts = freeD.length
+      ? ['<option value="">請選擇司機</option>'].concat(freeD.map(({ d }) => `<option value="${d.id}">${d.name}（${d.id}）</option>`)).join('')
+      : `<option value="">（此時段無可派司機${a.selfDrive ? '，使用者可自駕' : ''}）</option>`;
+    body = `
+    <div class="card">
+      <div class="card-title">資源可用性 · 共用商務池 <span class="g-tag">G71/G72</span></div>
+      <div class="card-desc">用車時段 <b>${dPeriod(a)}</b>。差旅共乘與一般用車共用同一批車輛／司機，<b>先佔先贏、不分模組優先權</b>：與差旅共乘以「日」為佔用單位（沿用差旅共乘排班口徑），一般用車之間以實際起訖時段判斷；保修（G60）與請假（G61）同樣排除。</div>
+      <div class="grid-2" style="gap:16px;">
+        <div class="table-wrap"><table class="dt"><thead><tr><th>車輛</th><th>座位</th><th>位置</th><th>狀態</th></tr></thead><tbody>
+          ${res.vehicles.map(({ v, busy }) => `<tr><td><b style="color:var(--navy);">${v.id}</b>（${v.name}）</td><td>${v.seats} 座</td><td>${v.currentSite}</td><td style="text-align:left;">${busyBadge(busy)}</td></tr>`).join('')}
+        </tbody></table></div>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>司機</th><th>位置</th><th>狀態</th></tr></thead><tbody>
+          ${res.drivers.map(({ d, busy }) => `<tr><td><b>${d.name}</b>（${d.id}）</td><td>${d.currentSite}</td><td style="text-align:left;">${busyBadge(busy)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">派車判斷 <span class="g-tag">G76/G77</span></div>
+      <div class="card-desc">依「車輛狀態 × 是否自駕」判斷，<b>不進候補</b>：無車可派即告知申請人、不保留資源。車型由調度依人數（${a.pax} 人）與隨行貨物人工指派。做出任一最終判斷即為「調度完成確認」，之後申請人僅能整單撤回（G79）。</div>
+      ${renderDMatrix(state, a.selfDrive)}
+      <div style="margin-top:14px;"></div>
+      ${infoGrid('dr-fields', [
+        fInput('派車車輛', `<select id="dr-veh">${vOpts}</select>`),
+        fInput('派車司機', `<select id="dr-drv">${dOpts}</select>`),
+        fInput('調度人員', `<input type="text" id="dr-by" value="調度室-值班人員">`),
+        fInput('調度備註（選填）', `<input type="text" id="dr-note" placeholder="例：含危險品改派廂型車／無合適車型">`, { w2: true }),
+      ].join(''))}
+      <div id="dr-preview" class="callout info" style="margin-top:10px;"></div>
+      <div style="text-align:center;margin-top:16px;">
+        <button class="btn btn-primary" id="dr-ok">▶ 確認派車判斷</button>
+        <button class="btn btn-ghost" id="dr-none" style="color:var(--red);">判定無車可派</button>
+      </div>
+    </div>`;
+  } else {
+    body = `
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>派車結果</span>${dOutcomeBadge(a)}</div>
+      ${infoGrid('dr-result', [
+        fItem('車輛', a.vehicle ? dVehName(a.vehicle) : '<span class="muted">—</span>'),
+        fItem('司機', a.driver ? dDrvName(a.driver) : (a.outcome === 'selfDrive' ? '使用者自行駕駛' : '<span class="muted">—</span>')),
+        fItem('調度完成確認', a.dispatchedAt ? `${fmtTime(a.dispatchedAt)}（${a.dispatchedBy}）` : '<span class="muted">未確認（調度前已撤回）</span>'),
+        fItem('調度備註', a.dispatchNote || '<span class="muted">—</span>'),
+        fItem('結果通知', a.notifiedAt ? `✉ 已寄送 Email 給 ${a.applicant}（示意）｜${fmtTime(a.notifiedAt)}` : '<span class="muted">—</span>', { w2: true }),
+        a.completedAt ? fItem('行程完成', `${fmtTime(a.completedAt)}（${a.completedBy}）`) : '',
+        a.releasedAt ? fItem('資源釋放', `${fmtTime(a.releasedAt)}（申請人整單撤回）`) : '',
+      ].join(''))}
+      ${a.status === 'dispatched' ? `<div class="divider"></div><button class="btn btn-accent" id="dr-complete">✓ 確認行程完成</button>
+        <span class="hint" style="margin-left:8px;">完成後車輛／司機即釋放回共用資源池。</span>` : ''}
+    </div>`;
+  }
+  p.innerHTML = `
+    <div class="section-h">${pending ? '派車調度' : '調度明細'} · ${a.id}</div>
+    ${dHazardCallout(a)}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>申請內容</span>${stBadge(a.status, 'D')}</div>
+      ${infoGrid('dr-basic', [
+        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('申請人', `${a.applicant}${a.dept ? `（${a.dept}/${a.ext}）` : ''}`),
+        fItem('簽核', `${ModuleD.approverOf(a)} 核准${a.reviewNote ? '｜' + a.reviewNote : ''}`),
+        fItem('用車時段', dPeriod(a), { w2: true }),
+        fItem('人數', `${a.pax} 人`),
+        fItem('是否自駕', a.selfDrive ? '是' : '否'),
+        fItem('行程說明', a.purpose || '<span class="muted">—</span>', { full: true, tall: true }),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">隨行貨物</div>
+      <div id="dr-items"></div>
+    </div>
+    ${body}
+    ${backBar('dr-back')}`;
+  renderCargoGrid('#dr-items', a.items, false, null, { hazard: true, emptyText: '無隨行貨物（純載人）。' });
+  $('#dr-back').onclick = () => { dReview.view = 'list'; RENDER.d_review(); };
+  if (pending) {
+    const preview = () => {
+      const box = $('#dr-preview');
+      const sel = { vehicle: $('#dr-veh').value, driver: $('#dr-drv').value };
+      if (!ModuleD.resources(a).vehicles.some(x => !x.busy)) {
+        box.className = 'callout'; $('#dr-ok').disabled = true;
+        box.innerHTML = '此時段<b>沒車</b> → 依判斷矩陣應<b>告知無車可派</b>，請按「判定無車可派」。';
+        return;
+      }
+      const r = ModuleD.decide(a, sel);
+      if (r.error) { box.className = 'callout'; box.innerHTML = `⚠ ${r.error}`; $('#dr-ok').disabled = true; return; }
+      $('#dr-ok').disabled = false;
+      box.className = r.outcome === 'noVehicle' ? 'callout' : 'callout info';
+      box.innerHTML = `判斷結果：<b>${ModuleD.OUTCOME_TEXT[r.outcome]}</b>` + (r.outcome === 'noVehicle'
+        ? '（有車沒司機、使用者未勾自駕 → 告知無車可派，不進候補、不佔用資源）'
+        : `｜車輛 ${dVehName(r.vehicle)}｜${r.driver ? '司機 ' + dDrvName(r.driver) : '使用者自行駕駛'}`);
+    };
+    $('#dr-veh').onchange = preview; $('#dr-drv').onchange = preview; preview();
+    const finish = (out) => {
+      if (!out.ok) { toast(out.error, 'err'); return; }
+      toast(`${a.id}｜${ModuleD.OUTCOME_TEXT[out.outcome]}，已寄送結果通知（示意）`, out.outcome === 'noVehicle' ? 'err' : 'ok');
+      RENDER.d_review(); renderDaList();
+    };
+    $('#dr-ok').onclick = async () => {
+      const sel = { vehicle: $('#dr-veh').value, driver: $('#dr-drv').value };
+      const r = ModuleD.decide(a, sel);
+      if (r.error) { toast(r.error, 'err'); return; }
+      const ok = await confirmDialog({ title: '確認派車判斷？',
+        text: `結果：<b>${ModuleD.OUTCOME_TEXT[r.outcome]}</b><br>確認後即為「調度完成確認」並 Email 通知申請人；之後申請人僅能整單撤回（G79）。` });
+      if (!ok) return;
+      finish(ModuleD.dispatch(a, sel, $('#dr-by').value.trim(), $('#dr-note').value.trim()));
+    };
+    $('#dr-none').onclick = async () => {
+      const ok = await confirmDialog({ title: '確認判定無車可派？',
+        text: '將告知申請人<b>無車可派</b>（不進候補、不佔用資源）並 Email 通知；此為調度完成確認，申請人需重新申請。' });
+      if (!ok) return;
+      finish(ModuleD.dispatch(a, { noVehicle: true }, $('#dr-by').value.trim(), $('#dr-note').value.trim()));
+    };
+  } else {
+    const cp = $('#dr-complete');
+    if (cp) cp.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟用車標記為完成，車輛與司機即釋放回共用資源池。' }, () => {
+      ModuleD.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok'); RENDER.d_review(); renderDaList();
+    });
+  }
+  initMasonry(p);
+}
+
+/* ============================================================
+   模組 D · 司機任務單（駕駛端）— 以「駕駛」為單位：用車時段、使用人、隨行貨物（含危險品提示）
+   ============================================================ */
+function dDriverCargo(a) {
+  if (!a.items.length) return '<span class="muted">無</span>';
+  return a.items.map(i => `${i.hazardous ? '<span class="badge b-red">⚠ 危險品</span> ' : ''}${i.name}×${i.qty || 1}`
+    + `<span class="hint">（${i.l}×${i.w}×${i.h}cm${i.weight ? '｜' + i.weight + 'kg' : ''}）</span>`).join('<br>');
+}
+RENDER.d_driver = function () {
+  const p = $('#page-d_driver');
+  const rows = ModuleD.applications.filter(a => ['dispatched', 'completed'].includes(a.status) && a.vehicle)
+    .sort((x, y) => (x.startDate + x.startTime).localeCompare(y.startDate + y.startTime));
+  const byDriver = {};
+  rows.filter(a => a.driver).forEach(a => { (byDriver[a.driver] = byDriver[a.driver] || []).push(a); });
+  const selfRows = rows.filter(a => !a.driver);
+  let cards = Object.keys(byDriver).map(did => {
+    const list = byDriver[did];
+    const trs = list.map((a, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>${a.startDate}<br><b style="color:var(--navy);">${a.startTime}</b>${a.endDate !== a.startDate ? `<br><span class="hint">至 ${a.endDate} ${a.endTime}</span>` : `<span class="hint">～${a.endTime}</span>`}</td>
+      <td>${dVehName(a.vehicle)}</td>
+      <td style="text-align:left;">${a.applicant}${a.ext ? `（分機 ${a.ext}）` : ''}｜${a.pax} 人${a.purpose ? `<br><span class="hint">${a.purpose}</span>` : ''}</td>
+      <td style="text-align:left;">${dDriverCargo(a)}</td>
+      <td style="white-space:nowrap;">${a.status === 'completed' ? '<span class="badge b-green">已完成</span>' : `<button class="btn btn-accent btn-sm" data-ddone="${a.id}">完成行程</button>`}</td></tr>`).join('');
+    return `<div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>🚗 駕駛 <b style="color:var(--navy);">${dDrvName(did)}</b></span>
+        <span class="badge b-green">共 ${list.length} 趟</span></div>
+      <div class="card-desc">該駕駛的一般用車任務：用車時段、車輛、<b>使用人</b>與<b>隨行貨物</b>（危險品特別標示，實際處置依公司規定）。</div>
+      <div class="table-wrap"><table class="dt"><thead><tr>
+        <th>順序</th><th>用車時段</th><th>車輛</th><th>使用人／行程</th><th>隨行貨物</th><th>操作</th>
+      </tr></thead><tbody>${trs}</tbody></table></div></div>`;
+  }).join('');
+  if (!cards) cards = `<div class="card"><div class="empty">目前尚無派司機的一般用車任務。於「D｜派車調度」做出「派車＋派司機」判斷後，這裡會依駕駛顯示任務單。</div></div>`;
+  const selfCard = selfRows.length === 0 ? '' : `
+    <div class="card">
+      <div class="card-title">自駕用車（無派司機）· 車輛交接參考</div>
+      <div class="card-desc">「有車沒司機＋使用者勾選自駕」派出的車輛，由使用者自行駕駛（系統不做駕駛資格檢核 G78）。</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>用車時段</th><th>車輛</th><th>使用人</th><th>隨行貨物</th><th>狀態</th></tr></thead><tbody>
+        ${selfRows.map(a => `<tr><td>${a.id}</td><td>${dPeriod(a)}</td><td>${dVehName(a.vehicle)}</td>
+          <td style="text-align:left;">${a.applicant}${a.ext ? `（分機 ${a.ext}）` : ''}｜${a.pax} 人</td>
+          <td style="text-align:left;">${dDriverCargo(a)}</td><td>${stBadge(a.status, 'D')}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`;
+  p.innerHTML = `
+    <div class="section-h">一般用車 · 司機任務單（駕駛）</div>
+    <div class="section-sub">以「駕駛」為單位，依用車時段列出每趟任務：車輛、使用人（分機／人數）、行程說明與隨行貨物；完成後按「完成行程」即釋放車輛與司機回共用資源池。</div>
+    ${cards}
+    ${selfCard}`;
+  $$('#page-d_driver [data-ddone]').forEach(b => b.onclick = confirmThen(
+    { title: '確認行程完成？', text: '確認後此趟用車標記為完成，車輛與司機即釋放回共用資源池。' }, () => {
+      const a = ModuleD.applications.find(x => x.id === b.dataset.ddone);
+      ModuleD.completeTrip(a, dDrvName(a.driver)); toast(`${a.id} 行程完成`, 'ok');
+      RENDER.d_driver(); renderDaList();
+    }));
 };
 
 /* ============================================================
