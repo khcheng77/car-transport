@@ -82,8 +82,7 @@ const NAV = [
   ] },
   { group: '模組 A · 區域內物流', items: [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
-    { id: 'a_review', ico: '🗂', label: 'A｜車次追蹤（業務）' },
-    { id: 'a_dispatch', ico: '🔧', label: 'A｜已排定車次異動（業務）' },
+    { id: 'a_dispatch', ico: '🗂', label: 'A｜車次追蹤／異動（業務）' },
     { id: 'a_route', ico: '🚌', label: 'A｜路線與班次（業務）' },
     { id: 'a_masonry', ico: '🧩', label: 'A｜資訊卡試做（Masonry）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
@@ -106,8 +105,7 @@ const PAGE_META = {
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
-  a_review: { title: '區域內物流 · 車次追蹤（業務單位）', crumb: '模組 A · 調度端 · G18/G20' },
-  a_dispatch: { title: '區域內物流 · 已排定車次異動（業務單位）', crumb: '模組 A · 調度端 · 車次班次/車輛/司機調整' },
+  a_dispatch: { title: '區域內物流 · 車次追蹤／異動（業務單位）', crumb: '模組 A · 調度端 · 追蹤＋車次班次/車輛/司機調整 · G18/G20' },
   a_route: { title: '區域內物流 · 路線與班次（業務單位）', crumb: '模組 A · 調度端 · 固定路線 / 每小時班次（查詢）' },
   a_masonry: { title: '區域內物流 · 資訊卡試做（Masonry）', crumb: '模組 A · label+value 資訊區塊 · 自適應排版 POC' },
   a_driver: { title: '區域內物流 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
@@ -173,7 +171,7 @@ RENDER.dashboard = function () {
     <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">業務單元（申請端 ｜ 主管 ｜ 審核/調度端）</div>
     <div class="grid-3">
       ${unitCard('📝 A｜收貨申請', '使用者填收貨單，送出即自動媒合並告知班次時間與車號；查看狀態、接受排班與交貨確認。', 'a_apply', '申請端')}
-      ${unitCard('🗂 A｜車次追蹤', '追蹤已自動排定車次與交貨狀態（路線班次、駕駛異常回報已各自獨立／整併）。', 'a_review', '審核端')}
+      ${unitCard('🗂 A｜車次追蹤／異動', '追蹤已排定車次、未排入待改期與交貨狀態；並可調整車次的車輛／司機、加移單、駕駛異常回報。', 'a_dispatch', '審核端')}
       ${unitCard('🚌 A｜路線與班次', '獨立單元：各分公司固定 9 站路線與每小時班次／車輛對應查詢。', 'a_route', '審核端')}
       ${unitCard('🧑‍✈️ A｜司機任務單', '駕駛端：以班次（車輛）為單位，沿據點 9 站路線的收送任務、到站時間、接收人。', 'a_driver', '駕駛')}
       ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
@@ -708,7 +706,7 @@ function renderAApplyDetail(p, id) {
     if (rm) rm.onclick = confirmThen({ title: '確認重新媒合？', text: '將依目前貨物內容重新執行自動媒合。' }, () => {
       const r = ModuleA.rematch(a);
       toast(r.ok ? `${a.id} 已媒合：${r.shift.label}／到站約 ${r.arrival}` : `${a.id}｜${r.msg}`, r.ok ? 'ok' : 'err');
-      RENDER.a_apply(); if ($('#ar-tab-review')) renderAr_review();
+      RENDER.a_apply();
     });
   }
   $('#ad-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
@@ -846,64 +844,6 @@ function renderAaItems() { renderCargoGrid('#aa-items', aaItems, true, renderAaI
 function renderAaList() { if ($('#aq-grid')) renderAGrid(); }
 
 /* ============================================================
-   模組 A · 車次追蹤（業務單位）— 已排定車次 / 路線班次 / 異常回報
-   （媒合已於使用者送出時自動完成，本單元不再執行媒合）
-   ============================================================ */
-RENDER.a_review = function () {
-  const p = $('#page-a_review');
-  p.innerHTML = `
-    <div class="section-h">車次追蹤（業務單位）</div>
-    <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合；供業務單位追蹤已排定車次與交貨狀態。<b>路線與班次</b>查詢已獨立為單獨單元；<b>駕駛異常回報</b>整併於「已排定車次異動」的車次明細內。</div>
-    <div style="margin:-4px 0 14px;">
-      <button class="btn btn-ghost btn-sm" id="ar-goto-driver">🧑‍✈️ 查看司機任務單</button>
-      <button class="btn btn-ghost btn-sm" id="ar-goto-route">🚌 路線與班次</button>
-      <button class="btn btn-ghost btn-sm" id="ar-goto-dispatch">🔧 車次異動／異常回報</button>
-    </div>
-    <div id="ar-tab-review"></div>`;
-  $('#ar-goto-driver').onclick = () => goto('a_driver');
-  $('#ar-goto-route').onclick = () => goto('a_route');
-  $('#ar-goto-dispatch').onclick = () => goto('a_dispatch');
-  renderAr_review();
-};
-function renderAr_review() {
-  // 媒合已於使用者送出時自動完成，本頁僅追蹤結果
-  const unsched = ModuleA.applications.filter(a => a.status === 'unscheduled');
-  const unschedCard = unsched.length === 0 ? '' : `
-    <div class="card">
-      <div class="card-title">未排入·待使用者改期 <span class="g-tag">G12/G17</span></div>
-      <div class="card-desc">自動媒合時當日各班次皆裝不下或時間額度已滿，系統已即時提醒該使用者改期（不留候補、不排隔日 G12）。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>原因</th></tr></thead><tbody>
-        ${unsched.map(a => { const st = DB.stations.find(s => s.id === a.station);
-          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td><td class="muted">${a.note || '—'}</td></tr>`; }).join('')}
-      </tbody></table></div>
-    </div>`;
-  $('#ar-tab-review').innerHTML = `
-    <div class="card">
-      <div class="card-title">自動媒合機制 <span class="g-tag">G10–G12/G16/G19</span></div>
-      <div class="card-desc">使用者送出收貨申請後，系統即時執行「時間軸最近班次」媒合：裝得下即排入並同步告知班次時間與車號（G10/G11）；裝不下順延下一班（G17）；當日末班仍不行即提醒改期（G12）。每據點<b>每小時一班</b>，每班次<b>上下貨合計上限 60 分</b>（＝班距）；同班已排各單依<b>送出先後</b>累計，加上本單合計超過 60 分即順延下一班（G16）。無主管核准、無業務按鈕。</div>
-    </div>
-    ${unschedCard}
-    ${renderAr_scheduled()}`;
-}
-// 已排定車次一覽（被安排的車次 + 媒合狀況 + 接受/交貨狀態）
-function renderAr_scheduled() {
-  const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status));
-  const body = rows.length === 0 ? `<div class="empty">尚無已排定車次。使用者送出申請並自動媒合成功後即會出現在此。</div>` : `
-    <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>班次</th><th>車輛</th><th>到站</th></tr></thead><tbody>
-      ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
-        const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
-        const veh = sh ? DB.vehicles.find(v => v.id === sh.vehicle) : null;
-        return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td>
-          <td>${a.serviceDate || '—'}</td>
-          <td>${sh ? sh.label : '—'}</td><td>${veh ? veh.name : '—'}</td><td>${a.arrival || '—'}</td></tr>`; }).join('')}
-    </tbody></table></div>`;
-  return `<div class="card">
-    <div class="card-title">已排定車次一覽</div>
-    <div class="card-desc">媒合成功即完成排班（免確認接受）。顯示每張已排班申請單的班次、車輛與到站時間。</div>
-    ${body}</div>`;
-}
-/* ============================================================
    模組 A · 路線與班次（業務單位）— 獨立單元（查詢）
    自「車次追蹤」拆出：各分公司據點固定 9 站路線 + 每小時班次／車輛對應。
    ============================================================ */
@@ -965,11 +905,12 @@ function openIncidentEditor(a, onDone) {
    ============================================================ */
 let aDispatch = { view: 'list', key: null, query: { date: '', vehicle: '', driver: '', shift: '' } };
 
-// 以「收貨日期＋班次」聚合已排定（matched）的物流申請單為「車次」
+// 以「收貨日期＋班次」聚合已排定的物流申請單為「車次」（含 matched 與 delivered，
+// 交貨後仍可於此追蹤；未排入 unscheduled 另於清單上方追蹤，不聚合成車次）
 function dispatchGroups() {
   const map = {};
   ModuleA.applications
-    .filter(a => a.status === 'matched' && a.assignedShift && a.serviceDate)
+    .filter(a => ['matched', 'delivered'].includes(a.status) && a.assignedShift && a.serviceDate)
     .forEach(a => { const k = a.serviceDate + '|' + a.assignedShift; (map[k] = map[k] || []).push(a); });
   return map;
 }
@@ -990,9 +931,23 @@ function renderADispatchList() {
     ModuleA.logiDrivers().map(d => `<option value="${d.id}" ${q.driver === d.id ? 'selected' : ''}>${d.name}</option>`)).join('');
   const shOpts = ['<option value="">全部班次</option>'].concat(
     DB.regionalShifts.map(s => `<option value="${s.id}" ${q.shift === s.id ? 'selected' : ''}>${brName(s.branch)}·${s.label}</option>`)).join('');
+  // 未排入·待改期（追蹤）：自動媒合失敗的單，不聚合成車次，於清單上方獨立追蹤
+  const unsched = ModuleA.applications.filter(a => a.status === 'unscheduled');
+  const unschedCard = unsched.length === 0 ? '' : `
+    <div class="card">
+      <div class="card-title">未排入·待使用者改期 <span class="g-tag">G12/G17</span></div>
+      <div class="card-desc">自動媒合時當日各班次皆裝不下或時間額度已滿，系統已即時提醒該使用者改期（不留候補、不排隔日 G12）。</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>物品運輸單號</th><th>申請人</th><th>目的地</th><th>原因</th></tr></thead><tbody>
+        ${unsched.map(a => { const st = DB.stations.find(s => s.id === a.station);
+          return `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td><td class="muted">${a.note || '—'}</td></tr>`; }).join('')}
+      </tbody></table></div>
+    </div>`;
   p.innerHTML = `
-    <div class="section-h">已排定車次異動（業務單位）</div>
-    <div class="section-sub">查詢已排定車次，點「細節」進入明細頁調整所屬<b>班次</b>、修改車次的<b>車輛／司機</b>，並<b>新增／移出</b>該班次的申請單。</div>
+    <div class="section-h">車次追蹤／異動（業務單位）</div>
+    <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合。<b>追蹤</b>已排定車次（含已交貨）與未排入待改期；點「細節」進入明細頁調整所屬<b>班次</b>、修改車次的<b>車輛／司機</b>、<b>新增／移出</b>申請單，並進行<b>駕駛異常回報</b>。路線與班次查詢請至獨立單元「路線與班次」。</div>
+    <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="ad-goto-driver">🧑‍✈️ 查看司機任務單</button>
+      <button class="btn btn-ghost btn-sm" id="ad-goto-route">🚌 路線與班次</button></div>
+    ${unschedCard}
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
         <button class="btn btn-primary btn-sm" id="ad-search">🔍 查詢</button></div>
@@ -1007,6 +962,8 @@ function renderADispatchList() {
       <div class="card-title" style="justify-content:space-between;"><span>已排定車次</span><span class="muted" id="ad-count"></span></div>
       <div id="ad-grid"></div>
     </div>`;
+  $('#ad-goto-driver').onclick = () => goto('a_driver');
+  $('#ad-goto-route').onclick = () => goto('a_route');
   $('#ad-search').onclick = () => {
     aDispatch.query = { date: $('#adq-date').value, vehicle: $('#adq-veh').value, driver: $('#adq-drv').value, shift: $('#adq-shift').value };
     renderADispatchGrid();
@@ -1023,7 +980,8 @@ function renderADispatchGrid() {
     const [date, shiftId] = k.split('|');
     const plan = ModuleA.shiftPlan(date, shiftId);
     const sh = DB.regionalShifts.find(s => s.id === shiftId);
-    return { key: k, date, shiftId, sh, plan, n: groups[k].length };
+    const del = groups[k].filter(a => a.status === 'delivered').length;
+    return { key: k, date, shiftId, sh, plan, n: groups[k].length, del };
   }).filter(r =>
     (!q.date || r.date === q.date) &&
     (!q.shift || r.shiftId === q.shift) &&
@@ -1034,14 +992,18 @@ function renderADispatchGrid() {
   $('#ad-count').textContent = `${rows.length} 個車次`;
   box.innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的已排定車次</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>收貨日期</th><th>車輛</th><th>司機</th><th>班次</th><th>單數</th></tr></thead><tbody>
-      ${rows.map(r => `<tr>
+      <th></th><th>收貨日期</th><th>車輛</th><th>司機</th><th>班次</th><th>單數</th><th>交貨狀態</th></tr></thead><tbody>
+      ${rows.map(r => {
+        const badge = r.del === 0 ? '<span class="badge b-amber">待交貨</span>'
+          : r.del === r.n ? '<span class="badge b-green">已全數交貨</span>'
+          : `<span class="badge b-navy">交貨 ${r.del}/${r.n}</span>`;
+        return `<tr>
         <td><button class="btn btn-ghost btn-sm" data-key="${r.key}">細節</button></td>
         <td>${r.date}</td>
         <td><b style="color:var(--navy);">${r.plan.vehicle || '—'}</b>（${vehName(r.plan.vehicle)}）</td>
         <td>${drvName(r.plan.driver)}</td>
         <td>${r.sh ? brName(r.sh.branch) + '·' + r.sh.label : r.shiftId}</td>
-        <td>${r.n}</td></tr>`).join('')}
+        <td>${r.n}</td><td>${badge}</td></tr>`; }).join('')}
     </tbody></table></div>`;
   $$('#ad-grid [data-key]').forEach(b => b.onclick = () => { aDispatch.key = b.dataset.key; aDispatch.view = 'detail'; RENDER.a_dispatch(); });
 }
@@ -1052,14 +1014,18 @@ function renderADispatchDetail() {
   const sh = DB.regionalShifts.find(s => s.id === shiftId);
   if (!sh) { aDispatch.view = 'list'; return RENDER.a_dispatch(); }
   const plan = ModuleA.shiftPlan(date, shiftId);
-  const orders = ModuleA.applications.filter(a => a.status === 'matched' && a.serviceDate === date && a.assignedShift === shiftId);
+  const orders = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status) && a.serviceDate === date && a.assignedShift === shiftId);
   const vehOpts = ModuleA.logiVehicles().map(v => `<option value="${v.id}" ${plan.vehicle === v.id ? 'selected' : ''}>${v.id}（${v.name}）</option>`).join('');
   const drvOpts = ModuleA.logiDrivers().map(d => `<option value="${d.id}" ${plan.driver === d.id ? 'selected' : ''}>${d.name}</option>`).join('');
   const body = orders.length === 0
     ? `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px;">此車次目前沒有申請單，可按右上角「新增」加入。</td></tr>`
     : orders.map(a => { const st = DB.stations.find(s => s.id === a.station);
+        // 已交貨的單不可再移出，改顯示狀態徽章
+        const act = a.status === 'delivered'
+          ? '<span class="badge b-green">已交貨</span>'
+          : `<button class="btn btn-ghost btn-sm" data-del="${a.id}">刪除</button>`;
         return `<tr>
-          <td><button class="btn btn-ghost btn-sm" data-del="${a.id}">刪除</button></td>
+          <td>${act}</td>
           <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
           <td>${a.pickupLoc || '—'}</td><td>${st.name} / ${a.building}</td>
           <td>${itemsSummary(a.items)}</td></tr>`; }).join('');
