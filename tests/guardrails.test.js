@@ -1457,6 +1457,165 @@ group('模組 D 一般用車（G70–G80）', () => {
   });
 });
 
+/* =================================================================
+   模組 E 例行用車 — G90–G99
+   ================================================================= */
+group('模組 E 例行用車（G90–G99）', () => {
+  function eApp(H, o) {
+    return H.ModuleE.createApp(Object.assign({ applicant: '業務部-周雅婷', purpose: '業務部北區業務',
+      startDate: '2026-09-01', endDate: '2026-11-30', needDriver: true }, o || {}));
+  }
+  function lent(H, o, sel) { // 建立並派出一張借用單
+    const a = eApp(H, o); H.ModuleE.approve(a);
+    const r = H.ModuleE.dispatch(a, sel || { vehicle: 'V-B01', driver: 'DR3' });
+    if (!r.ok) throw new Error(r.error);
+    return a;
+  }
+
+  test('G92 欄位：借用單位／用途、起日＋預計歸還日、是否配司機皆必填；不含人數與貨物', () => {
+    const H = fresh(), E = H.ModuleE;
+    const good = { applicant: 'A', purpose: '用途', startDate: '2026-09-01', endDate: '2026-11-30', needDriver: false };
+    eq(E.validate(good).length, 0);
+    ok(E.validate(Object.assign({}, good, { purpose: ' ' })).some(e => e.includes('用途')), '用途說明必填');
+    ok(E.validate(Object.assign({}, good, { endDate: '' })).some(e => e.includes('預計歸還日')), '不可只填起日');
+    ok(E.validate(Object.assign({}, good, { endDate: '2026-08-01' })).some(e => e.includes('不可早於')), '歸還日不可早於起日');
+    ok(E.validate(Object.assign({}, good, { needDriver: null })).some(e => e.includes('配司機')), '是否配司機必填');
+    const a = E.createApp(good);
+    ok(!('pax' in a) && !('items' in a), '借用單不含人數與隨行貨物');
+    ok(/^RT\d{3}$/.test(a.id), '單號前綴 RT');
+  });
+
+  test('G93 先簽核後調度；調度確認前可撤回修改（重送須重新簽核）', () => {
+    const H = fresh(), E = H.ModuleE;
+    const a = eApp(H);
+    ok(!E.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '未簽核不可派車');
+    E.approve(a); ok(E.withdrawToEdit(a)); eq(a.status, 'draft');
+    E.resubmit(a, Object.assign({}, a, { endDate: '2026-12-31' }));
+    eq(a.status, 'submitted'); ok(!E.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '重送後須重新簽核');
+  });
+
+  test('G94 派車矩陣：沿用一般用車，欄位為是否需要配司機；不進候補', () => {
+    const H = fresh(), E = H.ModuleE;
+    eq(E.matrixOutcome('withDriver', true), 'withDriver'); eq(E.matrixOutcome('withDriver', false), 'withDriver');
+    eq(E.matrixOutcome('vehicleOnly', false), 'noDriver'); eq(E.matrixOutcome('vehicleOnly', true), 'noVehicle');
+    eq(E.matrixOutcome('none', false), 'noVehicle'); eq(E.matrixOutcome('none', true), 'noVehicle');
+    // 有車沒司機：所有司機起日請假
+    ['DR3', 'DR4', 'DR5', 'DR6'].forEach(d => H.DB.driverLeaves.push({ driver: d, date: '2026-09-01', from: '08:00', to: '18:00', type: '全天' }));
+    const a = eApp(H, { needDriver: false }); E.approve(a);
+    eq(E.resourceState(a), 'vehicleOnly');
+    const r = E.dispatch(a, { vehicle: 'V-B01' }); eq(r.outcome, 'noDriver'); eq(a.status, 'active'); eq(a.driver, null);
+    const b = eApp(H, { needDriver: true }); E.approve(b);
+    const r2 = E.dispatch(b, { vehicle: 'V-B04' }); eq(r2.outcome, 'noVehicle'); eq(b.status, 'noVehicle');
+    eq(b.segments.length, 0, '無車可派不建立指派區間、不佔用資源');
+  });
+
+  test('G91 共用池：例行用車佔用整段借用期間，一般用車／差旅共乘皆不可重複指派', () => {
+    const H = fresh(), E = H.ModuleE, D = H.ModuleD, C = H.ModuleC;
+    lent(H);
+    const g = D.createApp({ applicant: 'X', startDate: '2026-10-05', startTime: '09:00', endDate: '2026-10-05', endTime: '10:00', pax: 1, selfDrive: false });
+    D.approve(g);
+    eq(D.vehicleBusy('V-B01', g).type, 'E'); eq(D.driverBusy('DR3', g).type, 'E');
+    ok(!D.dispatch(g, { vehicle: 'V-B01', driver: 'DR4' }).ok, '一般用車不可派 E 借出的車');
+    const c = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-09-10', earliestPickup: '09:00',
+      returnDate: '2026-09-10', earliestReturn: '16:00', pax: 6, applicant: 'Y', dept: 'D', ext: '1' });
+    C.approve(c); C.runBatch('2026-09-09', 't');
+    ok(c.vehicle !== 'V-B01', `差旅共乘不可指派 E 借出的 V-B01（實得 ${c.vehicle}/${c.status}）`);
+  });
+
+  test('G91 反向：借用期間內已被差旅共乘／一般用車佔用的車，例行用車不可派（先佔先贏）', () => {
+    const H = fresh(), E = H.ModuleE, D = H.ModuleD, C = H.ModuleC;
+    const c = C.createApp({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1', departDate: '2026-10-10', earliestPickup: '08:00',
+      returnDate: '2026-10-10', earliestReturn: '', pax: 1, applicant: 'X', dept: 'D', ext: '1' });
+    c.status = 'matched'; c.vehicle = 'V-B01'; c.driver = 'DR3';
+    const g = D.createApp({ applicant: 'X', startDate: '2026-11-20', startTime: '09:00', endDate: '2026-11-20', endTime: '10:00', pax: 1, selfDrive: false });
+    D.approve(g); D.dispatch(g, { vehicle: 'V-B04', driver: 'DR6' });
+    const a = eApp(H); E.approve(a);
+    const r = E.resources(a);
+    eq(r.vehicles.find(x => x.v.id === 'V-B01').busy.type, 'C', '借用期間中間一天被 C 佔用即不可');
+    eq(r.vehicles.find(x => x.v.id === 'V-B04').busy.type, 'D');
+    ok(!E.dispatch(a, { vehicle: 'V-B01', driver: 'DR4' }).ok);
+  });
+
+  test('G98 保修／請假：起日當天者不可派，借用中途者僅提示（屆時換車換司機）', () => {
+    const H = fresh(), E = H.ModuleE;
+    const mid = eApp(H, { startDate: '2026-08-15', endDate: '2026-10-15' }); E.approve(mid);
+    const r = E.resources(mid);
+    const b02 = r.vehicles.find(x => x.v.id === 'V-B02'), dr4 = r.drivers.find(x => x.d.id === 'DR4');
+    eq(b02.busy, null, '中途保修不擋派車'); ok(b02.warn && b02.warn.includes('2026-08-27'), '中途保修應提示');
+    eq(dr4.busy, null); ok(dr4.warn, '中途請假應提示');
+    const atStart = eApp(H, { startDate: '2026-08-28', endDate: '2026-10-31' }); E.approve(atStart);
+    eq(E.resources(atStart).vehicles.find(x => x.v.id === 'V-B02').busy.type, 'maint', '起日保修中不可派');
+  });
+
+  test('G95 換車／換司機：新增指派區間、保留歷史、生效日瞬間切換不重疊', () => {
+    const H = fresh(), E = H.ModuleE, D = H.ModuleD;
+    const a = lent(H);
+    ok(E.reassign(a, { vehicle: 'V-B04', effective: '2026-09-20', reason: '車輛維護' }).ok);
+    ok(E.reassign(a, { driver: 'DR6', effective: '2026-10-15', reason: '司機請假' }).ok);
+    eq(a.segments.map(s => `${s.from}~${E.segEnd(a, s)} ${s.vehicle}/${s.driver}`).join(' | '),
+      '2026-09-01~2026-09-19 V-B01/DR3 | 2026-09-20~2026-10-14 V-B04/DR3 | 2026-10-15~2026-11-30 V-B04/DR6', '對照規格 §7.2 範例');
+    eq(a.vehicle, 'V-B04'); eq(a.driver, 'DR6');
+    ok(E.holder('vehicle', 'V-B01', ['2026-09-19']), '09-19 仍為 V-B01');
+    ok(!E.holder('vehicle', 'V-B01', ['2026-09-20']), '09-20 起 V-B01 釋放（無重疊）');
+    const g = D.createApp({ applicant: 'X', startDate: '2026-10-01', startTime: '09:00', endDate: '2026-10-01', endTime: '10:00', pax: 1, selfDrive: false });
+    D.approve(g); eq(D.vehicleBusy('V-B01', g), null, '換車後舊車可被其他模組使用');
+    eq(E.mailsOf(a).map(m => m.kind).join(','), 'result,reassign,reassign', '換車換司機皆發通知（G99）');
+  });
+
+  test('G95 換車防呆：新資源須自生效日起無他人佔用；需配司機者不可取消司機', () => {
+    const H = fresh(), E = H.ModuleE;
+    const a = lent(H);
+    const b = lent(H, { applicant: '研發部-吳承恩', startDate: '2026-10-01', endDate: '2026-10-31' }, { vehicle: 'V-B04', driver: 'DR6' });
+    ok(!E.reassign(a, { vehicle: 'V-B04', effective: '2026-09-20', reason: 'x' }).ok, 'V-B04 於 10 月被 RT002 借用 → 不可換');
+    ok(!E.reassign(a, { driver: null, effective: '2026-09-20', reason: 'x' }).ok, '需配司機不可取消司機');
+    ok(!E.reassign(a, { vehicle: 'V-B03', effective: '2026-08-01', reason: 'x' }).ok, '生效日不可早於本區間起日');
+    ok(!E.reassign(a, { vehicle: 'V-B03', effective: '2026-09-20' }).ok, '須填原因');
+    eq(a.segments.length, 1, '失敗時不新增區間'); eq(b.status, 'active');
+  });
+
+  test('G96 展延：需重新簽核；核准後延長佔用；展延期間被佔用則不可申請／核准', () => {
+    const H = fresh(), E = H.ModuleE, D = H.ModuleD;
+    const a = lent(H);
+    ok(!E.requestExtension(a, '2026-11-15', 'x').ok, '新歸還日須晚於原歸還日');
+    ok(E.requestExtension(a, '2026-12-31', '專案延長').ok);
+    eq(a.endDate, '2026-11-30', '簽核前不變更'); ok(!E.holder('vehicle', 'V-B01', ['2026-12-15']), '待簽核期間不佔用展延日');
+    ok(!E.requestExtension(a, '2027-01-31', 'y').ok, '同時只能一筆待簽核');
+    // 簽核前他人先佔展延期間的車 → 核准失敗（先佔先贏）
+    const g = D.createApp({ applicant: 'X', startDate: '2026-12-20', startTime: '09:00', endDate: '2026-12-20', endTime: '10:00', pax: 1, selfDrive: false });
+    D.approve(g); ok(D.dispatch(g, { vehicle: 'V-B01', driver: 'DR4' }).ok, '展延尚未核准，D 可先佔');
+    ok(!E.approveExtension(a, 'ok').ok, '展延期間已被佔用 → 不可核准');
+    ok(E.rejectExtension(a, '車輛已被預約').ok); eq(a.extensions[0].status, 'rejected'); eq(a.pendingExt, null);
+    ok(!E.requestExtension(a, '2026-12-31', 'z').ok, '展延期間有衝突 → 申請即擋');
+    ok(E.requestExtension(a, '2026-12-15', '縮短展延').ok);
+    ok(E.approveExtension(a, 'ok').ok); eq(a.endDate, '2026-12-15');
+    ok(E.holder('vehicle', 'V-B01', ['2026-12-10']), '核准後延長佔用');
+  });
+
+  test('G97 歸還／提前歸還：免簽核、自歸還日起立即釋放；待簽核展延一併撤銷', () => {
+    const H = fresh(), E = H.ModuleE, C = H.ModuleC;
+    const a = lent(H);
+    E.requestExtension(a, '2026-12-31', '延長');
+    ok(!E.returnLoan(a, '2026-08-01', 'u').ok, '歸還日須在借用期間內');
+    const r = E.returnLoan(a, '2026-10-20', '業務部-周雅婷');
+    ok(r.ok && r.early, '提前歸還'); eq(a.status, 'returned');
+    ok(E.holder('vehicle', 'V-B01', ['2026-10-19']), '歸還前一日仍佔用');
+    ok(!E.holder('vehicle', 'V-B01', ['2026-10-20']), '歸還日起釋放');
+    eq(a.pendingExt, null); eq(a.extensions[0].status, 'withdrawn');
+    ok(!E.canCancel(a) && !E.canWithdrawToEdit(a), '調度確認後改以歸還結束，不可撤回修改');
+    const c = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-10-21', earliestPickup: '09:00',
+      returnDate: '2026-10-21', earliestReturn: '16:00', pax: 6, applicant: 'Y', dept: 'D', ext: '1' });
+    C.approve(c); C.runBatch('2026-10-20', 't');
+    eq(c.vehicle, 'V-B01', '歸還後差旅共乘即可指派 V-B01');
+  });
+
+  test('G90 獨立模組：例行用車單不進一般用車／差旅共乘清單', () => {
+    const H = fresh();
+    lent(H);
+    eq(H.ModuleD.applications.length, 0); eq(H.ModuleC.applications.length, 0);
+    eq(H.ModuleE.applications.length, 1);
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

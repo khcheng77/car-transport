@@ -133,10 +133,16 @@ const ModuleD = {
 
   /* ---- 共用資源池佔用判斷（G71/G72）----
      與差旅共乘：以「日」為單位，沿用模組 C 自己排班時的佔用口徑（matched/boarded/completed 的整趟日期）；
+     與例行用車（模組 E）：以「日」為單位，依借用單的指派區間歷史（G91/G95）；
      一般用車彼此：以實際起訖時段重疊判斷。保修（G60）與請假（G61）同樣適用。 */
   C_HOLD: ['matched', 'boarded', 'completed'],
   _cApps() { return (typeof ModuleC !== 'undefined') ? ModuleC.applications : []; },
   _overlap(a, b) { return a.start < b.end && b.start < a.end; },
+  _eHold(kind, id, dates) {
+    if (typeof ModuleE === 'undefined') return null;
+    const h = ModuleE.holder(kind, id, dates);
+    return h ? { type: 'E', ref: h.app.id, text: `例行用車 ${h.app.id} 借用中（${h.seg.from}~${ModuleE.segEnd(h.app, h.seg)}）` } : null;
+  },
 
   vehicleBusy(vId, app) {
     const dates = this.datesOf(app), sp = this.span(app);
@@ -145,6 +151,8 @@ const ModuleD = {
     const c = this._cApps().find(x => this.C_HOLD.includes(x.status) && x.vehicle === vId
       && ModuleC.tripDates(x).some(dt => dates.includes(dt)));
     if (c) return { type: 'C', ref: c.id, text: `差旅共乘 ${c.id} 佔用（${c.departDate}）` };
+    const e = this._eHold('vehicle', vId, dates);
+    if (e) return e;
     const d = this.applications.find(x => x.id !== app.id && x.status === 'dispatched' && x.vehicle === vId
       && this._overlap(sp, this.span(x)));
     if (d) return { type: 'D', ref: d.id, text: `一般用車 ${d.id} 佔用（${d.startDate} ${d.startTime}~${d.endDate} ${d.endTime}）` };
@@ -158,6 +166,8 @@ const ModuleD = {
     const c = this._cApps().find(x => this.C_HOLD.includes(x.status) && x.driver === dId
       && ModuleC.tripDates(x).some(dt => dates.includes(dt)));
     if (c) return { type: 'C', ref: c.id, text: `差旅共乘 ${c.id} 任務（${c.departDate}）` };
+    const e = this._eHold('driver', dId, dates);
+    if (e) return e;
     const d = this.applications.find(x => x.id !== app.id && x.status === 'dispatched' && x.driver === dId
       && this._overlap(sp, this.span(x)));
     if (d) return { type: 'D', ref: d.id, text: `一般用車 ${d.id} 任務（${d.startDate} ${d.startTime}~${d.endDate} ${d.endTime}）` };

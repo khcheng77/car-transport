@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>例行用車模組 — 需求討論報告 v1</title>
+<style>
+  :root {
+    --ink: #1f2430;
+    --ink-soft: #4a5164;
+    --line: #dde1e8;
+    --bg: #ffffff;
+    --bg-alt: #f6f7f9;
+    --accent: #2c5282;
+    --accent-soft: #ebf2fa;
+    --good: #2f6f4f;
+    --good-bg: #eaf5ee;
+    --warn: #9a5b13;
+    --warn-bg: #fbf1e3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    background: var(--bg-alt);
+    line-height: 1.75;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    background: var(--bg);
+    padding: 48px 56px 80px;
+    min-height: 100vh;
+  }
+  header.doc-header {
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 20px;
+    margin-bottom: 36px;
+  }
+  header.doc-header .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  header.doc-header h1 {
+    font-size: 28px;
+    margin: 8px 0 6px;
+  }
+  header.doc-header .meta {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  nav.toc {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 24px;
+    margin-bottom: 40px;
+    font-size: 14.5px;
+  }
+  nav.toc h2 {
+    font-size: 14px;
+    margin: 0 0 10px;
+    color: var(--ink-soft);
+    letter-spacing: 0.03em;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 32px;
+  }
+  nav.toc li { margin-bottom: 4px; break-inside: avoid; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 20px;
+    border-left: 5px solid var(--accent);
+    padding-left: 12px;
+    margin: 0 0 18px;
+  }
+  h3 {
+    font-size: 16.5px;
+    margin: 26px 0 10px;
+    color: var(--ink);
+  }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 14px 0 22px;
+  }
+  caption {
+    text-align: left;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    caption-side: top;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--accent-soft);
+    font-weight: 700;
+    color: var(--accent);
+  }
+  tr:nth-child(even) td { background: #fbfbfc; }
+
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+  }
+  .badge.decided { background: var(--good-bg); color: var(--good); }
+  .badge.provisional { background: var(--warn-bg); color: var(--warn); }
+
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    margin: 16px 0;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-bg);
+  }
+  .callout strong { color: var(--accent); }
+  .callout.warn strong { color: var(--warn); }
+
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin: 18px 0 24px;
+    font-size: 13.5px;
+  }
+  .flow .step {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 120px;
+    text-align: center;
+    font-weight: 600;
+  }
+  .flow .arrow {
+    color: var(--ink-soft);
+    font-size: 16px;
+  }
+
+  .matrix-highlight-yes { background: var(--good-bg) !important; color: var(--good); font-weight: 700; }
+  .matrix-highlight-no { background: var(--warn-bg) !important; color: var(--warn); font-weight: 700; }
+
+  .timeline {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 16px 0 22px;
+  }
+  .timeline .seg {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .timeline .seg:last-child { border-bottom: none; }
+  .timeline .seg .range {
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+    font-size: 13px;
+    min-width: 190px;
+  }
+  .timeline .seg .who {
+    font-weight: 700;
+  }
+  .timeline .seg .tag {
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .qa {
+    border-bottom: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  .qa:last-child { border-bottom: none; }
+  .qa .q { font-weight: 700; margin-bottom: 4px; }
+  .qa .q::before { content: "Q： "; color: var(--accent); }
+  .qa .a::before { content: "A： "; color: var(--ink-soft); font-weight: 700; }
+  .qa .rationale {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    padding-left: 20px;
+    border-left: 2px solid var(--line);
+  }
+
+  code {
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+  }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 28px 18px 60px; }
+    nav.toc ol { columns: 1; }
+    header.doc-header h1 { font-size: 22px; }
+    .timeline .seg { flex-wrap: wrap; }
+    .timeline .seg .range { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header">
+    <div class="eyebrow">車輛派遣系統整合案 · 第五模組需求討論報告</div>
+    <h1>例行用車模組</h1>
+    <div class="meta">
+      版本 v1　｜　討論日期 2026-09-23　｜　狀態：核心決策已定案，待進入實作規劃　｜　所屬專案：車輛派遣系統整合案（khcheng77/car-transport）
+    </div>
+  </header>
+
+  <nav class="toc">
+    <h2>目錄</h2>
+    <ol>
+      <li><a href="#scope">1. 模組定位與範疇</a></li>
+      <li><a href="#resource">2. 資源池與佔用規則</a></li>
+      <li><a href="#flow">3. 申請與簽核流程</a></li>
+      <li><a href="#application">4. 申請單欄位規格</a></li>
+      <li><a href="#matrix">5. 派車判斷矩陣</a></li>
+      <li><a href="#vehicle">6. 車型指派邏輯</a></li>
+      <li><a href="#reassign">7. 借用期間換車／換司機</a></li>
+      <li><a href="#lifecycle">8. 借用單生命週期：展延與歸還</a></li>
+      <li><a href="#notify">9. 通知機制</a></li>
+      <li><a href="#summary">10. 決策摘要表</a></li>
+      <li><a href="#qa">11. Q&amp;A 討論紀錄</a></li>
+      <li><a href="#glossary">12. 名詞表</a></li>
+      <li><a href="#open">13. 待辦與未決事項</a></li>
+    </ol>
+  </nav>
+
+  <section id="scope">
+    <h2>1. 模組定位與範疇</h2>
+    <p>
+      「例行用車」是車輛派遣系統新增的<strong>第五個獨立模組</strong>，與既有四模組（差旅共乘、區域內物流、南北幹線、一般用車）並列。
+      用途是<strong>長期撥用</strong>一台車（與視需要配的司機）給特定單位使用——一次借用一個月到數個月不等，
+      本質上跟一般用車一樣是「使用者申請 → 調度人工確認資源可用性 → 派車」，差別只在<strong>佔用時長</strong>：
+      一般用車是幾小時到多天的單次任務，例行用車是以月為單位的長期撥用。
+    </p>
+    <div class="callout">
+      <strong>為何獨立成第五模組，而不是一般用車底下的子類型：</strong>
+      雖然申請流程、簽核機制、派車矩陣都與一般用車相通，但「長期佔用」衍生出一般用車完全沒有的生命週期管理需求——
+      借用期間中途換車換司機、展延、提前歸還——這些都需要額外的狀態與規則設計。硬塞進一般用車底下，
+      會讓原本單純的「申請→派車→結束」流程背負這些長期借用專屬的複雜度，因此設計為獨立模組。
+    </div>
+    <table>
+      <caption>五模組定位對照</caption>
+      <thead>
+        <tr><th>模組</th><th>核心邏輯</th><th>資源池</th><th>佔用時長</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>差旅共乘</td><td>自動同路線併車媒合</td><td>與一般用車、例行用車共用</td><td>單趟</td></tr>
+        <tr><td>一般用車</td><td>人工資源確認＋派車</td><td>與差旅共乘、例行用車共用</td><td>數小時～數天</td></tr>
+        <tr><td><strong>例行用車（本文件）</strong></td><td>人工資源確認＋派車，含長期生命週期管理</td><td>與差旅共乘、一般用車共用</td><td>一個月～數個月</td></tr>
+        <tr><td>區域內物流</td><td>固定循環路線裝載</td><td>獨立</td><td>—</td></tr>
+        <tr><td>南北幹線</td><td>貪婪端點演算法</td><td>獨立</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="resource">
+    <h2>2. 資源池與佔用規則</h2>
+    <p>
+      例行用車與差旅共乘、一般用車<strong>共用同一批車輛與司機資源池</strong>（區域內物流、南北幹線維持各自獨立池不變）。
+      這與一般用車的資源池決策一致——例行用車搶用的是同一批人車資源，不需要另闢一個獨立池。
+    </p>
+    <div class="callout warn">
+      <strong>共用池下的長期佔用風險：</strong>一台車一旦被例行用車借走一個月以上，
+      在這段區間內對差旅共乘、一般用車而言就是「不可用」。這是刻意的設計結果，不是漏洞——
+      例行用車申請走同一套簽核與人工調度判斷，佔用與否本來就該由調度綜合考量車輛庫存後決定，
+      不需要為此另外設計「保留一部分車輛給短期用車」之類的配額機制。
+    </div>
+    <h3>2.1　佔用判定原則：先佔先贏</h3>
+    <p>
+      與一般用車相同，車輛／司機在某時段一旦被<strong>任一模組</strong>確定佔用，其他模組在做媒合／派車判斷時都必須讀到「已被佔用」，
+      不能重複指派。<strong>不設模組間優先權</strong>，純粹以派出／確認的時間先後決定。
+    </p>
+    <h3>2.2　撤回即釋放；提前歸還亦即釋放</h3>
+    <p>
+      申請在調度確認前被撤回時，原本佔用的時段立刻釋放回資源池。例行用車額外多一種釋放情境：
+      借用單<strong>提前歸還</strong>時，車輛／司機也立刻釋放回資源池（詳見第 8 節）。
+    </p>
+  </section>
+
+  <section id="flow">
+    <h2>3. 申請與簽核流程</h2>
+    <div class="flow">
+      <div class="step">① 使用者送出申請</div>
+      <span class="arrow">→</span>
+      <div class="step">② 主管簽核</div>
+      <span class="arrow">→</span>
+      <div class="step">③ 調度確認資源</div>
+      <span class="arrow">→</span>
+      <div class="step">④ 派車結果</div>
+      <span class="arrow">→</span>
+      <div class="step">⑤ Email 通知</div>
+    </div>
+    <p>
+      流程與一般用車<strong>完全相同</strong>，沿用同一套簽核機制（既有核准者關係表），不因為是長期借用而另加簽或拉高簽核層級。
+      簽核在調度判斷之前：申請送出後先走簽核，簽核通過才進入調度人工判斷資源池可用性的階段。
+    </p>
+    <div class="callout">
+      <strong>展延與提前歸還不是新申請：</strong>本節描述的是借用單的「首次申請」流程。展延（延長借用）與提前歸還屬於借用單
+      成立後的生命週期事件，各自的簽核要求見第 8 節，不完全套用本節流程。
+    </div>
+  </section>
+
+  <section id="application">
+    <h2>4. 申請單欄位規格</h2>
+    <p>
+      例行用車申請單欄位<strong>比一般用車精簡</strong>：不含人數、隨行貨物明細。原因是這些欄位描述的是「單次任務的乘載內容」，
+      而例行用車申請的是「長期撥用資源本身」，實際借用期間怎麼用車由借用單位自行安排，不需要在申請單上預先申報。
+    </p>
+    <table>
+      <caption>例行用車申請單欄位</caption>
+      <thead>
+        <tr><th>欄位</th><th>必填</th><th>說明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>借用單位／用途說明</td><td>必填</td><td>文字描述借用單位與用途；若對車型有特殊需求（例如需固定某種車型跑業務），也寫在這裡供調度人工判斷時參考，不另設獨立車型欄位</td></tr>
+        <tr><td>預計借用起訖日期</td><td>必填</td><td>明確起始日＋預計歸還日；作為調度查詢資源池可用性、以及其他模組判斷該車何時釋放的必要輸入</td></tr>
+        <tr><td>是否需要配司機</td><td>必填（勾選）</td><td>對應一般用車的「自駕」概念，但改用「是否需要配司機」的說法更貼近長期借用的語境；不需要司機則借用單位自行安排駕駛</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>與一般用車申請單的差異：</strong>不含「人數」「隨行貨物明細」兩項。例行用車不是描述單一趟次的乘載內容，
+      因此不比照既有物流運輸申請單規格。
+    </div>
+  </section>
+
+  <section id="matrix">
+    <h2>5. 派車判斷矩陣</h2>
+    <p>沿用一般用車同一套「車輛狀態 × 是否需要配司機」判斷矩陣，邏輯完全相同，只是欄位說法從「自駕」改為「是否需要配司機」：</p>
+    <table>
+      <caption>派車判斷矩陣</caption>
+      <thead>
+        <tr><th>車輛狀態</th><th>不需要配司機</th><th>需要配司機</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>有車有司機</td>
+          <td class="matrix-highlight-yes">派車＋派司機</td>
+          <td class="matrix-highlight-yes">派車＋派司機</td>
+        </tr>
+        <tr>
+          <td>有車沒司機</td>
+          <td class="matrix-highlight-yes">派車（借用單位自行安排駕駛）</td>
+          <td class="matrix-highlight-no">告知無車可派</td>
+        </tr>
+        <tr>
+          <td>沒車</td>
+          <td class="matrix-highlight-no">告知無車可派</td>
+          <td class="matrix-highlight-no">告知無車可派</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>不進候補：</strong>與一般用車一致，「有車沒司機＋需要配司機」判定為無車可派時，不轉入候補機制，
+      直接告知借用單位、資源立即釋放。時長差異不影響這條規則——即使長期借用天生就要等，也不因此特別開放候補。
+    </div>
+  </section>
+
+  <section id="vehicle">
+    <h2>6. 車型指派邏輯</h2>
+    <p>
+      沿用一般用車、南北幹線既有原則：<strong>調度人員人工判斷指派</strong>，不設獨立的「指定車型」欄位供借用單位挑選。
+    </p>
+    <div class="callout">
+      <strong>為何不給例行用車特殊的車型指定權：</strong>車型庫存是共用資源池的一部分，指派邏輯必須跨模組保持一致。
+      若讓例行用車能指定車型，等於給長期借用特權去挑車，會排擠一般用車與差旅共乘可用的車輛選擇。
+      借用單位若有特殊車型需求，寫在申請單的「借用單位／用途說明」欄位裡，由調度人工判斷時一併考量即可。
+    </div>
+  </section>
+
+  <section id="reassign">
+    <h2>7. 借用期間換車／換司機</h2>
+    <p>
+      這是例行用車獨有、一般用車沒有的機制。長期借用期間動輒一到數個月，中途因車輛維護、司機請假等調度端才知道的營運狀況而需要換車或換司機，
+      是可預期的常態而非例外。
+    </p>
+    <h3>7.1　發起權限：僅限調度人員</h3>
+    <p>
+      換車／換司機<strong>只能由調度人員發起</strong>，借用單位（使用者）不能自己申請換車。
+      換車換司機的原因是調度端才掌握的營運狀況，借用單位通常不需要、也不該涉入判斷，只要結果通知到人即可。
+    </p>
+    <h3>7.2　保留完整區間歷史，不覆蓋</h3>
+    <p>
+      每次換車／換司機，借用單底下都<strong>新增一筆指派區間記錄</strong>（車輛／司機＋生效起訖時間），而不是直接覆蓋舊資料。
+      借用單因此掛著一組完整的指派歷史，可以查出「這台車在哪段時間內是被這張借用單佔用」。
+    </p>
+    <div class="timeline">
+      <div class="seg">
+        <span class="range">09/01 － 09/20</span>
+        <span class="who">車輛 A　／　司機甲</span>
+        <span class="tag">原始指派</span>
+      </div>
+      <div class="seg">
+        <span class="range">09/20 － 10/15</span>
+        <span class="who">車輛 B　／　司機甲</span>
+        <span class="tag">換車（車輛維護）</span>
+      </div>
+      <div class="seg">
+        <span class="range">10/15 － 11/30（預計歸還）</span>
+        <span class="who">車輛 B　／　司機乙</span>
+        <span class="tag">換司機（請假）</span>
+      </div>
+    </div>
+    <p>
+      這個歷史記錄的用途不只是稽核：共用資源池要正確判斷某車某時段是否被佔用，也必須看到完整區間，而非只看借用單「目前」指派的車輛。
+    </p>
+    <h3>7.3　切換方式：瞬間切換，不設交接重疊區間</h3>
+    <p>
+      換車／換司機在資料層面採<strong>同一時間點瞬間切換</strong>——舊車輛／司機的區間在切換時間點結束，新車輛／司機的區間同一時間點開始，
+      不設計「舊車新車同時顯示佔用」的重疊區間。
+    </p>
+    <div class="callout">
+      <strong>為何不做重疊區間：</strong>系統要處理的是資源佔用判定，不是實體交車的時間管理。
+      若換車前需要準備時間（例如提前跟司機講、提前把新車開過去），那是調度人員自行在時間安排上抓緩衝的事，
+      不需要系統去建模「重疊佔用」這種邊緣狀態，徒增共用資源池判斷邏輯的複雜度。
+    </div>
+  </section>
+
+  <section id="lifecycle">
+    <h2>8. 借用單生命週期：展延與歸還</h2>
+    <h3>8.1　申請時須填明確預計歸還日期</h3>
+    <p>
+      借用單申請時必須填寫明確的<strong>預計歸還日期</strong>，不允許只填起始日、不設終點。
+      共用資源池需要一個明確的「這台車預計何時會回到池子裡」的資訊，供差旅共乘、一般用車做未來時段的可用性判斷；
+      若一開始不填終點，資源池就完全看不到這台車何時釋放，其他模組無從安排。
+    </p>
+    <h3>8.2　展延：延長預計歸還日，需重新簽核</h3>
+    <p>
+      實際用車時間需要延長時，走「展延」機制調整預計歸還日期，<strong>需要重新走一次簽核</strong>。
+      展延本質上是延長對共用資源的獨占，跟原始申請一樣需要主管把關，沿用同一套簽核機制。
+    </p>
+    <h3>8.3　提前歸還：不需簽核，可直接觸發</h3>
+    <p>
+      借用單還沒到預計歸還日，借用單位就想提前把車還回去時，<strong>不需要簽核</strong>，使用者或調度可直接操作結束借用單，
+      車輛／司機立即釋放回資源池。
+    </p>
+    <div class="callout">
+      <strong>展延與提前歸還的簽核力度為何不同：</strong>兩者對資源池的影響方向相反——展延是延長獨占，方向與「多佔用資源」一致，
+      需要跟原始申請一樣的把關；提前歸還是釋放資源回去給其他模組用，方向是「還給大家」，不應該讓簽核卡在中間拖慢釋放速度，
+      這也符合「撤回即釋放」一貫的原則。
+    </div>
+  </section>
+
+  <section id="notify">
+    <h2>9. 通知機制</h2>
+    <p>
+      派車結果透過既有 email 通知路由機制通知借用單位，與一般用車相同。
+      例行用車額外多一個通知觸發點：<strong>換車／換司機發生時也要發送通知</strong>，沿用同一套 email 路由機制，不新建通知管道。
+    </p>
+    <div class="callout">
+      <strong>為何換車換司機也要通知：</strong>借用單位得知道實際來的是哪台車、哪位司機才能配合交接。
+      若中途換了車卻不通知，借用單位可能還在等原本那台車、聯絡原本那位司機，造成實際運作上的落差。
+    </div>
+  </section>
+
+  <section id="summary">
+    <h2>10. 決策摘要表</h2>
+    <table>
+      <thead>
+        <tr><th>決策項目</th><th>決定</th><th>狀態</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>模組定位</td><td>獨立第五模組（非一般用車子類型）</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>資源池</td><td>與差旅共乘、一般用車共用；物流兩模組獨立</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>佔用判定</td><td>先佔先贏，不分模組優先權</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>換車／換司機發起權</td><td>僅限調度人員，借用單位不可自行申請</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>換車／換司機記錄方式</td><td>保留完整區間歷史，不覆蓋舊資料</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>換車／換司機切換方式</td><td>瞬間切換，不設交接重疊區間</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>簽核流程</td><td>沿用一般用車同一套機制，不另加簽</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>借用單終點</td><td>申請時須填明確預計歸還日期</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>展延</td><td>調整預計歸還日，需重新走簽核</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>提前歸還</td><td>不需簽核，可直接觸發並立即釋放資源</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>申請單欄位</td><td>借用單位／用途說明＋預計起訖日期＋是否需要配司機；不含人數與貨物明細</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>派車判斷矩陣</td><td>沿用一般用車同一套「車輛狀態 × 是否配司機」矩陣，不進候補</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>車型指派</td><td>調度人工判斷，不設獨立指定車型欄位</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>通知機制</td><td>沿用既有 email 路由機制；換車換司機也發通知</td><td><span class="badge decided">已定案</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="qa">
+    <h2>11. Q&amp;A 討論紀錄</h2>
+
+    <div class="qa">
+      <div class="q">例行用車是獨立的第五模組，還是一般用車底下的一種申請子類型？</div>
+      <div class="a">獨立的第五模組。</div>
+      <div class="rationale">申請流程、簽核、矩陣都相通，但長期佔用衍生出換車換司機、展延、提前歸還等一般用車沒有的生命週期管理需求，獨立模組較清楚。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">例行用車要不要跟一般用車、差旅共乘共用同一批車輛／司機資源池？</div>
+      <div class="a">共用。</div>
+      <div class="rationale">與一般用車的共用池決策一致，本質上都是搶用同一批人車資源。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">借用期間車輛維護或司機請假需要換車換司機時，要能更改這些資料嗎？</div>
+      <div class="a">要，這是例行用車獨有的機制，需要另外設計。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">換車／換司機由誰發起？</div>
+      <div class="a">只有調度人員，使用者不能自己換。</div>
+      <div class="rationale">換車換司機的原因是調度端才知道的營運狀況，借用單位不需要、也不該涉入判斷。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">換車／換司機時，是直接覆蓋成新車輛／新司機，還是要保留完整的區間歷史記錄？</div>
+      <div class="a">保留區間歷史記錄。</div>
+      <div class="rationale">供資源池歷史查核、其他模組判斷佔用軌跡使用；覆蓋會失去這台車在哪段時間被這張借用單佔用的軌跡。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">換車時，舊車輛釋放與新車輛佔用是瞬間切換，還是允許交接重疊區間？</div>
+      <div class="a">同一時間點瞬間切換，不設計重疊區間。</div>
+      <div class="rationale">交車緩衝是調度人員時間安排上的事，系統不需要為此建模重疊佔用這種邊緣狀態。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">例行用車的申請、簽核流程跟一般用車一樣嗎？會不會因為是長期承諾而拉高簽核層級？</div>
+      <div class="a">沿用一般用車同一套簽核機制，不另加簽。</div>
+      <div class="rationale">簽核層級是否拉高屬於組織治理決定，可在既有核准者關係表裡調整對應簽核鏈，不需要在模組設計上寫死特規流程。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">長期借用單怎麼算「結束」？要不要預先填一個明確的歸還日期？</div>
+      <div class="a">要，申請時須填明確預計歸還日期，允許事後展延。</div>
+      <div class="rationale">共用資源池需要知道這台車預計何時釋放，才能供其他模組做未來時段的可用性判斷。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">展延要不要重新走簽核？</div>
+      <div class="a">要。</div>
+      <div class="rationale">展延是延長對共用資源的獨占，跟原始申請一樣需要主管把關。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">提前歸還要不要簽核？</div>
+      <div class="a">不需要，使用者或調度可直接觸發結束。</div>
+      <div class="rationale">提前歸還是釋放資源給其他模組使用，方向與展延（延長獨占）相反，不需要同等把關力度，也讓資源盡快回到可用狀態。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">申請單欄位是否也跟一般用車一樣有人數、是否自駕、隨行貨物明細？</div>
+      <div class="a">不需要。只留借用單位／用途說明＋預計起訖日期＋是否需要配司機。</div>
+      <div class="rationale">這些欄位描述的是單次任務的乘載內容；例行用車申請的是長期撥用資源本身，實際怎麼用車由借用單位自行安排。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">派車判斷矩陣是否沿用一般用車同一套規則？「有車沒司機」情況要不要允許候補？</div>
+      <div class="a">沿用同一套矩陣，不進候補。</div>
+      <div class="rationale">這是與時長無關的通用判斷邏輯，即使長期借用天生要等，也不因此特別開放候補，維持系統一貫簡化原則。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">例行用車的車型是調度人工判斷指派，還是借用單位可以指定？</div>
+      <div class="a">調度人工判斷指派，不設獨立指定車型欄位。</div>
+      <div class="rationale">車型庫存是共用資源池的一部分，若讓例行用車有特權挑車型，會排擠一般用車與差旅共乘可用的車輛選擇。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">換車／換司機時要不要通知借用單位？</div>
+      <div class="a">要，沿用既有 email 通知路由機制。</div>
+      <div class="rationale">借用單位得知道實際來的是哪台車、哪位司機才能配合交接，不通知會造成運作上的落差。</div>
+    </div>
+
+    <div class="qa">
+      <div class="q">模組正式名稱？</div>
+      <div class="a">例行用車。</div>
+    </div>
+
+  </section>
+
+  <section id="glossary">
+    <h2>12. 名詞表</h2>
+    <table>
+      <thead>
+        <tr><th>名詞</th><th>定義</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>例行用車</td>
+          <td>派車系統第五個獨立模組，處理長期撥用（一個月至數個月）給特定單位使用的車輛／司機資源，區別於「一般用車」的單次短期用車申請。</td>
+        </tr>
+        <tr>
+          <td>借用單</td>
+          <td>例行用車模組的申請單位，記錄借用單位／用途說明、預計借用起訖日期、是否需要配司機，以及後續換車換司機的完整指派區間歷史。</td>
+        </tr>
+        <tr>
+          <td>是否需要配司機</td>
+          <td>對應一般用車「自駕」概念的欄位，代表借用單位是否需要系統配司機；不需要則借用單位自行安排駕駛。</td>
+        </tr>
+        <tr>
+          <td>指派區間</td>
+          <td>借用單底下的一筆記錄，代表某一段時間內實際指派的車輛／司機。每次換車換司機新增一筆，構成完整的指派歷史，不覆蓋舊資料。</td>
+        </tr>
+        <tr>
+          <td>換車／換司機</td>
+          <td>借用期間內，調度人員因車輛維護、司機請假等原因，將原指派的車輛或司機更換為其他資源的動作。只能由調度發起，瞬間切換，不設交接重疊區間。</td>
+        </tr>
+        <tr>
+          <td>展延</td>
+          <td>借用單到達原訂預計歸還日前，延長預計歸還日期的操作，需重新走一次簽核。</td>
+        </tr>
+        <tr>
+          <td>提前歸還</td>
+          <td>借用單還沒到預計歸還日就結束借用的操作，不需簽核，使用者或調度可直接觸發，車輛／司機立即釋放回資源池。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="open">
+    <h2>13. 待辦與未決事項</h2>
+    <ul>
+      <li>後續實作規劃階段需確認：借用單指派區間歷史的資料結構設計（如何與共用資源池的佔用判定查詢介接）。</li>
+      <li>展延的簽核鏈是否與原始申請共用同一組核准者，或允許設定不同核准者，待實作階段與一般用車的核准者關係表機制一併確認。</li>
+      <li>換車／換司機的通知內容格式（是否需要說明換車原因、或僅通知結果）尚未細節定案。</li>
+    </ul>
+  </section>
+
+  <footer>
+    本文件依「需求釐清模式」討論產出，記錄例行用車模組的核心決策與討論脈絡。與車輛派遣系統整合案其他模組文件（差旅共乘、區域內物流、南北幹線、一般用車）交叉參照時，請以 Project Knowledge 中的既有名詞定義為準。
+  </footer>
+
+</div>
+</body>
+</html>
