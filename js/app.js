@@ -128,7 +128,7 @@ const NAV = [
 ];
 const PAGE_META = {
   dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
-  guide: { title: '申請引導', crumb: '共用 · 依填寫內容判定申請並帶入（建議規格 v0.2）' },
+  guide: { title: '申請引導', crumb: '共用 · 查詢引導紀錄／新增引導（依填寫內容判定申請並帶入）' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
@@ -896,6 +896,7 @@ function renderAApplyNew(p) {
       loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
     });
     aaItems = [];
+    guideSubmitted(aApply, app.id); // 申請引導紀錄回填單號
     if (result.ok) {
       const veh = DB.vehicles.find(v => v.id === result.shift.vehicle);
       toast(`${app.id} 已自動媒合：${result.shift.label}／車 ${veh ? veh.id : result.shift.vehicle}／到站約 ${result.arrival}`, 'ok');
@@ -1538,6 +1539,7 @@ function renderBApplyNew(p) {
       items: baItems.map(x => ({ ...x })),
     });
     baItems = [];
+    guideSubmitted(bApply, o.id);
     toast(`${o.id} 已送出，等待業務審核`, 'ok');
     bApply.resultIds = null; bApply.view = 'detail'; bApply.detailId = o.id;
     RENDER.b_apply();
@@ -2109,6 +2111,7 @@ function renderCApplyNew(p) {
       returnDate,
       earliestReturn: $('#ca-return').value, pax: +$('#ca-pax').value,
     });
+    guideSubmitted(cApply, app.id);
     toast(`${app.id} 已送出，等待主管准駁`, 'ok');
     cApply.resultIds = null; cApply.view = 'detail'; cApply.detailId = app.id;
     RENDER.c_apply();
@@ -3053,6 +3056,7 @@ function renderDApplyNew(p) {
     let app;
     try { app = editing ? ModuleD.resubmit(editing, data) : ModuleD.createApp(data); }
     catch (e) { toast(e.message, 'err'); return; }
+    if (!editing) guideSubmitted(dApply, app.id);
     toast(`${app.id} 已${editing ? '重新' : ''}送出，等待主管簽核`, 'ok');
     dApply.resultIds = null; dApply.editId = null; dApply.view = 'detail'; dApply.detailId = app.id;
     RENDER.d_apply();
@@ -3817,6 +3821,7 @@ function renderEApplyNew(p) {
     let app;
     try { app = editing ? ModuleE.resubmit(editing, data) : ModuleE.createApp(data); }
     catch (e) { toast(e.message, 'err'); return; }
+    if (!editing) guideSubmitted(eApply, app.id);
     toast(`${app.id} 已${editing ? '重新' : ''}送出，等待主管簽核`, 'ok');
     eApply.resultIds = null; eApply.editId = null; eApply.view = 'detail'; eApply.detailId = app.id;
     RENDER.e_apply();
@@ -4296,7 +4301,8 @@ RENDER.e_driver = function () {
    需求表單＋依填寫內容出現的卡片（K1～K7）；判定邏輯在 guide.js（Guide）。
    只分流、不送單：按「前往並帶入」後把資料放進目標單元的 prefill，於新增畫面帶入一次。
    ============================================================ */
-let guideState = { v: null, shown: [] };
+// view：list（查詢＋引導紀錄 grid）／detail（紀錄歷史）／new（引導表單）；recId＝回到修改中的紀錄
+let guideState = { view: 'list', detailId: null, query: { applicant: '', unit: '', status: '' }, resultIds: null, v: null, recId: null, shown: [] };
 function guideDefaults() {
   return { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
     mode: '', fromSite: '', toSite: '', recvDate: Guide.todayStr(), recvTime: '', items: [],
@@ -4314,6 +4320,183 @@ const gYN = b => b === true ? 'yes' : (b === false ? 'no' : '');
 
 RENDER.guide = function () {
   const p = $('#page-guide');
+  if (guideState.view === 'new') return renderGuideNew(p);
+  if (guideState.view === 'detail') return renderGuideDetail(p, guideState.detailId);
+  return renderGuideList(p);
+};
+
+/* ---------- 查詢畫面（index）---------- */
+const G_STATUS_OPTS = [['', '全部'], ['handed', '已帶入待送出'], ['submitted', '已送出申請']];
+function gStBadge(st) { const [t, c] = Guide.STATUS[st] || [st, 'b-gray']; return `<span class="badge ${c}">${t}</span>`; }
+function gUnitTxt(k) { const u = Guide.UNITS[k]; return u ? `${u.module} · ${u.name}` : '—'; }
+function renderGuideList(p) {
+  const q = guideState.query;
+  const stOpts = G_STATUS_OPTS.map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  const uOpts = `<option value="">全部</option>` + Object.entries(Guide.UNITS)
+    .map(([k, u]) => `<option value="${k}" ${q.unit === k ? 'selected' : ''}>${u.name}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">申請引導</div>
+    <div class="section-sub">不確定該用哪一種申請？按右上角「＋ 新增」開始引導：依填寫內容出現需要的卡片、判定適用的申請功能，並把已填資料帶入該功能的新增畫面（<b>送出一律在該功能完成</b>）。每次帶入都會留下引導紀錄，目標功能送出後自動回填申請單號。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <span>
+          <button class="btn btn-primary btn-sm" id="gq-search">🔍 查詢</button>
+          <button class="btn btn-accent btn-sm" id="gq-new">＋ 新增</button>
+        </span>
+      </div>
+      ${infoGrid('gq-fields', [
+        fInput('申請人（模糊）', `<input type="text" id="gq-applicant" value="${gEsc(q.applicant)}" placeholder="輸入姓名/部門關鍵字">`),
+        fInput('判定功能', `<select id="gq-unit">${uOpts}</select>`),
+        fInput('狀態', `<select id="gq-status">${stOpts}</select>`),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史引導紀錄</span>
+        <span><span class="muted" id="gq-count"></span>
+          <button class="btn btn-ghost btn-sm" id="gq-demo" style="margin-left:10px;">載入範例</button></span>
+      </div>
+      <div id="gq-grid"></div>
+    </div>`;
+  $('#gq-search').onclick = () => runGuideQuery();
+  $('#gq-new').onclick = () => { guideState.v = guideDefaults(); guideState.recId = null; guideState.view = 'new'; RENDER.guide(); };
+  $('#gq-demo').onclick = () => { loadGuideDemo(); guideState.resultIds = null; renderGuideGrid(); };
+  renderGuideGrid();
+  initMasonry(p);
+}
+function runGuideQuery() {
+  guideState.query = { applicant: $('#gq-applicant').value.trim(), unit: $('#gq-unit').value, status: $('#gq-status').value };
+  const q = guideState.query;
+  const res = Guide.records.filter(r =>
+    (!q.applicant || (r.applicant || '').includes(q.applicant)) &&
+    (!q.unit || r.unit === q.unit) && (!q.status || r.status === q.status));
+  guideState.resultIds = res.map(r => r.id);
+  renderGuideGrid();
+  toast(`查詢完成，共 ${res.length} 筆`, 'ok');
+}
+function renderGuideGrid() {
+  if (!$('#gq-grid')) return;
+  const rows = guideState.resultIds == null ? Guide.records
+    : guideState.resultIds.map(id => Guide.records.find(r => r.id === id)).filter(Boolean);
+  $('#gq-count').textContent = `${rows.length} 筆`;
+  $('#gq-grid').innerHTML = rows.length === 0
+    ? `<div class="empty"><div class="big">🧭</div>尚無引導紀錄；按右上角「＋ 新增」開始引導，或按「載入範例」。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>引導編號</th><th>申請人</th><th>需求摘要</th><th>判定功能</th><th>規則</th><th>狀態</th><th>申請單號</th><th>建立時間</th></tr></thead><tbody>
+      ${rows.map(r => `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-gdetail="${r.id}">細節</button></td>
+        <td><b style="color:var(--navy);">${r.id}</b></td><td>${gEsc(r.applicant)}</td><td>${gEsc(r.summary)}</td>
+        <td>${gUnitTxt(r.unit)}</td><td><span class="g-tag">${r.rule}</span></td><td>${gStBadge(r.status)}</td>
+        <td>${r.appId ? `<b>${r.appId}</b>` : '<span class="muted">—</span>'}</td>
+        <td class="muted">${fmtTime(r.createdAt)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊左側「細節」可查看該次引導的填寫內容、判定結果與歷程（回到修改／查看申請單於明細操作）。</div>`;
+  $$('#gq-grid [data-gdetail]').forEach(b => b.onclick = () => {
+    guideState.detailId = b.dataset.gdetail; guideState.view = 'detail'; RENDER.guide();
+  });
+}
+// 範例：收貨申請（待送出）、出差用車（已送出，實際建立申請單）、例行用車（待送出）
+function loadGuideDemo() {
+  const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; };
+  const base = o => Object.assign(guideDefaults(), o);
+  const box = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
+  Guide.hand(base({ applicant: '研發部-吳承恩', dept: '研發部', ext: '4102', mode: 'goods', fromSite: 'D6', toSite: 'D6', items: [box] }));
+  const c = Guide.hand(base({ applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310', mode: 'people', startDate: d(3), endDate: d(3),
+    origin: '台北總部', dest: '高鐵台北站', departTime: '08:30', backTime: '18:00', pax: 2, hasCargo: 'no' }));
+  const app = ModuleC.createApp(c.pf.data);
+  Guide.markSubmitted(c.rec.id, app.id);
+  Guide.hand(base({ mode: 'people', startDate: d(7), endDate: d(97), purpose: '業務部北區業務組：每日拜訪客戶', selfArrange: false }));
+  toast(`已載入 3 筆引導紀錄（其中 1 筆已送出 ${app.id}）`, 'ok');
+}
+
+/* ---------- 明細畫面（該次引導的歷史資料）---------- */
+function renderGuideDetail(p, id) {
+  const r = Guide.records.find(x => x.id === id);
+  if (!r) { guideState.view = 'list'; return RENDER.guide(); }
+  const v = r.v, cards = Guide.visibleCards(v), u = Guide.UNITS[r.unit];
+  const yn = (b, y, n) => b === true ? y : (b === false ? n : '—');
+  const dash = x => (x === '' || x == null) ? '<span class="muted">—</span>' : gEsc(x);
+  const filled = [fItem('申請人', `${gEsc(v.applicant)}${v.dept ? `（${gEsc(v.dept)}/${gEsc(v.ext)}）` : ''}`),
+    fItem('運送內容', v.mode === 'goods' ? '只寄送物品（無人隨行）' : '有人要搭車')];
+  if (cards.includes('K2')) filled.push(fItem('寄件據點', Guide.siteName(v.fromSite)), fItem('收件據點', Guide.siteName(v.toSite)),
+    fItem('希望收貨', `${dash(v.recvDate)} ${v.recvTime || '（越快越好）'}`));
+  if (cards.includes('K4')) filled.push(fItem('用車期間', `${v.startDate} ～ ${v.endDate}（${Guide.days(v.startDate, v.endDate)} 天）`, { w2: true }));
+  if (cards.includes('K5')) filled.push(fItem('配司機', yn(v.selfArrange, '不需要（自行安排駕駛）', '需要')),
+    fItem('借用單位／用途說明', dash(v.purpose), { full: true, tall: true }));
+  if (cards.includes('K6')) {
+    filled.push(fItem('地點', `${Guide.placeName(v.origin)} → ${Guide.placeName(v.dest)}`, { w2: true }));
+    if (v.origin === Guide.OTHER || v.dest === Guide.OTHER) filled.push(fItem('其他地點說明', dash(v.otherPlace), { w2: true }));
+    const share = r.unit === 'C';
+    if (share) filled.push(fItem('行程型態', v.tripType === 'oneway' ? '單程（送到轉運點）' : '來回'));
+    filled.push(fItem('出發時間', dash(v.departTime)));
+    if (!(share && v.tripType === 'oneway')) filled.push(fItem(share ? '回程上車時間' : '結束時間', dash(v.backTime)));
+    filled.push(fItem('人數', `${v.pax} 人`), fItem('隨行物品', v.hasCargo === 'yes' ? '有' : '沒有'));
+    if (r.unit === 'D') filled.push(fItem('可否自己開車', yn(v.selfDrive, '可以', '不行')));
+  }
+  const acts = [];
+  if (r.status === 'handed') acts.push(`<button class="btn btn-primary" id="gd-edit">✎ 回到引導修改</button>`);
+  if (r.appId) acts.push(`<button class="btn btn-primary" id="gd-app">📄 查看申請單 ${r.appId}</button>`);
+  acts.push(`<button class="btn btn-ghost" id="gd-copy">⧉ 以此內容新增引導</button>`);
+  p.innerHTML = `
+    <div class="section-h">申請引導明細 · ${r.id}</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${gStBadge(r.status)}</div>
+      ${infoGrid('gd-basic', [
+        fItem('引導編號', `<b style="color:var(--navy);">${r.id}</b>`),
+        fItem('申請人', gEsc(r.applicant)),
+        fItem('建立時間', fmtTime(r.createdAt)),
+        fItem('判定功能', `<b>${gUnitTxt(r.unit)}</b> <span class="g-tag">${r.rule}</span>`, { w2: true }),
+        fItem('申請單號', r.appId ? `<b>${r.appId}</b>（${fmtTime(r.submittedAt)} 送出）` : '<span class="muted">尚未送出</span>'),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">填寫內容</div>
+      ${infoGrid('gd-filled', filled.join(''))}
+    </div>
+    ${cards.includes('K3') ? `<div class="card"><div class="card-title">貨物清單</div><div id="gd-items"></div></div>` : ''}
+    <div class="card">
+      <div class="card-title">判定結果</div>
+      ${infoGrid('gd-result', [
+        fItem('判定理由', r.reason, { full: true }),
+        fItem('帶入內容', r.labels.join('、'), { full: true }),
+      ].join(''))}
+      ${r.warnings.length ? `<div class="callout" style="margin-top:10px;">⚠ ${r.warnings.join('<br>')}</div>` : ''}
+    </div>
+    <div class="card"><div class="card-title">歷程紀錄</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
+      ${r.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${gEsc(l.by)}</td><td>${gEsc(l.note) || '—'}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="card">
+      <div class="card-title">操作</div>
+      <div class="card-desc">${r.status === 'handed'
+        ? `資料已帶入「${u.name}」但尚未送出：可回到引導修改內容後重新判定並帶入（同一筆紀錄）。`
+        : `已於「${u.name}」送出申請，引導內容不可再修改；如需另提申請可「以此內容新增引導」。`}</div>
+      <div>${acts.join(' ')}</div>
+    </div>
+    ${backBar('gd-back')}`;
+  if (cards.includes('K3')) renderCargoGrid('#gd-items', v.items, false, null, { hazard: true });
+  $('#gd-back').onclick = () => { guideState.view = 'list'; RENDER.guide(); };
+  const ed = $('#gd-edit');
+  if (ed) ed.onclick = () => guideEdit(r.id);
+  const ap = $('#gd-app');
+  if (ap) ap.onclick = () => { const st = guideUnitState(r.unit); st.view = 'detail'; st.detailId = r.appId; goto(u.page); };
+  $('#gd-copy').onclick = () => {
+    guideState.v = JSON.parse(JSON.stringify(r.v)); guideState.recId = null; guideState.view = 'new'; RENDER.guide();
+    toast(`已複製 ${r.id} 的內容，可修改後重新判定`);
+  };
+  initMasonry(p);
+}
+// 回到引導修改（細節頁或目標功能提示條）：載入該紀錄的填寫內容，重新帶入時更新同一筆
+function guideEdit(recId) {
+  const v = Guide.reopen(recId);
+  if (!v) { toast('此引導已送出申請，不可再修改', 'err'); guideState.view = 'list'; goto('guide'); return; }
+  guideState.v = v; guideState.recId = recId; guideState.view = 'new';
+  goto('guide');
+}
+
+/* ---------- 新增畫面（引導表單）---------- */
+function renderGuideNew(p) {
   if (!guideState.v) guideState.v = guideDefaults();
   guideState.shown = [];
   const v = guideState.v;
@@ -4327,9 +4510,11 @@ RENDER.guide = function () {
       ${desc ? `<div class="card-desc">${desc}</div>` : ''}
       ${body}
     </div>`;
+  const rid = guideState.recId;
   p.innerHTML = `
-    <div class="section-h">申請引導</div>
-    <div class="section-sub">不確定該用哪一種申請？由上往下填寫即可：系統會依您填的內容<b>出現需要的卡片</b>，並在最下方「判定結果」告訴您適用的申請功能；按「前往並帶入」後，已填資料會自動帶入該功能的新增畫面，<b>確認後在該功能送出</b>。</div>
+    <div class="section-h">${rid ? `修改申請引導 · ${rid}` : '新增申請引導'}</div>
+    <div class="section-sub">由上往下填寫即可：系統會依您填的內容<b>出現需要的卡片</b>，並在最下方「判定結果」告訴您適用的申請功能；按「前往並帶入」後，已填資料會自動帶入該功能的新增畫面，<b>確認後在該功能送出</b>。</div>
+    ${rid ? `<div class="callout info" style="margin-bottom:14px;">正在修改引導紀錄 <b>${rid}</b>：重新「前往並帶入」會更新同一筆紀錄，並在歷程記下改判結果。</div>` : ''}
     ${card('K1', '需求', '', infoGrid('gg-K1', [
       fInput('申請人', `<input type="text" id="gf-applicant" value="${gEsc(v.applicant)}">`),
       fInput('部門', `<input type="text" id="gf-dept" value="${gEsc(v.dept)}">`),
@@ -4365,10 +4550,12 @@ RENDER.guide = function () {
     ${card('K3', '貨物清單', '欄位比照物流申請（長寬高／類別／件數／重量），並標註是否為危險品。', `<div id="gf-items"></div>`,
       `<button class="btn btn-accent btn-sm" id="gf-add-item">＋ 新增</button>`)}
     ${card('K7', '判定結果', '', `<div id="gr-body"></div>`)}
-    <div style="text-align:center;margin-top:6px;"><button class="btn btn-ghost" id="gf-reset">↺ 全部清除重填</button></div>`;
+    <div style="text-align:center;margin-top:6px;"><button class="btn btn-ghost" id="gf-reset">↺ 全部清除重填</button></div>
+    ${backBar('gn-back')}`;
+  $('#gn-back').onclick = () => { guideState.view = 'list'; guideState.recId = null; RENDER.guide(); };
   guideWire(p);
   guideRefresh(p, true);
-};
+}
 
 function guideWire(p) {
   const v = guideState.v;
@@ -4464,7 +4651,7 @@ function guideResult(p, r) {
         <button class="btn btn-primary" id="gr-go"${miss.length ? ' disabled title="請先補齊缺少的欄位"' : ''}>前往「${u.name}」並帶入 →</button>
       </div>
       ${selfBtns}`;
-    $('#gr-go', box).onclick = () => { const f = Guide.prefill(guideState.v); if (f) guideGo(f); };
+    $('#gr-go', box).onclick = () => guideGo();
   }
   $$('[data-gself]', box).forEach(b => b.onclick = () => {
     const st = guideUnitState(b.dataset.gself);
@@ -4474,24 +4661,34 @@ function guideResult(p, r) {
 }
 
 function guideUnitState(k) { return { A: aApply, B: bApply, C: cApply, D: dApply, E: eApply }[k]; }
-function guideGo(pf) {
-  const st = guideUnitState(pf.unit);
+// 前往並帶入：建立（或更新）引導紀錄，把帶入資料交給目標單元後跳轉
+function guideGo() {
+  let res;
+  try { res = Guide.hand(guideState.v, guideState.recId); } catch (e) { toast(e.message, 'err'); return; }
+  const pf = res.pf, st = guideUnitState(pf.unit);
   st.view = 'new'; if ('editId' in st) st.editId = null;
   st.prefill = pf;
-  toast(`已帶入 ${pf.labels.length} 項資料，請確認後於「${Guide.UNITS[pf.unit].name}」送出`, 'ok');
+  guideState.v = null; guideState.recId = null; guideState.view = 'list';
+  toast(`${res.rec.id}：已帶入 ${pf.labels.length} 項資料，請確認後於「${Guide.UNITS[pf.unit].name}」送出`, 'ok');
   goto(pf.page);
 }
-// 目標新增畫面取出帶入資料（只用一次，避免之後再進新增畫面重複帶入）
-function guideTake(state) { const pf = state.prefill || null; state.prefill = null; return pf; }
+// 目標新增畫面取出帶入資料（只用一次，避免之後再進新增畫面重複帶入）；記住來源引導紀錄供送出後回填
+function guideTake(state) { const pf = state.prefill || null; state.prefill = null; state.guideRec = pf ? pf.recId : null; return pf; }
+// 目標功能送出成功：回填申請單號到引導紀錄
+function guideSubmitted(state, appId) {
+  if (!state.guideRec) return;
+  Guide.markSubmitted(state.guideRec, appId);
+  state.guideRec = null;
+}
 // 新增畫面上方的帶入提示條（含「回到引導修改」）
 function guideBanner(p, pf, state) {
   const html = `<div class="callout info" id="guide-banner" style="margin-bottom:14px;">
-    🧭 已由<b>申請引導</b>帶入：${pf.labels.join('、')}。其餘欄位請補齊並確認後送出。
+    🧭 已由<b>申請引導 ${pf.recId}</b> 帶入：${pf.labels.join('、')}。其餘欄位請補齊並確認後送出。
     ${pf.warnings.length ? `<div style="margin-top:6px;color:var(--red);font-weight:600;">⚠ ${pf.warnings.join('<br>')}</div>` : ''}
     <div style="margin-top:8px;"><button class="btn btn-ghost btn-sm" id="guide-back">← 回到引導修改</button></div></div>`;
   const h = $('.section-h', p);
   if (h) h.insertAdjacentHTML('afterend', html); else p.insertAdjacentHTML('afterbegin', html);
-  $('#guide-back', p).onclick = () => { state.view = 'list'; goto('guide'); };
+  $('#guide-back', p).onclick = () => { state.view = 'list'; state.guideRec = null; guideEdit(pf.recId); };
 }
 // A/B/C 新增畫面由 DOM 建立後再填值（D/E 於組 src 時直接帶入）
 function guideApply(unit, state, p) {

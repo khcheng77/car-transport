@@ -165,4 +165,62 @@ const Guide = {
     }
     return { unit: r.unit, page: this.UNITS[r.unit].page, data, labels, warnings };
   },
+
+  /* ---- 引導紀錄（index 頁 grid／細節頁歷程）----
+     每按一次「前往並帶入」即建立紀錄（或更新同一筆待送出紀錄）；目標功能送出後回填申請單號。 */
+  records: [],
+  _seq: 0,
+  STATUS: { handed: ['已帶入待送出', 'b-amber'], submitted: ['已送出申請', 'b-green'] },
+  _log(rec, action, by, note) { rec.log.push({ at: new Date(), action, by: by || '—', note: note || '' }); },
+  summary(v) {
+    if (v.mode === 'goods') {
+      return `物品 ${this.siteName(v.fromSite)} → ${this.siteName(v.toSite)}｜貨物 ${(v.items || []).length} 項`;
+    }
+    if (v.mode === 'people') {
+      const n = this.days(v.startDate, v.endDate);
+      const place = (v.origin && v.dest && n != null && n < this.THRESHOLD_DAYS) ? `｜${this.placeName(v.origin)} → ${this.placeName(v.dest)}` : '';
+      return `用車 ${v.startDate} ～ ${v.endDate}（${n} 天）${place}`;
+    }
+    return '—';
+  },
+  /* 前往並帶入：未判定或缺欄位時丟錯；recId 指向「已帶入待送出」紀錄時為回到引導修改後重新帶入 */
+  hand(v, recId) {
+    const r = this.route(v);
+    if (!r.unit) throw new Error(r.hint || '尚未判定適用的申請功能');
+    const miss = this.missing(v);
+    if (miss.length) throw new Error('仍缺少：' + miss.join('、'));
+    const pf = this.prefill(v);
+    const snap = JSON.parse(JSON.stringify(v));
+    const name = this.UNITS[r.unit].name;
+    let rec = recId ? this.records.find(x => x.id === recId && x.status === 'handed') : null;
+    const fields = { applicant: v.applicant, v: snap, unit: r.unit, rule: r.rule, reason: r.reason,
+      labels: pf.labels, warnings: pf.warnings, summary: this.summary(v) };
+    if (rec) {
+      const prev = rec.unit;
+      Object.assign(rec, fields);
+      this._log(rec, '重新判定並帶入', v.applicant, prev === r.unit ? `${r.rule} → ${name}` : `改判：${this.UNITS[prev].name} → ${name}（${r.rule}）`);
+    } else {
+      rec = Object.assign({ id: `GD-${String(++this._seq).padStart(4, '0')}`, createdAt: new Date(), status: 'handed', appId: null, submittedAt: null, log: [] }, fields);
+      this.records.unshift(rec);
+      this._log(rec, '建立引導', v.applicant, rec.summary);
+      this._log(rec, '判定並帶入', v.applicant, `${r.rule} → ${name}`);
+    }
+    pf.recId = rec.id;
+    return { rec, pf };
+  },
+  /* 目標功能送出成功：回填申請單號（只對待送出紀錄有效）*/
+  markSubmitted(recId, appId) {
+    const rec = this.records.find(x => x.id === recId && x.status === 'handed');
+    if (!rec) return null;
+    rec.status = 'submitted'; rec.appId = appId; rec.submittedAt = new Date();
+    this._log(rec, '送出申請', rec.applicant, `${this.UNITS[rec.unit].name} 單號 ${appId}`);
+    return rec;
+  },
+  /* 從目標功能「回到引導修改」或細節頁「修改」：回傳可編輯的填寫內容副本 */
+  reopen(recId) {
+    const rec = this.records.find(x => x.id === recId && x.status === 'handed');
+    if (!rec) return null;
+    this._log(rec, '回到引導修改', rec.applicant, '');
+    return JSON.parse(JSON.stringify(rec.v));
+  },
 };

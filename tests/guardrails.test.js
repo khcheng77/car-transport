@@ -1701,6 +1701,35 @@ group('申請引導（卡片出現規則／判定決策表 R1～R5／帶入）',
     ok(G.missing(c).some(m => m.includes('單程')), '新竹分公司非轉運點不可單程');
     ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).some(m => m.includes('貨物')), '物品至少 1 項');
   });
+
+  test('引導紀錄：前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判', () => {
+    const G = fresh().Guide;
+    const cv = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '高鐵台北站', hasCargo: 'no' });
+    const { rec, pf } = G.hand(cv);
+    eq(rec.id, 'GD-0001'); eq(rec.status, 'handed'); eq(rec.unit, 'C'); eq(pf.recId, 'GD-0001');
+    eq(rec.log.map(l => l.action).join(), '建立引導,判定並帶入');
+    const again = G.reopen(rec.id);
+    again.hasCargo = 'yes'; again.items = [box]; again.selfDrive = false;
+    const r2 = G.hand(again, rec.id).rec;
+    eq(r2, rec, '同一筆紀錄'); eq(G.records.length, 1); eq(rec.unit, 'D');
+    ok(rec.log[rec.log.length - 1].note.includes('出差用車 → 一般用車'), '歷程記錄改判');
+    eq(rec.v.hasCargo, 'yes', '保存最新填寫內容');
+    let err = ''; try { G.hand(base({ mode: 'goods' })); } catch (e) { err = e.message; }
+    ok(err, '未判定不可帶入');
+  });
+
+  test('引導紀錄：目標功能送出後回填申請單號；已送出者不可再修改，重新帶入另建新紀錄', () => {
+    const G = fresh().Guide;
+    const ev = base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-31', purpose: '業務部北區業務', selfArrange: true });
+    const { rec } = G.hand(ev);
+    eq(G.markSubmitted(rec.id, 'RT-0001'), rec);
+    eq(rec.status, 'submitted'); eq(rec.appId, 'RT-0001');
+    ok(rec.log[rec.log.length - 1].note.includes('RT-0001'));
+    eq(G.markSubmitted(rec.id, 'RT-0002'), null, '已送出不重複回填');
+    eq(G.reopen(rec.id), null, '已送出不可回到修改');
+    const n = G.hand(ev, rec.id).rec;
+    eq(n.id, 'GD-0002', '指向已送出紀錄時另建新紀錄'); eq(G.records[0], n, '新紀錄排最前');
+  });
 });
 
 /* ---- 總結 ---- */
