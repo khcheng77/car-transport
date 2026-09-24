@@ -86,7 +86,10 @@ function stBadge(s, mod) {
 
 /* ---------- 導覽（2 共用 + 6 業務單元）---------- */
 const NAV = [
-  { group: '總覽', items: [{ id: 'dashboard', ico: '▤', label: '系統儀表板' }] },
+  { group: '總覽', items: [
+    { id: 'dashboard', ico: '▤', label: '系統儀表板' },
+    { id: 'guide', ico: '🧭', label: '申請引導' },
+  ] },
   { group: '共用基礎', items: [
     { id: 'engine', ico: '⚙', label: '裝載判定引擎' },
     { id: 'master', ico: '▦', label: '主檔資料' },
@@ -125,6 +128,7 @@ const NAV = [
 ];
 const PAGE_META = {
   dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
+  guide: { title: '申請引導', crumb: '共用 · 依填寫內容判定申請並帶入（建議規格 v0.2）' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
   a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
@@ -197,6 +201,10 @@ RENDER.dashboard = function () {
       <div class="stat"><div class="k">商務池 · C 已媒合／D 已派車／E 借用中</div><div class="v green">${cMatched} / ${dDispatched} / ${eActive}</div></div>
     </div>
 
+    <div class="card" data-go="guide" style="cursor:pointer;border:2px solid var(--navy);">
+      <div class="card-title" style="justify-content:space-between;">🧭 不知道該用哪一種申請？ <span class="badge b-navy">申請引導</span></div>
+      <div class="card-desc" style="margin-bottom:0;">照著填寫需求，系統依內容判定該用收貨申請、幹線託運、出差用車、一般用車或例行用車，並把已填資料自動帶入該申請。</div>
+    </div>
     <div class="card-title" style="font-size:14px;margin:8px 0 12px;color:var(--ink-soft);">共用基礎層</div>
     <div class="grid-2">
       ${dashCard('⚙ 裝載判定引擎', 'Level 1 體積 + 地板面積 + Level 2 六方向 + 重量累計。可解釋、不做 3D 碰撞模擬。', 'engine', 'G01–G05')}
@@ -853,6 +861,7 @@ function renderAApplyNew(p) {
   wirePerson('arag', p); // 接收代理人
   renderAaItems(); // 一開始顯示空白清單
   initMasonry(p);  // 表單資訊區塊自適應排版（與顯示頁一致）
+  guideApply('A', aApply, p); // 申請引導帶入（若有）
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); });
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   $('#aa-submit').onclick = async () => {
@@ -1507,6 +1516,7 @@ function renderBApplyNew(p) {
   $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填建物選單
   renderBaCargo(); // 一開始顯示空白清單
   initMasonry(p);
+  guideApply('B', bApply, p); // 申請引導帶入（若有）
   $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
   $('#ba-cancel').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   $('#ba-submit').onclick = async () => {
@@ -2077,6 +2087,7 @@ function renderCApplyNew(p) {
   const syncRDateMin = () => { $('#ca-rdate').min = $('#ca-date').value || ''; };
   $('#ca-date').onchange = syncRDateMin; syncRDateMin();
   initMasonry(p);
+  guideApply('C', cApply, p); // 申請引導帶入（若有）
   $('#ca-cancel').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   $('#ca-submit').onclick = async () => {
     const type = $('#page-c_apply input[name=ca-type]:checked').value;
@@ -2960,8 +2971,9 @@ function dTomorrow() { const d = new Date(); d.setDate(d.getDate() + 1); return 
 function renderDApplyNew(p) {
   const editing = dApply.editId ? ModuleD.applications.find(x => x.id === dApply.editId && x.status === 'draft') : null;
   const t = dTomorrow();
-  const src = editing || { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
-    startDate: t, startTime: '09:00', endDate: t, endTime: '12:00', pax: 1, selfDrive: null, purpose: '', items: [] };
+  const gpf = editing ? null : guideTake(dApply); // 申請引導帶入（只用一次）
+  const src = editing || Object.assign({ applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
+    startDate: t, startTime: '09:00', endDate: t, endTime: '12:00', pax: 1, selfDrive: null, purpose: '', items: [] }, gpf ? gpf.data : {});
   dDraftItems = (src.items || []).map(i => Object.assign({}, i));
   const v = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
   const sd = src.selfDrive;
@@ -3003,6 +3015,7 @@ function renderDApplyNew(p) {
       <button class="btn btn-ghost" id="da-cancel">取消</button>
     </div>
     ${backBar('dn-back')}`;
+  if (gpf) guideBanner(p, gpf, dApply);
   const back = () => {
     if (editing) { dApply.view = 'detail'; dApply.detailId = editing.id; } else dApply.view = 'list';
     dApply.editId = null; RENDER.d_apply();
@@ -3745,8 +3758,9 @@ function openEExtension(a, onDone) {
 function renderEApplyNew(p) {
   const editing = eApply.editId ? ModuleE.applications.find(x => x.id === eApply.editId && x.status === 'draft') : null;
   const t = eToday();
-  const src = editing || { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
-    purpose: '', startDate: t, endDate: ModuleE.addDays(t, 90), needDriver: null };
+  const gpf = editing ? null : guideTake(eApply); // 申請引導帶入（只用一次）
+  const src = editing || Object.assign({ applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
+    purpose: '', startDate: t, endDate: ModuleE.addDays(t, 90), needDriver: null }, gpf ? gpf.data : {});
   const v = s => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
   const nd = src.needDriver;
   p.innerHTML = `
@@ -3775,6 +3789,7 @@ function renderEApplyNew(p) {
       <button class="btn btn-ghost" id="ea-cancel">取消</button>
     </div>
     ${backBar('en-back')}`;
+  if (gpf) guideBanner(p, gpf, eApply);
   const back = () => {
     if (editing) { eApply.view = 'detail'; eApply.detailId = editing.id; } else eApply.view = 'list';
     eApply.editId = null; RENDER.e_apply();
@@ -4275,6 +4290,242 @@ RENDER.e_driver = function () {
     ${cards}
     ${selfCard}`;
 };
+
+/* ============================================================
+   共用單元：申請引導（建議規格 v0.2）
+   需求表單＋依填寫內容出現的卡片（K1～K7）；判定邏輯在 guide.js（Guide）。
+   只分流、不送單：按「前往並帶入」後把資料放進目標單元的 prefill，於新增畫面帶入一次。
+   ============================================================ */
+let guideState = { v: null, shown: [] };
+function guideDefaults() {
+  return { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
+    mode: '', fromSite: '', toSite: '', recvDate: Guide.todayStr(), recvTime: '', items: [],
+    startDate: '', endDate: '', purpose: '', selfArrange: null,
+    origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 1,
+    hasCargo: '', selfDrive: null };
+}
+const gEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+// 單選膠囊：opts = [[value, 文字], ...]；cur 為目前值（布林以 'yes'/'no' 表示）
+function gPills(name, cur, opts) {
+  return `<div class="radio-group" id="${name}-wrap">${opts.map(([val, txt]) =>
+    `<label class="radio-pill${cur === val ? ' sel' : ''}"><input type="radio" name="${name}" value="${val}"${cur === val ? ' checked' : ''}>${txt}</label>`).join('')}</div>`;
+}
+const gYN = b => b === true ? 'yes' : (b === false ? 'no' : '');
+
+RENDER.guide = function () {
+  const p = $('#page-guide');
+  if (!guideState.v) guideState.v = guideDefaults();
+  guideState.shown = [];
+  const v = guideState.v;
+  const siteOpts = sel => `<option value="">— 請選擇 —</option>` + DB.sites.map(s => `<option value="${s.id}"${s.id === sel ? ' selected' : ''}>${s.name}</option>`).join('');
+  const placeOpts = (list, sel, otherTxt) => `<option value="">— 請選擇 —</option>`
+    + list.map(x => `<option${x === sel ? ' selected' : ''}>${x}</option>`).join('')
+    + `<option value="${Guide.OTHER}"${sel === Guide.OTHER ? ' selected' : ''}>${otherTxt}</option>`;
+  const card = (k, title, desc, body, extra) => `
+    <div class="card" id="gk-${k}" style="display:none;">
+      <div class="card-title"${extra ? ' style="justify-content:space-between;"' : ''}><span class="g-t">${title}</span>${extra || ''}</div>
+      ${desc ? `<div class="card-desc">${desc}</div>` : ''}
+      ${body}
+    </div>`;
+  p.innerHTML = `
+    <div class="section-h">申請引導</div>
+    <div class="section-sub">不確定該用哪一種申請？由上往下填寫即可：系統會依您填的內容<b>出現需要的卡片</b>，並在最下方「判定結果」告訴您適用的申請功能；按「前往並帶入」後，已填資料會自動帶入該功能的新增畫面，<b>確認後在該功能送出</b>。</div>
+    ${card('K1', '需求', '', infoGrid('gg-K1', [
+      fInput('申請人', `<input type="text" id="gf-applicant" value="${gEsc(v.applicant)}">`),
+      fInput('部門', `<input type="text" id="gf-dept" value="${gEsc(v.dept)}">`),
+      fInput('分機', `<input type="text" id="gf-ext" value="${gEsc(v.ext)}">`),
+      fInput('運送內容', gPills('gf-mode', v.mode, [['goods', '📦 只寄送物品（無人隨行）'], ['people', '🚗 有人要搭車（可附帶物品）']]), { stack: true, full: true }),
+    ].join('')))}
+    ${card('K2', '物品寄送', '寄件與收件據點相同＝院區內收送；不同＝跨據點幹線收送。', infoGrid('gg-K2', [
+      fInput('寄件據點', `<select id="gf-fromSite">${siteOpts(v.fromSite)}</select>`),
+      fInput('收件據點', `<select id="gf-toSite">${siteOpts(v.toSite)}</select>`),
+      fInput('希望收貨日期', `<input type="date" id="gf-recvDate" min="${Guide.todayStr()}" value="${gEsc(v.recvDate)}">`),
+      fInput('希望收貨時間 <span class="hint">選填；不填＝越快越好</span>', `<input type="time" id="gf-recvTime" value="${gEsc(v.recvTime)}">`),
+    ].join('')))}
+    ${card('K4', '用車期間', `起訖含當日計算；達 <b>${Guide.THRESHOLD_DAYS} 天</b>以上視為長期撥用。`, infoGrid('gg-K4', [
+      fInput('起日', `<input type="date" id="gf-startDate" value="${gEsc(v.startDate)}">`),
+      fInput('迄日', `<input type="date" id="gf-endDate" value="${gEsc(v.endDate)}">`),
+      fItem('天數', `<span id="gf-days">—</span>`),
+    ].join('')))}
+    ${card('K5', '借用資料', '長期撥用車輛（可另配司機），借用期間可展延或提前歸還。', infoGrid('gg-K5', [
+      fInput('借用單位／用途說明', `<textarea id="gf-purpose" rows="3" placeholder="例：業務部北區業務組，每日拜訪客戶">${gEsc(v.purpose)}</textarea>`, { full: true, stack: true }),
+      fInput('沒有司機時可否自行安排駕駛', gPills('gf-selfArrange', gYN(v.selfArrange), [['yes', '可以（不需配司機）'], ['no', '不行（需要配司機）']]), { stack: true, full: true }),
+    ].join('')))}
+    ${card('K6', '行程', '出發地／目的地都在共乘清單、且未攜帶物品時可自動併車共乘；其他地點選「其他」。', infoGrid('gg-K6', [
+      fInput('出發地', `<select id="gf-origin">${placeOpts(DB.bizOrigins, v.origin, '其他地點')}</select>`),
+      fInput('目的地', `<select id="gf-dest">${placeOpts(DB.bizDests, v.dest, '其他地點／多點')}</select>`),
+      fInput('其他地點說明', `<input type="text" id="gf-otherPlace" value="${gEsc(v.otherPlace)}" placeholder="例：新竹科學園區客戶（多點洽公）">`, { w2: true }),
+      fInput('行程型態 <span class="hint">單程限目的地為交通轉運點</span>', gPills('gf-tripType', v.tripType, [['round', '來回'], ['oneway', '單程（送到轉運點）']]), { stack: true, w2: true }),
+      fInput('出發時間', `<input type="time" id="gf-departTime" value="${gEsc(v.departTime)}">`),
+      fInput(`<span id="gf-backLabel">結束時間</span>`, `<input type="time" id="gf-backTime" value="${gEsc(v.backTime)}">`),
+      fInput('人數', `<input type="number" id="gf-pax" min="1" step="1" value="${gEsc(v.pax)}">`),
+      fInput('隨行物品', gPills('gf-hasCargo', v.hasCargo, [['no', '沒有'], ['yes', '有']]), { stack: true }),
+      fInput('沒有司機時可否自己開車', gPills('gf-selfDrive', gYN(v.selfDrive), [['yes', '可以'], ['no', '不行']]), { stack: true, w2: true }),
+    ].join('')))}
+    ${card('K3', '貨物清單', '欄位比照物流申請（長寬高／類別／件數／重量），並標註是否為危險品。', `<div id="gf-items"></div>`,
+      `<button class="btn btn-accent btn-sm" id="gf-add-item">＋ 新增</button>`)}
+    ${card('K7', '判定結果', '', `<div id="gr-body"></div>`)}
+    <div style="text-align:center;margin-top:6px;"><button class="btn btn-ghost" id="gf-reset">↺ 全部清除重填</button></div>`;
+  guideWire(p);
+  guideRefresh(p, true);
+};
+
+function guideWire(p) {
+  const v = guideState.v;
+  const text = ['applicant', 'dept', 'ext', 'recvDate', 'recvTime', 'startDate', 'endDate', 'purpose', 'otherPlace', 'departTime', 'backTime', 'pax'];
+  text.forEach(k => {
+    const inp = $('#gf-' + k, p);
+    const upd = () => { v[k] = k === 'pax' ? (inp.value === '' ? '' : +inp.value) : inp.value; guideRefresh(p); };
+    inp.addEventListener('input', upd); inp.addEventListener('change', upd);
+  });
+  ['fromSite', 'toSite', 'origin', 'dest'].forEach(k => {
+    $('#gf-' + k, p).onchange = e => { v[k] = e.target.value; guideRefresh(p); };
+  });
+  const bools = { selfArrange: 1, selfDrive: 1 };
+  ['mode', 'selfArrange', 'tripType', 'hasCargo', 'selfDrive'].forEach(k => {
+    $$(`input[name=gf-${k}]`, p).forEach(r => r.onchange = () => {
+      v[k] = bools[k] ? r.value === 'yes' : r.value;
+      $$(`#gf-${k}-wrap .radio-pill`, p).forEach(l => l.classList.toggle('sel', $('input', l).checked));
+      guideRefresh(p);
+    });
+  });
+  $('#gf-add-item', p).onclick = () => openCargoEditor(null, it => { v.items.push(it); guideRefresh(p); }, { hazard: true });
+  $('#gf-reset', p).onclick = confirmThen({ title: '全部清除重填？', text: '引導中已填寫的內容將清空。' }, () => {
+    guideState.v = null; RENDER.guide(); toast('已清除，請重新填寫');
+  });
+}
+
+function guideRefresh(p, initial) {
+  const v = guideState.v;
+  const cards = Guide.visibleCards(v);
+  // 單程只在目的地為交通轉運點時可選；不符時退回來回
+  const canOne = Guide.canOneway(v);
+  const oneInp = $('input[name=gf-tripType][value=oneway]', p);
+  oneInp.disabled = !canOne; oneInp.closest('.radio-pill').style.opacity = canOne ? '' : '.45';
+  if (!canOne && v.tripType === 'oneway') {
+    v.tripType = 'round';
+    $('input[name=gf-tripType][value=round]', p).checked = true;
+    $$('#gf-tripType-wrap .radio-pill', p).forEach(l => l.classList.toggle('sel', $('input', l).checked));
+  }
+  const r = Guide.route(v);
+  // K6 內依條件出現的欄位
+  const showItem = (id, on) => { const gi = $('#' + id, p).closest('.grid-item'); gi.style.display = on ? '' : 'none'; };
+  const other = v.origin === Guide.OTHER || v.dest === Guide.OTHER;
+  showItem('gf-otherPlace', other);
+  const share = Guide.inBizList(v) && v.hasCargo !== 'yes'; // 可能走出差共乘：顯示行程型態、回程上車時間
+  showItem('gf-tripType-wrap', share);
+  showItem('gf-backTime', !(share && v.tripType === 'oneway'));
+  showItem('gf-selfDrive-wrap', r.unit === 'D');
+  $('#gf-backLabel', p).textContent = share ? '回程上車時間' : '結束時間';
+  const n = Guide.days(v.startDate, v.endDate);
+  $('#gf-days', p).innerHTML = n == null ? (v.startDate && v.endDate ? '<span style="color:var(--red);">迄日不可早於起日</span>' : '—')
+    : `${n} 天${n >= Guide.THRESHOLD_DAYS ? '（長期撥用）' : '（單次用車）'}`;
+  if (v.startDate) $('#gf-endDate', p).min = v.startDate;
+  // 卡片顯示；新出現的卡片加「新」標記並捲到可視範圍
+  const fresh = [];
+  ['K1', 'K2', 'K3', 'K4', 'K5', 'K6', 'K7'].forEach(k => {
+    const c = $('#gk-' + k, p), on = cards.includes(k);
+    c.style.display = on ? '' : 'none';
+    const badge = $('.g-new', c);
+    if (badge) badge.remove();
+    if (on && !initial && !guideState.shown.includes(k) && k !== 'K7') {
+      fresh.push(k);
+      $('.card-title .g-t', c).insertAdjacentHTML('afterend', ' <span class="badge b-amber g-new">新</span>');
+    }
+  });
+  guideState.shown = cards;
+  renderCargoGrid('#gf-items', v.items, true, () => guideRefresh(p), { hazard: true, emptyText: '尚無貨物，請按右上角「新增」加入。' });
+  guideResult(p, r);
+  initMasonry(p);
+  if (fresh.length) {
+    const c = $('#gk-' + fresh[0], p);
+    setTimeout(() => c.scrollIntoView && c.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+  }
+}
+
+function guideResult(p, r) {
+  const v = guideState.v, box = $('#gr-body', p);
+  const selfBtns = `<div style="margin-top:14px;font-size:12.5px;color:var(--ink-soft);">或我想自己選：
+    ${Object.entries(Guide.UNITS).map(([k, u]) => `<button class="btn btn-ghost btn-sm" data-gself="${k}">${u.name}</button>`).join(' ')}</div>`;
+  if (!r.unit) {
+    box.innerHTML = `<div class="callout info">🧭 ${r.hint}</div>${selfBtns}`;
+  } else {
+    const u = Guide.UNITS[r.unit], miss = Guide.missing(v), pf = miss.length ? null : Guide.prefill(v);
+    box.innerHTML = `
+      ${infoGrid('gg-K7', [
+        fItem('將使用', `<b>${u.module} · ${u.name}</b> <span class="g-tag">${r.rule}</span>`, { full: true }),
+        fItem('判定理由', r.reason, { full: true }),
+        miss.length
+          ? fItem('仍缺少', `<span style="color:var(--red);font-weight:600;">${miss.join('、')}</span>`, { full: true })
+          : fItem('將帶入', pf.labels.join('、'), { full: true }),
+      ].join(''))}
+      ${pf && pf.warnings.length ? `<div class="callout" style="margin-top:10px;">⚠ ${pf.warnings.join('<br>')}</div>` : ''}
+      <div style="text-align:center;margin-top:12px;">
+        <button class="btn btn-primary" id="gr-go"${miss.length ? ' disabled title="請先補齊缺少的欄位"' : ''}>前往「${u.name}」並帶入 →</button>
+      </div>
+      ${selfBtns}`;
+    $('#gr-go', box).onclick = () => { const f = Guide.prefill(guideState.v); if (f) guideGo(f); };
+  }
+  $$('[data-gself]', box).forEach(b => b.onclick = () => {
+    const st = guideUnitState(b.dataset.gself);
+    st.view = 'new'; if ('editId' in st) st.editId = null; st.prefill = null;
+    goto(Guide.UNITS[b.dataset.gself].page);
+  });
+}
+
+function guideUnitState(k) { return { A: aApply, B: bApply, C: cApply, D: dApply, E: eApply }[k]; }
+function guideGo(pf) {
+  const st = guideUnitState(pf.unit);
+  st.view = 'new'; if ('editId' in st) st.editId = null;
+  st.prefill = pf;
+  toast(`已帶入 ${pf.labels.length} 項資料，請確認後於「${Guide.UNITS[pf.unit].name}」送出`, 'ok');
+  goto(pf.page);
+}
+// 目標新增畫面取出帶入資料（只用一次，避免之後再進新增畫面重複帶入）
+function guideTake(state) { const pf = state.prefill || null; state.prefill = null; return pf; }
+// 新增畫面上方的帶入提示條（含「回到引導修改」）
+function guideBanner(p, pf, state) {
+  const html = `<div class="callout info" id="guide-banner" style="margin-bottom:14px;">
+    🧭 已由<b>申請引導</b>帶入：${pf.labels.join('、')}。其餘欄位請補齊並確認後送出。
+    ${pf.warnings.length ? `<div style="margin-top:6px;color:var(--red);font-weight:600;">⚠ ${pf.warnings.join('<br>')}</div>` : ''}
+    <div style="margin-top:8px;"><button class="btn btn-ghost btn-sm" id="guide-back">← 回到引導修改</button></div></div>`;
+  const h = $('.section-h', p);
+  if (h) h.insertAdjacentHTML('afterend', html); else p.insertAdjacentHTML('afterbegin', html);
+  $('#guide-back', p).onclick = () => { state.view = 'list'; goto('guide'); };
+}
+// A/B/C 新增畫面由 DOM 建立後再填值（D/E 於組 src 時直接帶入）
+function guideApply(unit, state, p) {
+  const pf = guideTake(state);
+  if (!pf) return;
+  const d = pf.data;
+  const set = (id, val) => { const e = $('#' + id, p); if (e && val != null && val !== '') e.value = val; };
+  const pick = (name, val) => {
+    const r = $(`input[name=${name}][value="${val}"]`, p);
+    if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+  };
+  if (unit === 'A') {
+    set('aa-branch', d.branch); $('#aa-branch', p).onchange();
+    pick('aa-recv', d.recvMode);
+    if (d.recvMode === 'exact') { set('aa-date', d.serviceDate); set('aa-deliver', d.deliverTime); }
+    aaItems = d.items.map(i => Object.assign({}, i)); renderAaItems();
+  } else if (unit === 'B') {
+    set('ba-applicant', d.applicant);
+    set('ba-site', d.site); $('#ba-site', p).onchange();
+    set('ba-dest', d.destSite); $('#ba-dest', p).onchange();
+    set('ba-want', d.wantReceiveTime);
+    baItems = d.items.map(i => Object.assign({}, i)); renderBaCargo();
+  } else if (unit === 'C') {
+    set('ca-applicant', d.applicant); set('ca-dept', d.dept); set('ca-ext', d.ext);
+    pick('ca-type', d.type);
+    set('ca-origin', d.origin); set('ca-dest', d.dest);
+    set('ca-date', d.departDate); $('#ca-date', p).onchange();
+    set('ca-pickup', d.earliestPickup);
+    set('ca-rdate', d.returnDate); set('ca-return', d.earliestReturn);
+    set('ca-pax', d.pax);
+  }
+  guideBanner(p, pf, state);
+  initMasonry(p);
+}
 
 /* ============================================================
    初始化

@@ -1616,6 +1616,93 @@ group('模組 E 例行用車（G90–G99）', () => {
   });
 });
 
+/* =================================================================
+   共用單元：申請引導（建議規格 v0.2 卡片出現規則 5.2／判定決策表 R1～R5）
+   ================================================================= */
+group('申請引導（卡片出現規則／判定決策表 R1～R5／帶入）', () => {
+  const FUT = '2099-03-01';
+  const base = (o) => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', mode: '', fromSite: '', toSite: '',
+    recvDate: FUT, recvTime: '', items: [], startDate: '', endDate: '', purpose: '', selfArrange: null,
+    origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 2, hasCargo: '', selfDrive: null }, o);
+  const box = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
+
+  test('卡片：一開始只有需求與判定結果；選物品出現物品寄送，兩據點選好才出現貨物清單', () => {
+    const G = fresh().Guide;
+    eq(G.visibleCards(base()).join(), 'K1,K7');
+    eq(G.visibleCards(base({ mode: 'goods' })).join(), 'K1,K2,K7');
+    eq(G.visibleCards(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).join(), 'K1,K2,K3,K7');
+  });
+
+  test('卡片：有人搭車出現用車期間；≥30 天出現借用資料、未滿出現行程；有物品再出現貨物清單', () => {
+    const G = fresh().Guide;
+    eq(G.visibleCards(base({ mode: 'people' })).join(), 'K1,K4,K7');
+    eq(G.visibleCards(base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-03-30' })).join(), 'K1,K4,K5,K7', '30 天');
+    eq(G.visibleCards(base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-03-29' })).join(), 'K1,K4,K6,K7', '29 天');
+    eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes' })).join(), 'K1,K4,K6,K3,K7');
+  });
+
+  test('R1／R2：寄件與收件據點相同 → 收貨申請，不同 → 幹線託運', () => {
+    const G = fresh().Guide;
+    eq(G.route(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).unit, 'A');
+    eq(G.route(base({ mode: 'goods', fromSite: 'D9', toSite: 'D3' })).unit, 'B');
+    ok(!G.route(base({ mode: 'goods', fromSite: 'D9' })).unit, '缺收件據點未判定');
+  });
+
+  test('R3：期間含起訖 ≥ 30 天 → 例行用車（29 天不算）', () => {
+    const G = fresh().Guide;
+    eq(G.route(base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-03-30' })).unit, 'E');
+    ok(G.route(base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-03-29' })).unit !== 'E');
+    ok(!G.route(base({ mode: 'people', startDate: '2099-03-05', endDate: '2099-03-01' })).unit, '迄日早於起日未判定');
+  });
+
+  test('R4／R5：地點在共乘清單且無物品 → 出差用車；其他地點或有物品 → 一般用車', () => {
+    const G = fresh().Guide;
+    const p = o => base(Object.assign({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '桃園機場T1' }, o));
+    eq(G.route(p({ hasCargo: 'no' })).unit, 'C');
+    eq(G.route(p({ hasCargo: 'yes' })).unit, 'D');
+    eq(G.route(p({ dest: G.OTHER })).unit, 'D', '其他地點不必等隨行物品即判定');
+    ok(!G.route(p({ hasCargo: '' })).unit, '清單內地點需先選是否有物品');
+  });
+
+  test('帶入：出差用車／一般用車／例行用車的帶入資料可直接通過該功能驗證', () => {
+    const H = fresh(), G = H.Guide;
+    const c = G.prefill(base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '高鐵台北站', hasCargo: 'no' }));
+    eq(c.unit, 'C'); eq(c.data.type, 'round'); eq(c.data.pax, 2);
+    ok(H.ModuleC.createApp(c.data).id, '出差用車可建立');
+    const dv = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: G.OTHER, otherPlace: '新竹科學園區三家客戶',
+      hasCargo: 'yes', items: [Object.assign({ hazardous: true }, box)], selfDrive: true });
+    eq(G.missing(dv).length, 0, '欄位齊全：' + G.missing(dv).join('、'));
+    const d = G.prefill(dv);
+    eq(d.unit, 'D'); eq(H.ModuleD.validate(d.data).length, 0, 'D 驗證：' + H.ModuleD.validate(d.data).join('、'));
+    ok(d.data.purpose.includes('新竹科學園區'), '其他地點寫入行程說明'); eq(d.data.items[0].hazardous, true);
+    const ev = base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-31', purpose: '業務部北區業務', selfArrange: false });
+    const e = G.prefill(ev);
+    eq(e.unit, 'E'); eq(e.data.needDriver, true, '不能自行安排駕駛 → 需要配司機');
+    eq(H.ModuleE.validate(e.data).length, 0);
+  });
+
+  test('帶入：只帶判定路徑用得到的欄位；物品含危險品導向收貨／幹線時提示', () => {
+    const G = fresh().Guide;
+    const v = base({ mode: 'goods', fromSite: 'D9', toSite: 'D3', recvTime: '10:30', items: [Object.assign({ hazardous: true }, box)],
+      origin: '台北總部', purpose: '不應帶入', pax: 5 });
+    const b = G.prefill(v);
+    eq(b.unit, 'B'); eq(b.data.site, 'D9'); eq(b.data.destSite, 'D3'); eq(b.data.wantReceiveTime, '10:30');
+    ok(!('pax' in b.data) && !('purpose' in b.data), '隱藏卡片（行程）的資料不帶入');
+    ok(b.warnings.length === 1, '危險品提示');
+    const a = G.prefill(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: G.todayStr(), items: [box] }));
+    eq(a.unit, 'A'); eq(a.data.branch, 'D6'); eq(a.data.recvMode, 'asap', '今天且未填時間 → 越快越好');
+  });
+
+  test('缺漏欄位：未填齊不可前往（例：一般用車未選自駕、單程目的地非轉運點）', () => {
+    const G = fresh().Guide;
+    const d = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: G.OTHER, dest: '桃園機場T1', otherPlace: 'x', hasCargo: 'no' });
+    ok(G.missing(d).some(m => m.includes('自己開車')));
+    const c = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '新竹分公司', hasCargo: 'no', tripType: 'oneway' });
+    ok(G.missing(c).some(m => m.includes('單程')), '新竹分公司非轉運點不可單程');
+    ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).some(m => m.includes('貨物')), '物品至少 1 項');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

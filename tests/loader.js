@@ -9,14 +9,14 @@ const path = require('path');
 const vm = require('vm');
 
 const JS_DIR = path.join(__dirname, '..', 'js');
-const FILES = ['data.js', 'loadengine.js', 'moduleA.js', 'moduleB.js', 'moduleC.js', 'moduleD.js', 'moduleE.js'];
+const FILES = ['data.js', 'loadengine.js', 'moduleA.js', 'moduleB.js', 'moduleC.js', 'moduleD.js', 'moduleE.js', 'guide.js'];
 
 /* 回傳一個全新載入的 context（含 DB / 引擎 / 五模組單例）*/
 function fresh() {
   let src = FILES.map(f => fs.readFileSync(path.join(JS_DIR, f), 'utf8')).join('\n');
   // 匯出頂層 const（VM 中 const 不會掛到 global，串接後由尾段一次取出）
   src += '\n; ({ DB, WasteFactorProvider, checkLoad, effectiveLoad, itemEffective,'
-       + ' ModuleA, ModuleB, ModuleC, ModuleD, ModuleE, fmtVol, minToHHMM, hhmmToMin });';
+       + ' ModuleA, ModuleB, ModuleC, ModuleD, ModuleE, Guide, fmtVol, minToHHMM, hhmmToMin });';
   const ctx = { console, Date, Math, Set, Map, String, Number, Array, JSON, isNaN, parseInt, parseFloat };
   vm.createContext(ctx);
   return vm.runInContext(src, ctx, { filename: 'bundle.js' });
