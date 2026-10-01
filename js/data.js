@@ -30,7 +30,15 @@ const DB = {
   regionalShifts: [],
 
   /* ---- 登入使用者（示意；正式版由登入 session 帶入）：供申請人／申請單位／申請人分機預設 ---- */
-  currentUser: { name: '周雅婷', unit: '業務部', ext: '2201' },
+  currentUser: { name: '周雅婷', unit: '業務部', ext: '2201', role: '一般員工' },
+  /* ---- 一般用車「例行用車」類別：僅下列角色的下拉選單可見可選（G81）---- */
+  routineRoles: ['總經理', '部長秘書'],
+  /* ---- 管制區通行證種類（車輛主檔 permits 欄位的代碼 G85）---- */
+  permitTypes: [{ code: 'K', name: '管制區 K' }, { code: 'P', name: '管制區 P' }],
+  /* ---- 台北市噸位提示門檻（僅提示、不篩選 G86）---- */
+  taipeiTonHint: 6.5,
+  /* ---- 加班系統（模擬）：司機剩餘可加班工時（依勞基法計算，由加班系統提供；一般用車調度即時查詢 G87）---- */
+  overtimeRemaining: { DR3: 18, DR4: 6.5, DR5: 24, DR6: 2 },
 
   /* ---- 人事組織（事業部 → 組別 → 組員）----
      供委運人／接收人／代理人「姓名」連動下拉（事業部→組別→組員），
@@ -152,11 +160,12 @@ const DB = {
       dims: { l: 600, w: 240, h: 240 }, volume: 600*240*240/1000, weight: 8000 },
     { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'small',
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
-    // 商務共乘池（模組 C）— 完全分開（資源池原則）
-    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7 },
-    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 4 },
-    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9 },
-    { id: 'V-B04', name: '商務廂車 04', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 5 },
+    // 商務池（模組 C/D 共用）— 與物流池完全分開（資源池原則）
+    //   permits：管制區通行證（綁車輛、可多證；一般用車交集篩選 G85）；tons：車重（台北市噸位提示 G86）
+    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7, permits: ['K'], tons: 3.5 },
+    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 4, permits: [], tons: 2.0 },
+    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9, permits: ['K', 'P'], tons: 7.2 },
+    { id: 'V-B04', name: '商務廂車 04', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 5, permits: ['P'], tons: 3.0 },
   ],
 
   /* ---- 司機主檔（獨立資源 G61）---- */
@@ -210,6 +219,7 @@ const DB = {
     '業務部-周雅婷': '業務部-主管 黃經理',
     '研發部-吳承恩': '研發部-主管 劉協理',
     '財務部-鄭安琪': '財務部-主管 蔡副理',
+    '總經理室-林秘書': '總經理室-主管 陳特助',
   },
 };
 
