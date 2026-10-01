@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>申請引導單元</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* 版面：單欄規格文件，白紙置於淺灰底；沿用系統 UI 規範配色（深藍主色、橘色漸層卡片標題、亮藍欄位名） */
+  :root {
+    --ground: #F3F4F7;
+    --paper: #FFFFFF;
+    --ink: #1E232B;
+    --ink-soft: #586070;
+    --line: #DCE1E8;
+    --line-soft: #EBEEF3;
+    --navy: #1F3864;
+    --navy-soft: #E8EDF6;
+    --accent: #C97A3D;
+    --accent-soft: #F8EDE3;
+    --label: #2563EB;
+    --good: #2E7D4F;
+    --good-bg: #E9F4EC;
+    --warn: #96560F;
+    --warn-bg: #FBF0E0;
+    --gone: #8A3B3B;
+    --gone-bg: #F7E9E9;
+    --code-bg: #F1F3F7;
+    --on-navy: #FFFFFF;
+    --mock-head: #1F3864;
+    --mock-head-ink: #FFFFFF;
+    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #13171E; --paper: #1A1F28; --ink: #E4E7EC; --ink-soft: #A3AAB8;
+      --line: #2E3542; --line-soft: #252B36; --navy: #A9BFE6; --navy-soft: #1F2A3D;
+      --accent: #E0A06B; --accent-soft: #33261B; --label: #7AA5FF;
+      --good: #79C497; --good-bg: #1B2E23; --warn: #E7B46C; --warn-bg: #33281A;
+      --gone: #E39A9A; --gone-bg: #3A2224;
+      --code-bg: #222835; --on-navy: #13171E; --mock-head: #2A3A5C; --mock-head-ink: #E4E7EC;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #13171E; --paper: #1A1F28; --ink: #E4E7EC; --ink-soft: #A3AAB8;
+    --line: #2E3542; --line-soft: #252B36; --navy: #A9BFE6; --navy-soft: #1F2A3D;
+    --accent: #E0A06B; --accent-soft: #33261B; --label: #7AA5FF;
+    --good: #79C497; --good-bg: #1B2E23; --warn: #E7B46C; --warn-bg: #33281A;
+    --gone: #E39A9A; --gone-bg: #3A2224;
+    --code-bg: #222835; --on-navy: #13171E; --mock-head: #2A3A5C; --mock-head-ink: #E4E7EC;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground); color: var(--ink); font-family: var(--sans);
+    font-size: 15px; line-height: 1.8; padding-inline: 16px; padding-block: 28px 64px;
+  }
+  .doc {
+    max-width: 900px; margin: 0 auto; background: var(--paper);
+    border: 1px solid var(--line); border-radius: 6px; padding: 44px clamp(18px, 5vw, 56px) 56px;
+  }
+  header.doc-head { border-bottom: 3px solid var(--navy); padding-bottom: 20px; margin-bottom: 30px; }
+  .eyebrow { font-size: 12.5px; letter-spacing: .1em; color: var(--accent); font-weight: 700; }
+  h1 { font-family: var(--serif); font-size: clamp(26px, 4vw, 32px); color: var(--navy); margin: 8px 0; line-height: 1.35; text-wrap: balance; }
+  .meta { font-size: 13px; color: var(--ink-soft); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .meta b { color: var(--ink); font-weight: 500; }
+
+  .changes { background: var(--warn-bg); border: 1px solid var(--line); border-radius: 6px; padding: 14px 20px; margin-bottom: 28px; font-size: 14px; }
+  .changes .ch-h { display: block; font-weight: 700; color: var(--warn); margin-bottom: 6px; font-size: 13.5px; letter-spacing: .04em; }
+  .changes ul { margin: 0; }
+
+  nav.toc { background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: 16px 22px; margin-bottom: 36px; font-size: 14px; }
+  nav.toc .toc-h { display: block; font-size: 12.5px; letter-spacing: .08em; color: var(--ink-soft); font-weight: 700; margin-bottom: 8px; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  nav.toc li { break-inside: avoid; margin-bottom: 2px; }
+  nav.toc a { color: var(--navy); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { margin-bottom: 44px; scroll-margin-top: 16px; }
+  h2 { font-family: var(--serif); font-size: 21px; color: var(--navy); margin: 0 0 16px; padding-left: 12px; border-left: 5px solid var(--accent); line-height: 1.4; text-wrap: balance; }
+  h3 { font-size: 16px; margin: 26px 0 10px; color: var(--ink); }
+  p { margin: 0 0 12px; max-width: 68ch; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .muted { color: var(--ink-soft); }
+
+  .table-wrap { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--line); border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+  thead th { background: var(--navy-soft); color: var(--navy); font-weight: 700; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.nw { white-space: nowrap; }
+  tr.retired td { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: var(--gone); }
+  tr.retired td:last-child { text-decoration: none; }
+
+  .callout { border: 1px solid var(--line); border-left: 4px solid var(--navy); background: var(--navy-soft); border-radius: 6px; padding: 13px 17px; font-size: 14.5px; margin: 16px 0; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .callout b.k { color: var(--navy); }
+  .callout.warn b.k { color: var(--warn); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 9px; border-radius: 999px; white-space: nowrap; line-height: 1.7; }
+  .b-prop { background: var(--navy-soft); color: var(--navy); }
+  .b-pend { background: var(--warn-bg); color: var(--warn); }
+  .b-unit { background: var(--accent-soft); color: var(--accent); }
+  .b-new { background: var(--good-bg); color: var(--good); }
+  .b-gone { background: var(--gone-bg); color: var(--gone); }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 22px; font-size: 13.5px; }
+  .flow .step { flex: 1 1 150px; background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; min-width: 0; }
+  .flow .step b { display: block; color: var(--navy); font-size: 14px; }
+  .flow .step span { color: var(--ink-soft); }
+
+  /* 卡片結構圖：卡片為節點、出現條件為分支 */
+  .tree-wrap { overflow-x: auto; margin: 14px 0 22px; padding: 18px; background: var(--ground); border: 1px solid var(--line); border-radius: 6px; }
+  .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+  .tree ul { margin-left: 18px; padding-left: 18px; border-left: 2px solid var(--line); }
+  .tree li { position: relative; margin: 8px 0; }
+  .tree ul > li::before { content: ""; position: absolute; left: -18px; top: 17px; width: 14px; border-top: 2px solid var(--line); }
+  .node { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .card-n { font-weight: 700; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 5px; padding: 3px 10px; }
+  .card-n small { font-family: var(--mono); color: var(--accent); font-weight: 500; margin-right: 6px; font-size: 12px; }
+  .cond { color: var(--ink-soft); font-size: 14px; }
+  .cond::before { content: "當 "; color: var(--accent); font-weight: 700; }
+  .to { font-weight: 700; color: var(--on-navy); background: var(--navy); border-radius: 5px; padding: 2px 10px; font-size: 13.5px; }
+
+  /* 畫面示意：沿用系統 UI 規範（橘色漸層卡片標題、亮藍欄位名、底線輸入、單選膠囊） */
+  .mock-page { background: var(--ground); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 14px 0 20px; display: grid; gap: 12px; }
+  .mock { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--paper); font-size: 13.5px; min-width: 0; }
+  .mock-title { color: #fff; font-weight: 700; padding: 8px 14px 8px 24px; position: relative;
+    background: linear-gradient(90deg, #C97A3D 0%, #DBA271 55%, #F2E3D4 100%); text-shadow: 0 1px 2px rgba(0,0,0,.25);
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mock-title::before { content: "^"; position: absolute; left: 9px; top: 50%; transform: translateY(-55%); font-weight: 800; font-size: 17px; }
+  .mock-title .tag { font-size: 11.5px; font-weight: 700; background: rgba(255,255,255,.9); color: #8A4F1E; border-radius: 999px; padding: 0 8px; text-shadow: none; }
+  .mock-title .acts { display: flex; gap: 6px; }
+  .mock-title .mbtn { font-size: 11.5px; border-radius: 6px; padding: 1px 9px; text-shadow: none; background: #1F3864; color: #fff; }
+  .mock-title .mbtn.orange { background: #B8692E; }
+  .mock-body { padding: 12px 14px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 18px; }
+  .mock-body.block { display: block; }
+  .fld { display: flex; gap: 8px; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 3px; min-width: 0; }
+  .fld .l { color: var(--label); font-weight: 700; white-space: nowrap; }
+  .fld .v { color: var(--ink); overflow-wrap: anywhere; }
+  .fld .v.ph { color: var(--ink-soft); }
+  .fld.full { grid-column: 1 / -1; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { border: 1px solid var(--line); border-radius: 7px; padding: 2px 10px; color: var(--ink-soft); }
+  .pill.sel { border-color: var(--navy); background: var(--navy-soft); color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); font-weight: 700; }
+  .mgrid { overflow-x: auto; }
+  .mgrid table { font-size: 12.5px; min-width: 620px; }
+  .mgrid thead th { background: var(--mock-head); color: var(--mock-head-ink); }
+  .mgrid td { padding: 6px 10px; }
+  .mini-btn { display: inline-block; border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; font-size: 12px; color: var(--ink); background: var(--paper); }
+  .result { border: 2px solid var(--navy); }
+  .result .mock-title { background: linear-gradient(90deg, #1F3864 0%, #3B5A8F 60%, #8FA6CC 100%); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 6px 0 8px; }
+  .kv dt { color: var(--label); font-weight: 700; }
+  .kv dd { margin: 0; min-width: 0; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+  .btn { font-size: 12.5px; border-radius: 6px; padding: 4px 11px; border: 1px solid var(--line); color: var(--ink); background: var(--paper); }
+  .btn.primary { background: #1F3864; color: #fff; border-color: #1F3864; }
+  .mock-cap { font-size: 12.5px; color: var(--ink-soft); margin: -4px 0 0; }
+
+  .qa { border-bottom: 1px solid var(--line-soft); padding: 13px 0; }
+  .qa:last-child { border-bottom: 0; }
+  .qa .q2 { font-weight: 700; margin-bottom: 3px; }
+  .qa .q2::before { content: "待決："; color: var(--warn); }
+  .qa .a2::before { content: "建議："; color: var(--navy); font-weight: 700; }
+  .qa .why { font-size: 13.5px; color: var(--ink-soft); margin-top: 4px; padding-left: 14px; border-left: 2px solid var(--line); }
+
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-soft); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  @media (max-width: 640px) { nav.toc ol { columns: 1; } }
+</style>
+</head>
+<body>
+
+<main class="doc">
+  <header class="doc-head">
+    <div class="eyebrow">車輛派遣系統整合案 · 共用軟體單元 · 建議規格</div>
+    <h1>申請引導單元</h1>
+    <div class="meta">
+      <span>版本 <b>v2</b></span>
+      <span>日期 <b>2026-10-01</b></span>
+      <span>狀態 <b>已實作於原型，待業務單位確認</b></span>
+      <span>所屬專案 <b>khcheng77/car-transport</b></span>
+    </div>
+  </header>
+
+  <div class="changes">
+    <span class="ch-h">v2 相對 v0.2 的主要變更</span>
+    <ul>
+      <li>例行用車不再是獨立申請：依〈一般用車模組 v2〉改為一般用車申請單的「例行用車」類別，僅總經理／部長秘書可選。引導改為分流到<strong>四種</strong>申請。</li>
+      <li>移除判定規則 R3（期間 ≥ 30 天 → 例行用車）與卡片 K5（借用資料）；天數不再影響判定，多天到數個月的用車依地點與隨行物品走出差用車或一般用車。</li>
+      <li>單元改為與其他單元一致的三個畫面：首頁（查詢條件＋歷史引導紀錄）、右上角「＋ 新增」進入引導表單、清單左側「細節」查看該次引導的歷史資料。</li>
+      <li>新增<strong>引導紀錄</strong>：每次「前往並帶入」留下一筆紀錄；回到引導修改會更新同一筆並記錄改判；目標功能送出後自動回填申請單號。</li>
+      <li>一般用車 v2 新增的欄位（願意等待駕駛媒合、管制區通行證、進入台北市、假日／夜間加班）不由引導收集，留在一般用車新增畫面填寫。</li>
+    </ul>
+  </div>
+
+  <nav class="toc" aria-label="目錄">
+    <span class="toc-h">目錄</span>
+    <ol>
+      <li><a href="#bg">背景與目標</a></li>
+      <li><a href="#scope">單元定位與範疇</a></li>
+      <li><a href="#principle">設計原則</a></li>
+      <li><a href="#screens">單元畫面結構</a></li>
+      <li><a href="#flow">使用流程</a></li>
+      <li><a href="#cards">卡片出現規則</a></li>
+      <li><a href="#route">判定決策表</a></li>
+      <li><a href="#fields">各卡片欄位規格</a></li>
+      <li><a href="#map">帶入欄位對照</a></li>
+      <li><a href="#handoff">跳轉與帶入機制</a></li>
+      <li><a href="#records">引導紀錄與歷程</a></li>
+      <li><a href="#ui">畫面規格</a></li>
+      <li><a href="#edge">例外與邊界情況</a></li>
+      <li><a href="#accept">驗收條件</a></li>
+      <li><a href="#decide">待業務單位決定事項</a></li>
+      <li><a href="#summary">決策摘要表</a></li>
+      <li><a href="#history">版本紀錄</a></li>
+    </ol>
+  </nav>
+
+  <section id="bg">
+    <h2>1. 背景與目標</h2>
+    <p>
+      系統目前有四種申請：收貨申請（區域內物流）、幹線託運申請（南北幹線）、出差用車（差旅共乘）、一般用車（含例行用車類別）。
+      業務單位反映申請項目太多，使用者常不知道該選哪一個，選錯後才被駁回或轉單，徒增往返。
+    </p>
+    <p>
+      本單元的目標：使用者<strong>照著畫面填寫自己的需求資料</strong>，畫面依填寫內容<strong>自動長出需要的卡片</strong>，
+      系統同時依這些資料判定該用哪一種申請，最後一鍵前往該功能，<strong>已填的資料自動帶入</strong>；每次引導都留下紀錄，可回頭查看與修改。
+    </p>
+  </section>
+
+  <section id="scope">
+    <h2>2. 單元定位與範疇</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>本單元負責</th><th>本單元不負責</th></tr></thead>
+        <tbody>
+          <tr><td>一張需求表單，依填寫內容顯示或隱藏後續卡片</td><td>建立或送出任何申請單（一律在目標功能內送出）</td></tr>
+          <tr><td>依欄位值判定該用哪一種申請，並即時顯示判定結果與理由</td><td>各功能專屬的複雜欄位（例如站點／建物、接收人、通行證、加班需求）</td></tr>
+          <tr><td>把已填資料帶入目標功能的新增畫面</td><td>決定一般用車的「用車類別」（例行用車由有權限者在一般用車畫面自行選擇）</td></tr>
+          <tr><td>保存引導紀錄：填寫內容、判定結果、歷程與回填的申請單號</td><td>跨模組的申請進度查詢（另案，見第 15 節）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><b class="k">定位：</b>本單元是<strong>新增的入口</strong>，不取代四個既有申請單元（第一階段並存）。屬於共用層，與「系統儀表板」同列於側邊選單「總覽」群組。</p>
+    </div>
+  </section>
+
+  <section id="principle">
+    <h2>3. 設計原則</h2>
+    <ol>
+      <li><strong>填的是資料，不是回答問題。</strong>畫面上沒有「您要做什麼？」式的問句；使用者填的每一格都是真正要送出的申請資料，判定流程的同時也在收集帶入資料。</li>
+      <li><strong>流程靠卡片出現來呈現。</strong>前一張卡片的關鍵欄位填好，下一張需要的卡片才出現；不需要的卡片不出現。</li>
+      <li><strong>判定結果看得見。</strong>表單最下方固定一張「判定結果」卡片，隨填寫即時更新：將使用哪一項申請、為什麼、還缺哪些欄位。</li>
+      <li><strong>只分流、不送單。</strong>送出一律在目標功能完成，驗證與業務規則只維護一份。</li>
+      <li><strong>只收共用、易填的資料。</strong>各功能專屬的欄位留在原表單填寫，避免同一套欄位在兩處維護。</li>
+      <li><strong>畫面結構與其他單元一致。</strong>首頁是查詢條件＋清單，「＋ 新增」進入表單，「細節」看歷史資料（依 UI 規範的三畫面子流程）。</li>
+      <li><strong>規則以資料維護。</strong>「卡片出現規則」與「判定決策表」都寫成資料表，規則異動只改表，並以測試保護每一條路徑。</li>
+    </ol>
+  </section>
+
+  <section id="screens">
+    <h2>4. 單元畫面結構</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>畫面</th><th>進入方式</th><th>內容</th></tr></thead>
+        <tbody>
+          <tr><td class="nw">首頁（查詢）</td><td>側邊選單「申請引導」、儀表板入口卡</td><td>上方「查詢條件」卡片（申請人模糊、判定功能、狀態；右上「🔍 查詢」「＋ 新增」）；下方「歷史引導紀錄」清單，每列最左側「細節」按鈕</td></tr>
+          <tr><td class="nw">新增（引導表單）</td><td>首頁右上「＋ 新增」；細節頁「回到引導修改」「以此內容新增引導」；目標功能的「← 回到引導修改」</td><td>需求表單與依條件出現的卡片 K1～K7（第 6 節）；修改既有紀錄時標題為「修改申請引導 · GD-xxxx」</td></tr>
+          <tr><td class="nw">細節（歷史資料）</td><td>首頁清單左側「細節」</td><td>基本資料、填寫內容（只列當時出現過的卡片）、貨物清單、判定結果、歷程紀錄、操作（第 11 節）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>4.1 首頁示意</h3>
+    <div class="mock-page" aria-label="申請引導首頁示意">
+      <div class="mock">
+        <div class="mock-title">查詢條件 <span class="acts"><span class="mbtn">🔍 查詢</span><span class="mbtn orange">＋ 新增</span></span></div>
+        <div class="mock-body">
+          <div class="fld"><span class="l">申請人（模糊）</span><span class="v ph">輸入姓名/部門關鍵字</span></div>
+          <div class="fld"><span class="l">判定功能</span><span class="v">全部</span></div>
+          <div class="fld"><span class="l">狀態</span><span class="v">全部</span></div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="mock-title">歷史引導紀錄 <span class="tag">3 筆</span></div>
+        <div class="mock-body block">
+          <div class="mgrid">
+            <table>
+              <thead><tr><th></th><th>引導編號</th><th>申請人</th><th>需求摘要</th><th>判定功能</th><th>狀態</th><th>申請單號</th></tr></thead>
+              <tbody>
+                <tr><td><span class="mini-btn">細節</span></td><td>GD-0003</td><td>研發部-吳承恩</td><td>物品 台中據點 → 台中據點｜貨物 1 項</td><td>收貨申請 <code>R1</code></td><td><span class="badge b-pend">已帶入待送出</span></td><td>—</td></tr>
+                <tr><td><span class="mini-btn">細節</span></td><td>GD-0002</td><td>業務部-周雅婷</td><td>用車 10/08～10/09（2 天）｜台北總部 → 其他地點</td><td>一般用車 <code>R5</code></td><td><span class="badge b-new">已送出申請</span></td><td>GU001</td></tr>
+                <tr><td><span class="mini-btn">細節</span></td><td>GD-0001</td><td>財務部-鄭安琪</td><td>用車 10/04（1 天）｜台北總部 → 高鐵台北站</td><td>出差用車 <code>R4</code></td><td><span class="badge b-new">已送出申請</span></td><td>BZ001</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="flow">
+    <h2>5. 使用流程</h2>
+    <div class="flow" role="list">
+      <div class="step" role="listitem"><b>① 首頁按「＋ 新增」</b><span>進入引導表單；申請人、部門、分機預帶登入者</span></div>
+      <div class="step" role="listitem"><b>② 填卡片</b><span>依填寫內容，只出現需要的卡片</span></div>
+      <div class="step" role="listitem"><b>③ 判定結果即時更新</b><span>顯示將使用的申請、理由與缺少的欄位</span></div>
+      <div class="step" role="listitem"><b>④ 前往並帶入</b><span>建立引導紀錄，跳到目標功能的新增畫面</span></div>
+      <div class="step" role="listitem"><b>⑤ 補齊後送出</b><span>在目標功能補專屬欄位、送出；紀錄回填申請單號</span></div>
+    </div>
+  </section>
+
+  <section id="cards">
+    <h2>6. 卡片出現規則</h2>
+    <h3>6.1 卡片結構</h3>
+    <div class="tree-wrap">
+      <ul class="tree">
+        <li><span class="node"><span class="card-n"><small>K1</small>需求</span><span class="muted">（一開始就出現）</span></span>
+          <ul>
+            <li><span class="node"><span class="cond">運送內容＝只有物品</span><span class="card-n"><small>K2</small>物品寄送</span></span>
+              <ul>
+                <li><span class="node"><span class="cond">寄件據點、收件據點都已選</span><span class="card-n"><small>K3</small>貨物清單</span></span>
+                  <ul>
+                    <li><span class="node"><span class="cond">兩據點相同</span><span class="to">A 收貨申請</span></span></li>
+                    <li><span class="node"><span class="cond">兩據點不同</span><span class="to">B 幹線託運申請</span></span></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+            <li><span class="node"><span class="cond">運送內容＝有人搭車</span><span class="card-n"><small>K4</small>用車期間</span></span>
+              <ul>
+                <li><span class="node"><span class="cond">起訖日期有效（不論天數）</span><span class="card-n"><small>K6</small>行程</span></span>
+                  <ul>
+                    <li><span class="node"><span class="cond">出發地、目的地都在共乘清單，且無隨行物品</span><span class="to">C 出差用車</span></span></li>
+                    <li><span class="node"><span class="cond">選了「其他地點」，或有隨行物品</span><span class="card-n"><small>K3</small>貨物清單（有物品時）</span><span class="to">D 一般用車</span></span></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><span class="node"><span class="card-n"><small>K7</small>判定結果</span><span class="muted">（永遠在最下方，隨填寫即時更新）</span></span></li>
+      </ul>
+    </div>
+
+    <h3>6.2 卡片出現條件表（規則資料）</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>卡片</th><th>出現條件</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td class="nw"><code>K1</code> 需求</td><td>永遠顯示</td><td>申請人資料、運送內容</td></tr>
+          <tr><td class="nw"><code>K2</code> 物品寄送</td><td>運送內容＝只有物品</td><td>寄件／收件據點決定 A 或 B；收貨日期時間</td></tr>
+          <tr><td class="nw"><code>K3</code> 貨物清單</td><td>（運送內容＝只有物品，且 K2 兩據點已選）或（K6 隨行物品＝有）</td><td>共用貨物編輯器，含「是否為危險品」</td></tr>
+          <tr><td class="nw"><code>K4</code> 用車期間</td><td>運送內容＝有人搭車</td><td>起訖日期；顯示天數（僅供參考，不影響判定）</td></tr>
+          <tr class="retired"><td class="nw"><code>K5</code> 借用資料</td><td>（原：期間 ≥ 30 天）</td><td><span class="badge b-gone">v2 移除</span> 例行用車改為一般用車類別</td></tr>
+          <tr><td class="nw"><code>K6</code> 行程</td><td>K4 起訖日期已填且迄日不早於起日</td><td>地點與隨行物品決定 C 或 D；時間、人數</td></tr>
+          <tr><td class="nw"><code>K7</code> 判定結果</td><td>永遠顯示</td><td>判定結果、理由、將帶入／仍缺少、「前往並帶入」</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><b class="k">卡片內的欄位也會依資料出現：</b>K6 行程中，「來回／單程」只在兩地都在共乘清單且無隨行物品時出現；選「單程」時回程時間收起；「其他地點說明」只在選了「其他地點」時出現；「沒有司機時可以自己開車嗎」只在判定為一般用車時出現。卡片編號保留 K5 空號，避免與 v0.2 文件對照時混淆。</p>
+    </div>
+  </section>
+
+  <section id="route">
+    <h2>7. 判定決策表</h2>
+    <p>判定只看<strong>欄位值</strong>，依序比對，第一條符合的規則即為結果。用車天數只用於顯示與提示，不參與判定。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>規則</th><th>條件（欄位值）</th><th>導向</th><th>判定結果卡片的理由文字</th></tr></thead>
+        <tbody>
+          <tr><td><code>R1</code></td><td>運送內容＝只有物品，且寄件據點＝收件據點</td><td><span class="badge b-unit">A 收貨申請</span></td><td>寄件與收件在同一個據點，由院區內固定班次巡迴收送，送出即自動排入最近班次。</td></tr>
+          <tr><td><code>R2</code></td><td>運送內容＝只有物品，且寄件據點≠收件據點</td><td><span class="badge b-unit">B 幹線託運申請</span></td><td>寄件與收件在不同據點，由南北幹線車沿線收送，需主管核准後派車。</td></tr>
+          <tr class="retired"><td><code>R3</code></td><td>（原：有人搭車，且期間 ≥ 30 天 → 例行用車）</td><td><span class="badge b-gone">v2 移除</span></td><td>例行用車併入一般用車，時長不分類別。</td></tr>
+          <tr><td><code>R4</code></td><td>運送內容＝有人搭車，出發地∈共乘出發地清單，目的地∈共乘目的地清單，且隨行物品＝無</td><td><span class="badge b-unit">C 出差用車</span></td><td>往返共乘清單內的地點且未攜帶物品，由系統自動併車共乘。</td></tr>
+          <tr><td><code>R5</code></td><td>運送內容＝有人搭車，且（出發地或目的地＝其他地點，或隨行物品＝有）</td><td><span class="badge b-unit">D 一般用車</span></td><td>地點不在共乘清單或需攜帶物品，由調度人工確認資源後派車，可自駕。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><b class="k">例行用車怎麼走：</b>總經理、部長秘書的用車需求同樣經 R4／R5 判定；導向一般用車後，在一般用車新增畫面把「用車類別」改成「例行用車」即可（該選項只有這兩種角色看得到）。引導本身不設定類別，帶入時一律為「一般用車」。</p>
+    </div>
+    <div class="callout warn">
+      <p><b class="k">需要業務單位確認：</b>R4／R5 以「地點是否在共乘清單、是否有隨行物品」劃分 C 與 D，見第 15 節待決事項 1。長天數（例如數個月）且兩地都在共乘清單、無隨行物品時，依規則仍導向 C，見待決事項 2。</p>
+    </div>
+  </section>
+
+  <section id="fields">
+    <h2>8. 各卡片欄位規格</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>卡片</th><th>欄位</th><th>控件</th><th>必填</th><th>說明</th></tr></thead>
+        <tbody>
+          <tr><td class="nw" rowspan="2">K1 需求</td><td>申請人／部門／分機</td><td>文字（預帶登入者）</td><td>是</td><td>可修改</td></tr>
+          <tr><td>運送內容</td><td>單選膠囊</td><td>是</td><td>「只寄送物品（無人隨行）」／「有人要搭車（可附帶物品）」</td></tr>
+          <tr><td class="nw" rowspan="3">K2 物品寄送</td><td>寄件據點、收件據點</td><td>下拉（屏東～台北 10 據點）</td><td>是</td><td>兩者相同→A；不同→B</td></tr>
+          <tr><td>希望收貨日期</td><td>日期</td><td>是</td><td>不可早於今天；只帶入 A（幹線託運申請無日期欄位）</td></tr>
+          <tr><td>希望收貨時間</td><td>時間</td><td>否</td><td>留空＝越快越好</td></tr>
+          <tr><td class="nw">K3 貨物清單</td><td>品名、長寬高、品類、件數、單件重、是否危險品</td><td>共用貨物編輯器</td><td>至少 1 項</td><td>沿用 <code>renderCargoGrid</code>／<code>openCargoEditor</code></td></tr>
+          <tr><td class="nw">K4 用車期間</td><td>起日、迄日</td><td>日期</td><td>是</td><td>迄日不得早於起日；顯示天數</td></tr>
+          <tr><td class="nw" rowspan="7">K6 行程</td><td>出發地</td><td>下拉（共乘出發地＋「其他地點」）</td><td>是</td><td>如：台北總部、台中辦公室</td></tr>
+          <tr><td>目的地</td><td>下拉（共乘目的地＋「其他地點／多點」）</td><td>是</td><td>如：桃園機場T1、高鐵台北站</td></tr>
+          <tr><td>其他地點說明</td><td>文字</td><td>選「其他」時必填</td><td>選「其他」時才出現；帶入一般用車的「行程說明」</td></tr>
+          <tr><td>來回／單程</td><td>單選膠囊</td><td>C 時必填</td><td>兩地都在清單且無物品時出現；單程限目的地為交通轉運點</td></tr>
+          <tr><td>出發時間、回程上車／結束時間</td><td>時間</td><td>是</td><td>搭配 K4 起訖日期；單程時不需回程時間</td></tr>
+          <tr><td>人數</td><td>數字</td><td>是</td><td>至少 1 人</td></tr>
+          <tr><td>隨行物品</td><td>單選膠囊（沒有／有）</td><td>是</td><td>「有」→出現 K3、判定為 D；D 時另出現「沒有司機時可否自己開車」（必填）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="map">
+    <h2>9. 帶入欄位對照</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>引導欄位</th><th>A 收貨</th><th>B 幹線</th><th>C 出差</th><th>D 一般</th></tr></thead>
+        <tbody>
+          <tr><td>申請人／部門／分機</td><td>取登入者（A 畫面為唯讀）</td><td><code>applicant</code></td><td><code>applicant</code> <code>dept</code> <code>ext</code></td><td><code>applicant</code> <code>dept</code> <code>ext</code></td></tr>
+          <tr><td>寄件據點</td><td><code>branch</code>（院區）</td><td><code>site</code></td><td>—</td><td>—</td></tr>
+          <tr><td>收件據點</td><td>—（同院區）</td><td><code>destSite</code></td><td>—</td><td>—</td></tr>
+          <tr><td>希望收貨日期</td><td><code>serviceDate</code></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>希望收貨時間</td><td><code>deliverTime</code>＋<code>recvMode</code>（今天且留空＝越快越好）</td><td><code>wantReceiveTime</code></td><td>—</td><td>—</td></tr>
+          <tr><td>貨物清單</td><td><code>items</code></td><td><code>items</code></td><td>—</td><td><code>items</code>（含 <code>hazardous</code>）</td></tr>
+          <tr><td>用車起日／迄日</td><td>—</td><td>—</td><td><code>departDate</code> <code>returnDate</code></td><td><code>startDate</code> <code>endDate</code></td></tr>
+          <tr><td>出發時間</td><td>—</td><td>—</td><td><code>earliestPickup</code></td><td><code>startTime</code></td></tr>
+          <tr><td>回程／結束時間</td><td>—</td><td>—</td><td><code>earliestReturn</code>（回程上車）</td><td><code>endTime</code>（用車結束）</td></tr>
+          <tr><td>出發地／目的地／其他地點說明</td><td>—</td><td>—</td><td><code>origin</code> <code>dest</code></td><td>寫入 <code>purpose</code></td></tr>
+          <tr><td>來回／單程</td><td>—</td><td>—</td><td><code>type</code></td><td>—</td></tr>
+          <tr><td>人數</td><td>—</td><td>—</td><td><code>pax</code></td><td><code>pax</code></td></tr>
+          <tr><td>沒有司機時可否自己開車</td><td>—</td><td>—</td><td>—</td><td><code>selfDrive</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><b class="k">一般用車 v2 的欄位不由引導收集：</b>用車類別（帶入一律為一般用車）、願意等待駕駛媒合、所需管制區通行證、是否進入台北市、假日／夜間加班需求，都在一般用車新增畫面填寫；這些欄位只影響調度判斷，不影響該走哪一種申請。</p>
+    </div>
+  </section>
+
+  <section id="handoff">
+    <h2>10. 跳轉與帶入機制</h2>
+    <ol>
+      <li>按下「前往並帶入」時：建立（或更新）引導紀錄，只把<strong>目前顯示中的卡片</strong>的資料整理成帶入資料，寫到目標單元狀態的 <code>prefill</code>，將目標單元切到「新增」畫面，再以 <code>goto()</code> 跳轉。</li>
+      <li>目標單元的新增畫面依序採用：撤回修改中的草稿 → <strong>引導帶入資料</strong> → 系統預設值。</li>
+      <li>帶入資料<strong>只使用一次</strong>，畫面產生後即清除；之後從清單按「＋ 新增」不會再出現舊資料。</li>
+      <li>目標畫面頂部顯示「已由申請引導 GD-xxxx 帶入：…，其餘欄位請補齊並確認後送出」與「← 回到引導修改」；有危險品時一併提示。</li>
+      <li>「← 回到引導修改」會重新打開<strong>同一筆</strong>引導紀錄的填寫內容，卡片與已填資料維持原樣。</li>
+      <li>在目標功能送出成功後，引導紀錄自動回填申請單號；送出仍走目標功能自己的驗證與確認視窗，引導本身<strong>不建立、不送出</strong>任何申請單。</li>
+    </ol>
+  </section>
+
+  <section id="records">
+    <h2>11. 引導紀錄與歷程</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>狀態</th><th>何時進入</th><th>可做的操作</th></tr></thead>
+        <tbody>
+          <tr><td class="nw"><span class="badge b-pend">已帶入待送出</span></td><td>按下「前往並帶入」，尚未在目標功能送出</td><td>回到引導修改（更新同一筆）、以此內容新增引導</td></tr>
+          <tr><td class="nw"><span class="badge b-new">已送出申請</span></td><td>目標功能送出成功，紀錄回填申請單號</td><td>查看申請單（跳到該單明細）、以此內容新增引導；內容不可再修改</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>歷程動作</th><th>說明欄內容</th></tr></thead>
+        <tbody>
+          <tr><td class="nw">建立引導</td><td>需求摘要，例如「用車 10/01～10/31（31 天）｜台北總部 → 其他地點」</td></tr>
+          <tr><td class="nw">判定並帶入</td><td>規則與功能，例如「R5 → 一般用車」</td></tr>
+          <tr><td class="nw">回到引導修改</td><td>—</td></tr>
+          <tr><td class="nw">重新判定並帶入</td><td>同功能時記規則；功能改變時記「改判：出差用車 → 一般用車（R5）」</td></tr>
+          <tr><td class="nw">送出申請</td><td>目標功能與單號，例如「一般用車 單號 GU001」</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">細節頁的「填寫內容」只列出判定當時出現的卡片欄位（隱藏卡片的資料不顯示、也不會被帶入），與帶入範圍一致。</p>
+  </section>
+
+  <section id="ui">
+    <h2>12. 畫面規格（符合 UI 規範）</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>項目</th><th>規格</th></tr></thead>
+        <tbody>
+          <tr><td class="nw">單元代號</td><td>頁面 <code>guide</code>、容器 <code>page-guide</code>、渲染 <code>RENDER.guide()</code>（依 <code>guideState.view</code> 分派 list／detail／new）；邏輯放 <code>Guide</code>（卡片出現規則、判定決策表、帶入資料、引導紀錄）</td></tr>
+          <tr><td class="nw">選單位置</td><td>「總覽」群組，系統儀表板之後：「🧭 申請引導」；儀表板另有入口卡</td></tr>
+          <tr><td class="nw">首頁</td><td>查詢條件卡片（<code>gq-*</code>）＋歷史引導紀錄表格；「載入範例」可產生示範紀錄</td></tr>
+          <tr><td class="nw">新增頁</td><td>單一表單頁，不分步驟；卡片依第 6 節條件顯示或隱藏，K7 判定結果永遠在最下方；頁尾「全部清除重填」（確認視窗）與「← 回上一頁」</td></tr>
+          <tr><td class="nw">欄位元件</td><td>一律 <code>infoGrid</code> ＋ <code>fInput</code>／<code>fItem</code>；二選一用單選膠囊 <code>radio-pill</code>；貨物沿用共用貨物編輯器</td></tr>
+          <tr><td class="nw">顯示／隱藏</td><td>任何欄位變更後重新計算卡片可見性與判定結果，並呼叫 <code>initMasonry</code></td></tr>
+          <tr><td class="nw">新卡片出現</td><td>新出現的卡片標題加「新」小標，並平順捲動到可視範圍</td></tr>
+          <tr><td class="nw">判定結果卡</td><td>未判定：下一步提示；已判定：功能與規則、理由、將帶入或仍缺少的欄位；欄位齊全前「前往並帶入」停用；下方「或我想自己選」列出四個申請入口</td></tr>
+          <tr><td class="nw">細節頁</td><td>基本資料、填寫內容、貨物清單、判定結果、歷程紀錄、操作；最下方「← 回上一頁」</td></tr>
+          <tr><td class="nw">欄位代號前綴</td><td>查詢 <code>gq-*</code>、表單 <code>gf-*</code>、判定結果 <code>gr-*</code>、細節 <code>gd-*</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>12.1 新增頁示意（有人搭車、多點洽公、兩天）</h3>
+    <div class="mock-page" aria-label="申請引導新增頁示意">
+      <div class="mock">
+        <div class="mock-title">需求</div>
+        <div class="mock-body">
+          <div class="fld"><span class="l">申請人</span><span class="v">業務部-周雅婷</span></div>
+          <div class="fld"><span class="l">分機</span><span class="v">2201</span></div>
+          <div class="fld full"><span class="l">運送內容</span><span class="pills"><span class="pill">只寄送物品（無人隨行）</span><span class="pill sel">有人要搭車（可附帶物品）</span></span></div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="mock-title">用車期間</div>
+        <div class="mock-body">
+          <div class="fld"><span class="l">起日</span><span class="v">2026-10-08</span></div>
+          <div class="fld"><span class="l">迄日</span><span class="v">2026-10-09</span></div>
+          <div class="fld"><span class="l">天數</span><span class="v">2 天</span></div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="mock-title">行程 <span class="tag">新</span></div>
+        <div class="mock-body">
+          <div class="fld"><span class="l">出發地</span><span class="v">台北總部</span></div>
+          <div class="fld"><span class="l">目的地</span><span class="v">其他地點／多點</span></div>
+          <div class="fld full"><span class="l">其他地點說明</span><span class="v">新竹科學園區客戶拜訪（三家）</span></div>
+          <div class="fld"><span class="l">出發時間</span><span class="v">09:00</span></div>
+          <div class="fld"><span class="l">結束時間</span><span class="v">17:00</span></div>
+          <div class="fld"><span class="l">人數</span><span class="v">3</span></div>
+          <div class="fld full"><span class="l">隨行物品</span><span class="pills"><span class="pill">沒有</span><span class="pill sel">有</span></span></div>
+          <div class="fld full"><span class="l">沒有司機時可否自己開車</span><span class="pills"><span class="pill sel">可以</span><span class="pill">不行</span></span></div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="mock-title">貨物清單 <span class="tag">新</span></div>
+        <div class="mock-body">
+          <div class="fld full"><span class="l">展示機台</span><span class="v">60×40×45 cm｜易碎品｜1 件｜18 kg｜非危險品</span></div>
+        </div>
+      </div>
+      <div class="mock result">
+        <div class="mock-title">判定結果</div>
+        <div class="mock-body block">
+          <p style="margin:0 0 4px;"><b>將使用：</b><span class="badge b-unit">一般用車 · 一般用車</span> <code>R5</code></p>
+          <p class="muted" style="margin:0 0 6px;">用車期間 2 天；地點不在共乘清單（台北總部 → 其他地點），由調度人工確認資源後派車，可自駕。</p>
+          <dl class="kv">
+            <dt>將帶入</dt><dd>申請人、用車 10/08 09:00～10/09 17:00、3 人、自駕：可以、行程說明、隨行貨物 1 項</dd>
+          </dl>
+          <div class="btns"><span class="btn primary">前往「一般用車」並帶入 →</span><span class="muted" style="font-size:12.5px;">或我想自己選：收貨申請｜幹線託運申請｜出差用車｜一般用車</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="mock-cap">v2 起不再有「借用資料」卡片；兩天、數週或數個月的用車都由「行程」卡片判定。</p>
+  </section>
+
+  <section id="edge">
+    <h2>13. 例外與邊界情況</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>情況</th><th>處理方式</th></tr></thead>
+        <tbody>
+          <tr><td>改了前面的欄位，後面的卡片消失</td><td>已填的值保留在畫面記憶中（改回來仍在），但<strong>只帶入目前顯示中的卡片</strong>；判定結果同步更新。</td></tr>
+          <tr><td>長期用車（數週～數個月）</td><td>不再另走例行用車；依 R4／R5 判定。導向一般用車時，一般用車本身支援數小時～數個月。</td></tr>
+          <tr><td>總經理／部長秘書要申請例行用車</td><td>照常引導；導向一般用車後，在一般用車畫面把「用車類別」改為「例行用車」（只有這兩種角色看得到此選項）。</td></tr>
+          <tr><td>需要管制區通行證、會進入台北市、要加班</td><td>引導不收集；導向一般用車後在其新增畫面勾選。通行證會影響調度可選的車輛，不影響判定。</td></tr>
+          <tr><td>只有物品，但含危險品</td><td>仍導向 A／B；判定結果與目標畫面提示「目前沒有危險品欄位，請於備註說明並聯絡調度」。<span class="badge b-pend">待確認</span></td></tr>
+          <tr><td>有人搭車且要跨據點（北↔南）</td><td>於 K6 選「其他地點」並說明，導向 D（一般用車沒有地點限制）。</td></tr>
+          <tr><td>兩地都在共乘清單，但要自己開車</td><td>依 R4 仍判定為 C（出差用車由系統派車）；若必須自駕，改選「其他地點」或聯絡調度。<span class="badge b-pend">待確認</span></td></tr>
+          <tr><td>單程且目的地不是交通轉運點</td><td>K6 的「單程」選項只在目的地為轉運點時可選，否則自動退回「來回」。</td></tr>
+          <tr><td>在目標畫面取消、沒有送出</td><td>引導紀錄維持「已帶入待送出」；可從細節頁「回到引導修改」或「以此內容新增引導」接續。</td></tr>
+          <tr><td>已送出的紀錄想再改</td><td>不可修改（申請單已成立）；用「以此內容新增引導」另建一筆，申請異動則依各功能規則處理。</td></tr>
+          <tr><td>帶入值不符目標欄位規則</td><td>目標功能照常驗證並提示；引導在欄位設計上先行避免（例如人數至少 1、收貨日期不早於今天）。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="accept">
+    <h2>14. 驗收條件</h2>
+    <ul>
+      <li><strong>判定測試：</strong>R1、R2、R4、R5 每條規則，以欄位值輸入 <code>Guide.route(表單值)</code> 皆得到正確功能；判定功能不含例行用車；長天數（例如 92 天）依地點與物品判定為 C 或 D。</li>
+      <li><strong>卡片測試：</strong>卡片顯示與否完全符合第 6.2 節條件表（<code>Guide.visibleCards(表單值)</code>），不論天數都不出現 K5。</li>
+      <li><strong>帶入測試：</strong>C、D 的帶入資料能直接通過該功能驗證（含多天一般用車）；A、B 的據點、日期時間、貨物正確出現在新增畫面。</li>
+      <li><strong>只帶入可見卡片：</strong>先填 K6 再把運送內容改為「只有物品」，K6 的資料不得被帶入 A／B。</li>
+      <li><strong>引導紀錄：</strong>前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判；目標功能送出後回填單號；已送出的紀錄不可再修改，重新帶入另建新紀錄。</li>
+      <li><strong>只用一次、可返回、不送單：</strong>跳轉後從清單按「＋ 新增」不再出現帶入資料；未在目標功能送出時，系統不新增任何申請單。</li>
+      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 142 項）。</li>
+    </ul>
+  </section>
+
+  <section id="decide">
+    <h2>15. 待業務單位決定事項</h2>
+    <div class="qa">
+      <div class="q2">1. 出差用車（C）與一般用車（D）以欄位劃分是否可行？</div>
+      <div class="a2">出發地與目的地都在共乘清單內、且沒有隨行物品 → C；選了「其他地點」或有隨行物品 → D。</div>
+      <div class="why">出差用車靠系統自動併車，地點必須在清單內、不處理貨物；一般用車由調度人工派車，可自駕、可帶貨、地點不限。</div>
+    </div>
+    <div class="qa">
+      <div class="q2">2. 長天數但兩地都在共乘清單、無物品時，仍導向出差用車嗎？</div>
+      <div class="a2">先依 R4 導向出差用車；若業務認為長期用車都應走一般用車，可加一條天數門檻規則（例如 ≥ N 天 → D），只改決策表。</div>
+      <div class="why">移除例行用車後，原本 30 天以上的需求會依地點分流；出差用車是以單趟／來回媒合為主，是否適合多週行程需業務確認。</div>
+    </div>
+    <div class="qa">
+      <div class="q2">3. 引導是否要替有權限者預設「例行用車」類別？</div>
+      <div class="a2">不預設，帶入一律為「一般用車」，由使用者在一般用車畫面自行切換。</div>
+      <div class="why">例行用車是身分特權而非流程差異（一般用車 v2 §2.1）；引導只判定走哪一種申請，不替使用者決定是否動用優先權。</div>
+    </div>
+    <div class="qa">
+      <div class="q2">4. 引導是唯一入口，還是新增的入口？</div>
+      <div class="a2">第一階段為新增入口，四個申請項目照樣保留；觀察使用情況後再決定是否對一般使用者隱藏。</div>
+      <div class="why">熟悉流程的使用者直接點進去比較快；先並存可降低導入風險。</div>
+    </div>
+    <div class="qa">
+      <div class="q2">5. 只有物品、但含危險品時導向哪裡？</div>
+      <div class="a2">仍導向 A／B，並提示於備註說明、聯絡調度；A／B 是否新增危險品欄位另案評估。</div>
+      <div class="why">一般用車規格明訂「必有人隨行、純載貨走運輸申請」，因此不能導到 D。</div>
+    </div>
+    <div class="qa">
+      <div class="q2">6. 引導紀錄要保存多久、誰看得到？</div>
+      <div class="a2">比照各申請單的保存期限；一般使用者只看自己的紀錄，業務單位可查全部（供分析使用者常走的路徑）。</div>
+      <div class="why">原型的紀錄存在瀏覽器記憶體，重新整理即清空；正式版需落資料庫並決定權限。</div>
+    </div>
+    <div class="qa">
+      <div class="q2">7. 是否一併提供「我的所有申請」跨模組查詢？</div>
+      <div class="a2">列為另案。引導紀錄已能從申請單號跳到各申請明細，可作為過渡。</div>
+      <div class="why">送出後使用者會想在同一處看進度；它與引導互不相依，分開做可縮短時程。</div>
+    </div>
+  </section>
+
+  <section id="summary">
+    <h2>16. 決策摘要表</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>項目</th><th>建議</th><th>狀態</th></tr></thead>
+        <tbody>
+          <tr><td>單元定位</td><td>共用層的新增入口，只分流、不送單</td><td><span class="badge b-prop">建議</span></td></tr>
+          <tr><td>畫面結構</td><td>首頁（查詢＋引導紀錄）／新增（引導表單）／細節（歷史資料），與其他單元一致</td><td><span class="badge b-new">v2 變更</span></td></tr>
+          <tr><td>互動方式</td><td>單一需求表單，依填寫內容出現卡片；不使用問答式畫面</td><td><span class="badge b-prop">建議</span></td></tr>
+          <tr><td>分流對象</td><td>四種申請：收貨、幹線託運、出差用車、一般用車（含例行用車類別）</td><td><span class="badge b-new">v2 變更</span></td></tr>
+          <tr><td>判定方式</td><td>依欄位值套用 R1、R2、R4、R5；R3 與 K5 移除，天數不參與判定</td><td><span class="badge b-new">v2 變更</span></td></tr>
+          <tr><td>A／B 劃分</td><td>寄件據點與收件據點相同 → A；不同 → B</td><td><span class="badge b-prop">建議</span></td></tr>
+          <tr><td>C／D 劃分</td><td>地點都在共乘清單且無隨行物品 → C；其餘 → D</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>長天數共乘清單內行程</td><td>依 R4 導向 C；必要時再加天數門檻</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>例行用車類別</td><td>引導不設定，帶入為一般用車，由有權限者在一般用車畫面切換</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>引導紀錄</td><td>每次帶入留紀錄；回到修改更新同一筆；送出回填單號</td><td><span class="badge b-new">v2 新增</span></td></tr>
+          <tr><td>帶入範圍</td><td>只帶入目前顯示中卡片的資料；只用一次；可回到引導</td><td><span class="badge b-prop">建議</span></td></tr>
+          <tr><td>與既有申請並存</td><td>第一階段並存</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>純貨物含危險品</td><td>導向 A／B 並提示聯絡調度</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>跨模組查詢</td><td>另案</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="history">
+    <h2>17. 版本紀錄</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>版本</th><th>內容</th></tr></thead>
+        <tbody>
+          <tr><td class="nw">v2</td><td>配合〈一般用車模組 v2〉：例行用車改為一般用車類別，引導分流改為四種申請；移除 R3（≥ 30 天 → 例行用車）與 K5（借用資料），天數不參與判定。單元改為首頁／新增／細節三畫面；新增引導紀錄（建立、回到修改、改判、送出回填單號）。內容與原型實作一致。</td></tr>
+          <tr><td class="nw">v0.2</td><td>互動方式由「問答式分步引導」改為「需求表單＋依填寫內容出現的卡片」；判定改以欄位值套用決策表；新增判定結果卡；A、B 的據點與 C 的起訖地點可直接帶入。</td></tr>
+          <tr><td class="nw">v0.1</td><td>初版：問答式引導（Q1～Q4）分流至五種申請並帶入共用資料。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    本文件為「申請引導單元」的建議規格，依現有四個申請功能（收貨申請、幹線託運申請、出差用車、一般用車）的實際欄位與規則整理，並與 <code>khcheng77/car-transport</code> 原型的 <code>js/guide.js</code>、<code>RENDER.guide</code> 一致。
+    標示「待業務確認」者須由業務單位決定後再定稿。
+  </footer>
+</main>
+</body>
+</html>
