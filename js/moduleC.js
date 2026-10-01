@@ -165,9 +165,8 @@ const ModuleC = {
     this.applications
       .filter(a => ['matched', 'boarded', 'completed'].includes(a.status) && a.vehicle && a.driver)
       .forEach(a => this.occupy(occupied, a, a.vehicle, a.driver));
-    // 共用資源池（G71/G72/G91 先佔先贏）：一般用車（D）已派出、例行用車（E）借用中的車輛/司機，
-    // 於其用車／借用日期同樣視為已佔用
-    [typeof ModuleD !== 'undefined' ? ['一般用車', ModuleD] : null, typeof ModuleE !== 'undefined' ? ['例行用車', ModuleE] : null]
+    // 共用資源池（G71/G72 先佔先贏）：一般用車（D）已派出的車輛/司機，於其用車日期同樣視為已佔用
+    [typeof ModuleD !== 'undefined' ? ['一般用車', ModuleD] : null]
       .filter(Boolean).forEach(([label, M]) => {
         const occ = M.dayOccupancy();
         occ.veh.forEach((_, k) => occupied.veh.add(k));

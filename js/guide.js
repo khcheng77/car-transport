@@ -1,12 +1,11 @@
 /* ============================================================
    guide.js — 共用單元：申請引導（依填寫內容判定申請並帶入）
-   建議規格 v0.2：需求表單＋依條件出現的卡片（K1～K7）、判定決策表 R1～R5
+   建議規格 v0.2：需求表單＋依條件出現的卡片（K1～K7，K5 借用資料已隨例行用車移除）、判定決策表 R1/R2/R4/R5
    只分流、不送單：產生目標功能的帶入資料，送出一律在目標功能完成。
    本檔為純邏輯（不碰畫面），畫面在 app.js 的 RENDER.guide。
    ============================================================ */
 
 const Guide = {
-  THRESHOLD_DAYS: 30,   // 用車期間（含起訖兩日）≥ 此天數 → 例行用車（待業務確認）
   OTHER: '__other',     // 出發地／目的地選「其他地點」
 
   UNITS: {
@@ -14,7 +13,6 @@ const Guide = {
     B: { page: 'b_apply', name: '幹線託運申請', module: '南北幹線' },
     C: { page: 'c_apply', name: '出差用車', module: '差旅共乘' },
     D: { page: 'd_apply', name: '一般用車', module: '一般用車' },
-    E: { page: 'e_apply', name: '例行用車', module: '例行用車' },
   },
 
   todayStr() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; },
@@ -30,7 +28,6 @@ const Guide = {
       && DB.bizOrigins.includes(v.origin) && DB.bizDests.includes(v.dest);
   },
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
-  _peopleDays(v) { return v.mode === 'people' ? this.days(v.startDate, v.endDate) : null; },
 
   /* ---- 卡片出現規則（規格 5.2）---- */
   visibleCards(v) {
@@ -41,9 +38,7 @@ const Guide = {
     }
     if (v.mode === 'people') {
       out.push('K4');
-      const n = this._peopleDays(v);
-      if (n != null && n >= this.THRESHOLD_DAYS) out.push('K5');
-      if (n != null && n < this.THRESHOLD_DAYS) {
+      if (this.days(v.startDate, v.endDate) != null) {
         out.push('K6');
         if (v.hasCargo === 'yes') out.push('K3');
       }
@@ -52,7 +47,8 @@ const Guide = {
     return out;
   },
 
-  /* ---- 判定決策表（規格 6）：依序比對，第一條符合者為結果；未判定時回傳下一步提示 ---- */
+  /* ---- 判定決策表（規格 6）：依序比對，第一條符合者為結果；未判定時回傳下一步提示
+     （R3 期間 ≥30 天 → 例行用車，已隨例行用車功能移除；多天用車依地點／物品走 R4/R5）---- */
   route(v) {
     if (!v.mode) return { unit: null, hint: '請先在「需求」卡片選擇運送內容。' };
     if (v.mode === 'goods') {
@@ -64,10 +60,7 @@ const Guide = {
     if (!v.startDate || !v.endDate) return { unit: null, hint: '請填寫用車起日與迄日。' };
     const n = this.days(v.startDate, v.endDate);
     if (n == null) return { unit: null, hint: '迄日不可早於起日。' };
-    if (n >= this.THRESHOLD_DAYS) {
-      return { unit: 'E', rule: 'R3', days: n, reason: `用車期間 ${n} 天（達 ${this.THRESHOLD_DAYS} 天以上），屬長期撥用；借用期間可展延或提前歸還。` };
-    }
-    if (!v.origin || !v.dest) return { unit: null, hint: `用車期間 ${n} 天（單次用車）。請選擇出發地與目的地。` };
+    if (!v.origin || !v.dest) return { unit: null, hint: `用車期間 ${n} 天。請選擇出發地與目的地。` };
     if (!this.inBizList(v)) {
       return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；地點不在共乘清單（${this.placeName(v.origin)} → ${this.placeName(v.dest)}），由調度人工確認資源後派車，可自駕。` };
     }
@@ -88,10 +81,6 @@ const Guide = {
       if (!v.recvDate) out.push('希望收貨日期');
       else if (v.recvDate < this.todayStr()) out.push('希望收貨日期（不可早於今天）');
       if (!v.items || !v.items.length) out.push('貨物清單（至少 1 項）');
-    }
-    if (u === 'E') {
-      if (!v.purpose || !v.purpose.trim()) out.push('借用單位／用途說明');
-      if (typeof v.selfArrange !== 'boolean') out.push('沒有司機時可否自行安排駕駛');
     }
     if (u === 'C' || u === 'D') {
       if (!v.departTime) out.push('出發時間');
@@ -153,12 +142,6 @@ const Guide = {
         if (v.hasCargo === 'yes') labels.push(`隨行貨物 ${items.length} 項`);
         break;
       }
-      case 'E':
-        data = Object.assign({}, who, { purpose: (v.purpose || '').trim(), startDate: v.startDate, endDate: v.endDate,
-          needDriver: typeof v.selfArrange === 'boolean' ? !v.selfArrange : null });
-        labels.push('申請人', '借用單位／用途說明', `借用 ${v.startDate} ～ ${v.endDate}`,
-          `配司機：${v.selfArrange ? '不需要（自行安排駕駛）' : '需要'}`);
-        break;
     }
     if ((r.unit === 'A' || r.unit === 'B') && items.some(it => it.hazardous)) {
       warnings.push(`${this.UNITS[r.unit].name}目前沒有危險品欄位，請於備註說明並聯絡調度。`);
@@ -178,7 +161,7 @@ const Guide = {
     }
     if (v.mode === 'people') {
       const n = this.days(v.startDate, v.endDate);
-      const place = (v.origin && v.dest && n != null && n < this.THRESHOLD_DAYS) ? `｜${this.placeName(v.origin)} → ${this.placeName(v.dest)}` : '';
+      const place = (v.origin && v.dest && n != null) ? `｜${this.placeName(v.origin)} → ${this.placeName(v.dest)}` : '';
       return `用車 ${v.startDate} ～ ${v.endDate}（${n} 天）${place}`;
     }
     return '—';
