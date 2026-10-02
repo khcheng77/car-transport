@@ -42,11 +42,16 @@ const ModuleC = {
   reject(app, note) { app.status = 'rejected'; app.approvedAt = null; if (note != null) app.reviewNote = note; },
 
   // 乘客確認上車（matched → boarded）
-  confirmBoard(app) { if (app.status === 'matched') { app.status = 'boarded'; app.boardedAt = Date.now(); } },
+  // 簽審通過才生效：待調度主管簽審的媒合結果不可上車／完成
+  confirmBoard(app) {
+    if (app.status !== 'matched' || !Signoff.effective(app)) return false;
+    app.status = 'boarded'; app.boardedAt = Date.now();
+    return true;
+  },
   // 行程完成確認（boarded → completed）：乘客抵達確認，或調度回報完成
   // 行程完成（boarded → completed）；多天任務結束後車輛/司機當前位置回復歸屬據點（C-2/C-3）
   completeTrip(app, by) {
-    if (app.status === 'boarded') {
+    if (app.status === 'boarded' && Signoff.effective(app)) {
       app.status = 'completed'; app.completedAt = Date.now(); app.completedBy = by || '調度室';
       this._returnResourcesHome(app);
     }
@@ -144,6 +149,13 @@ const ModuleC = {
 
   /* ---- 批次媒合引擎（按鈕觸發 G53/G54）---- */
   runBatch(fromDate, triggeredBy) {
+    const r = this._runBatch(fromDate, triggeredBy);
+    // 批次媒合產生的派車結果（新媒合或前次被退回者）送調度主管簽審
+    this.applications.filter(a => a.status === 'matched' && !Signoff.isPending(a) && !Signoff.isApproved(a))
+      .forEach(a => Signoff.mark(a, this.signSummary(a), triggeredBy || '調度室'));
+    return r;
+  },
+  _runBatch(fromDate, triggeredBy) {
     const trace = [];
     // 7 天範圍（以出發日期為準 G53）
     const start = new Date(fromDate);
@@ -319,6 +331,7 @@ const ModuleC = {
       before, after: { vehicle: app.vehicle, driver: app.driver, status: app.status },
       note: next.note || '',
     });
+    Signoff.mark(app, this.signSummary(app) + '（人工改派）', by || '調度室');
     return app.overrides[app.overrides.length - 1];
   },
 
@@ -355,6 +368,23 @@ const ModuleC = {
     app.status = 'matched';
     app.vehicle = targetApp.vehicle; app.driver = targetApp.driver; app.groupId = targetApp.groupId;
     app.note = '手動併車：搭 ' + targetApp.id;
+    Signoff.mark(app, this.signSummary(app) + `（手動併車：搭 ${targetApp.id}）`, app.applicant);
+  },
+
+  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  signSummary(a) {
+    const d = DB.drivers.find(x => x.id === a.driver);
+    return `${a.departDate} ${a.earliestPickup}｜${a.origin} → ${a.dest}｜車 ${a.vehicle || '—'}／司機 ${d ? d.name : '—'}`;
+  },
+  signRecords() { return this.applications.filter(a => Signoff.inScope(a)); },
+  signApprove(a, by, note) { return Signoff.decide(a, true, by, note); },
+  // 退回：清除媒合結果、回到「已核准待媒合」，由調度重新媒合／改派後再送簽審
+  signReject(a, by, note) {
+    const r = Signoff.decide(a, false, by, note);
+    if (!r.ok) return r;
+    a.status = 'approved'; a.vehicle = null; a.driver = null; a.groupId = null;
+    a.note = `調度主管退回：${a.sign.note}；待重新媒合。`;
+    return r;
   },
 
   /* ---- 逾期自動作廢（G57）：以「現在時刻」模擬到出發時間仍未成 ---- */

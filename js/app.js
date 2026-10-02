@@ -93,46 +93,54 @@ const NAV = [
     { id: 'master', ico: '▦', label: '主檔資料' },
   ] },
   { group: '模組 A · 巡迴物品轉運作業', items: [
-    { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
+    { id: 'a_apply', ico: '📝', label: 'A｜巡迴物品轉運申請（使用者）' },
     { id: 'a_dispatch', ico: '🗂', label: 'A｜車次追蹤／異動（業務）' },
+    { id: 'a_sign', ico: '🖋', label: 'A｜調度主管簽審（調度主管）' },
     { id: 'a_route', ico: '🚌', label: 'A｜路線與班次（業務）' },
     { id: 'a_masonry', ico: '🧩', label: 'A｜資訊卡試做（Masonry）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
   ] },
   { group: '模組 B · 院區物品轉運作業', items: [
-    { id: 'b_apply', ico: '📝', label: 'B｜幹線託運申請（使用者）' },
+    { id: 'b_apply', ico: '📝', label: 'B｜院區物品轉運申請（使用者）' },
     { id: 'b_approve', ico: '✅', label: 'B｜主管准駁（主管）' },
     { id: 'b_review', ico: '🚚', label: 'B｜派車調度（業務）' },
+    { id: 'b_sign', ico: '🖋', label: 'B｜調度主管簽審（調度主管）' },
     { id: 'b_driver', ico: '🧑‍✈️', label: 'B｜司機任務單（駕駛）' },
   ] },
   { group: '模組 C · 差旅共乘作業', items: [
-    { id: 'c_apply', ico: '📝', label: 'C｜出差用車申請（使用者）' },
+    { id: 'c_apply', ico: '📝', label: 'C｜差旅共乘申請（使用者）' },
     { id: 'c_approve', ico: '✅', label: 'C｜主管准駁（主管）' },
     { id: 'c_review', ico: '🔀', label: 'C｜媒合調度（業務）' },
+    { id: 'c_sign', ico: '🖋', label: 'C｜調度主管簽審（調度主管）' },
     { id: 'c_driver', ico: '🧑‍✈️', label: 'C｜司機任務單（駕駛）' },
   ] },
   { group: '模組 D · 一般用車申請作業', items: [
     { id: 'd_apply', ico: '📝', label: 'D｜一般用車申請（使用者）' },
     { id: 'd_approve', ico: '✅', label: 'D｜主管簽核（主管）' },
     { id: 'd_review', ico: '🚗', label: 'D｜派車調度（業務）' },
+    { id: 'd_sign', ico: '🖋', label: 'D｜調度主管簽審（調度主管）' },
     { id: 'd_driver', ico: '🧑‍✈️', label: 'D｜司機任務單（駕駛）' },
   ] },
 ];
 const PAGE_META = {
+  a_sign: { title: '巡迴物品轉運作業 · 調度主管簽審（調度主管）', crumb: '模組 A · 調度主管端 · 派車結果覆核（通過才生效）' },
+  b_sign: { title: '院區物品轉運作業 · 調度主管簽審（調度主管）', crumb: '模組 B · 調度主管端 · 派車結果覆核（通過才生效）' },
+  c_sign: { title: '差旅共乘作業 · 調度主管簽審（調度主管）', crumb: '模組 C · 調度主管端 · 派車結果覆核（通過才生效）' },
+  d_sign: { title: '一般用車申請作業 · 調度主管簽審（調度主管）', crumb: '模組 D · 調度主管端 · 派車結果覆核（通過才生效）' },
   dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
   guide: { title: '申請引導', crumb: '共用 · 查詢引導紀錄／新增引導（依填寫內容判定申請並帶入）' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
-  a_apply: { title: '巡迴物品轉運作業 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
+  a_apply: { title: '巡迴物品轉運作業 · 巡迴物品轉運申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
   a_dispatch: { title: '巡迴物品轉運作業 · 車次追蹤／異動（業務單位）', crumb: '模組 A · 調度端 · 追蹤＋車次班次/車輛/司機調整 · G18/G20' },
   a_route: { title: '巡迴物品轉運作業 · 路線與班次（業務單位）', crumb: '模組 A · 調度端 · 固定路線 / 每小時班次（查詢）' },
   a_masonry: { title: '巡迴物品轉運作業 · 資訊卡試做（Masonry）', crumb: '模組 A · label+value 資訊區塊 · 自適應排版 POC' },
   a_driver: { title: '巡迴物品轉運作業 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
-  b_apply: { title: '院區物品轉運作業 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
+  b_apply: { title: '院區物品轉運作業 · 院區物品轉運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
   b_approve: { title: '院區物品轉運作業 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
   b_review: { title: '院區物品轉運作業 · 派車調度（業務單位）', crumb: '模組 B · 調度端 · G30–G44' },
   b_driver: { title: '院區物品轉運作業 · 司機任務單（駕駛）', crumb: '模組 B · 駕駛端 · 沿線取貨/卸貨' },
-  c_apply: { title: '差旅共乘作業 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55/G56' },
+  c_apply: { title: '差旅共乘作業 · 差旅共乘申請（使用者）', crumb: '模組 C · 申請端 · G54/G55/G56' },
   c_approve: { title: '差旅共乘作業 · 主管准駁（直屬主管）', crumb: '模組 C · 主管端 · G63' },
   c_review: { title: '差旅共乘作業 · 媒合調度（業務單位）', crumb: '模組 C · 調度端 · G50–G63' },
   c_driver: { title: '差旅共乘作業 · 司機任務單（駕駛）', crumb: '模組 C · 駕駛端 · 今日行程與乘客' },
@@ -189,7 +197,7 @@ RENDER.dashboard = function () {
 
     <div class="card" data-go="guide" style="cursor:pointer;border:2px solid var(--navy);">
       <div class="card-title" style="justify-content:space-between;">🧭 不知道該用哪一種申請？ <span class="badge b-navy">申請引導</span></div>
-      <div class="card-desc" style="margin-bottom:0;">照著填寫需求，系統依內容判定該用收貨申請、幹線託運、出差用車或一般用車，並把已填資料自動帶入該申請。</div>
+      <div class="card-desc" style="margin-bottom:0;">照著填寫需求，系統依內容判定該用巡迴物品轉運申請、院區物品轉運申請、差旅共乘申請或一般用車申請，並把已填資料自動帶入該申請。</div>
     </div>
     <div class="card-title" style="font-size:14px;margin:8px 0 12px;color:var(--ink-soft);">共用基礎層</div>
     <div class="grid-2">
@@ -199,21 +207,25 @@ RENDER.dashboard = function () {
 
     <div class="card-title" style="font-size:14px;margin:22px 0 12px;color:var(--ink-soft);">業務單元（申請端 ｜ 主管 ｜ 審核/調度端）</div>
     <div class="grid-3">
-      ${unitCard('📝 A｜收貨申請', '使用者填收貨單，送出即自動媒合並告知班次時間與車號；查看狀態、接受排班與交貨確認。', 'a_apply', '申請端')}
+      ${unitCard('📝 A｜巡迴物品轉運申請', '使用者填收貨單，送出即自動媒合並告知班次時間與車號；查看狀態、接受排班與交貨確認。', 'a_apply', '申請端')}
       ${unitCard('🗂 A｜車次追蹤／異動', '追蹤已排定車次、未排入待改期與交貨狀態；並可調整車次的車輛／司機、加移單、駕駛異常回報。', 'a_dispatch', '審核端')}
+      ${unitCard('🖋 A｜調度主管簽審', '調度做出的派車結果送調度主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'a_sign', '調度主管')}
       ${unitCard('🚌 A｜路線與班次', '獨立單元：各分公司固定 9 站路線與每小時班次／車輛對應查詢。', 'a_route', '審核端')}
       ${unitCard('🧑‍✈️ A｜司機任務單', '駕駛端：以班次（車輛）為單位，沿據點 9 站路線的收送任務、到站時間、接收人。', 'a_driver', '駕駛')}
-      ${unitCard('📝 B｜幹線託運申請', '使用者建立幹線託運單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
-      ${unitCard('✅ B｜主管准駁', '直屬主管准駁幹線託運單，駁回保留紀錄不進派車池。', 'b_approve', '主管')}
+      ${unitCard('📝 B｜院區物品轉運申請', '使用者建立院區物品轉運申請單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
+      ${unitCard('✅ B｜主管准駁', '直屬主管准駁院區物品轉運申請單，駁回保留紀錄不進派車池。', 'b_approve', '主管')}
       ${unitCard('🚚 B｜派車調度', '貪婪/直達派車決策、回程直達鎖定、決策矩陣、貨況追蹤。', 'b_review', '審核端')}
+      ${unitCard('🖋 B｜調度主管簽審', '調度做出的派車結果送調度主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'b_sign', '調度主管')}
       ${unitCard('🧑‍✈️ B｜司機任務單', '駕駛端：以車輛為單位，這一趟停靠哪些據點、各站取貨／卸貨。', 'b_driver', '駕駛')}
-      ${unitCard('📝 C｜出差用車申請', '使用者填來回/單程用車申請、查看狀態、手動併車找便車。', 'c_apply', '申請端')}
-      ${unitCard('✅ C｜主管准駁', '直屬主管准駁出差用車申請，駁回保留紀錄不進排班池。', 'c_approve', '主管')}
+      ${unitCard('📝 C｜差旅共乘申請', '使用者填來回/單程用車申請、查看狀態、手動併車找便車。', 'c_apply', '申請端')}
+      ${unitCard('✅ C｜主管准駁', '直屬主管准駁差旅共乘申請，駁回保留紀錄不進排班池。', 'c_approve', '主管')}
       ${unitCard('🔀 C｜媒合調度', '批次媒合、資源檢核、逾期作廢、派車追蹤。', 'c_review', '審核端')}
+      ${unitCard('🖋 C｜調度主管簽審', '調度做出的派車結果送調度主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'c_sign', '調度主管')}
       ${unitCard('🧑‍✈️ C｜司機任務單', '駕駛端：以駕駛為單位，今日整個行程要接誰、去哪裡。', 'c_driver', '駕駛')}
       ${unitCard('📝 D｜一般用車申請', '起訖時間（數小時～數個月）、人數、自駕／願意等待駕駛媒合、通行證與提示欄位、隨行貨物；例行用車類別限特定角色；派車後可提出提前歸還。', 'd_apply', '申請端')}
       ${unitCard('✅ D｜主管簽核', '直屬主管簽核首次申請（兩類別相同），通過才進調度；駁回保留紀錄。', 'd_approve', '主管')}
       ${unitCard('🚗 D｜派車調度', '通行證交集篩選、例行用車優先、雙駕駛、剩餘加班工時；派車後換車／換司機／補派／展延、確認提前歸還。', 'd_review', '審核端')}
+      ${unitCard('🖋 D｜調度主管簽審', '調度做出的派車結果送調度主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'd_sign', '調度主管')}
       ${unitCard('🧑‍✈️ D｜司機任務單', '駕駛端：依指派區間列出任務（雙駕駛標示搭檔）、使用人、隨行貨物（含危險品提示）。', 'd_driver', '駕駛')}
     </div>
 
@@ -592,8 +604,8 @@ function renderAApplyList(p) {
   const modeOpts = [['', '全部模式'], ['asap', '越快越好'], ['exact', '指定期望時間']]
     .map(([v, t]) => `<option value="${v}" ${q.mode === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">收貨申請（使用者）</div>
-    <div class="section-sub">先查詢歷史申請紀錄，點擊任一筆可檢視明細；或按「新增」建立新的收貨申請單。</div>
+    <div class="section-h">巡迴物品轉運申請（使用者）</div>
+    <div class="section-sub">先查詢歷史申請紀錄，點擊任一筆可檢視明細；或按「新增」建立新的巡迴物品轉運申請單。</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
         <span>查詢條件</span>
@@ -635,7 +647,7 @@ function renderAApplyList(p) {
         pickStation: pick, pickupLoc: pSt.name + ' / ' + pSt.buildings[0],
         deliverTime: mode === 'exact' ? '14:00' : '', consignor, recipient, recipientAgent,
         items, recvMode: mode, loadMin: lm, unloadMin: um }); });
-    aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆收貨申請（送出即自動媒合）', 'ok');
+    aApply.resultIds = null; renderAGrid(); toast('已載入 3 筆巡迴物品轉運申請（送出即自動媒合）', 'ok');
   };
   renderAGrid();
   initMasonry(p);
@@ -677,7 +689,7 @@ function renderAGrid() {
           <td>${brName(a.branch)}·${st ? st.name : '—'}/${a.building}</td>
           <td>${a.serviceDate || '—'}</td>
           <td>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好'}</td>
-          <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}</td>
+          <td>${sh ? sh.label : '—'}</td><td>${stBadge(a.status)}${signBadge(a)}</td>
           <td class="muted">${fmtTime(a.createdAt)}</td></tr>`; }).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至申請單明細。</div>`;
@@ -696,9 +708,9 @@ function renderAApplyDetail(p, id) {
   const totalVol = a.items.reduce((s, it) => s + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0);
   const canEdit = !['matched', 'delivered'].includes(a.status); // 媒合後不可編輯貨物
   p.innerHTML = `
-    <div class="section-h">收貨申請明細 · ${a.id}</div>
+    <div class="section-h">巡迴物品轉運申請明細 · ${a.id}</div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status)}</div>
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${stBadge(a.status)}${signBadge(a)}</span></div>
       ${infoGrid('ad-basic', [
         fItem('物品運輸單號', `<b style="color:var(--navy);">${a.id}</b>`),
         fItem('申請人', a.applicant),
@@ -768,9 +780,9 @@ function renderAApplyNew(p) {
   const brOpts = DB.branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
   const stOpts = branchStationOpts(initBranch);
   p.innerHTML = `
-    <div class="section-h">新增收貨申請單</div>
+    <div class="section-h">新增巡迴物品轉運申請單</div>
     <div class="card">
-      <div class="card-title">填寫收貨申請單 <span class="g-tag">G13/G19</span></div>
+      <div class="card-title">填寫巡迴物品轉運申請單 <span class="g-tag">G13/G19</span></div>
       ${infoGrid('aa-fields', [
         fItem('申請人', DB.currentUser.name),
         fItem('申請單位', DB.currentUser.unit),
@@ -848,7 +860,7 @@ function renderAApplyNew(p) {
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
   $('#aa-submit').onclick = async () => {
     if (aaItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
-    const ok = await confirmDialog({ title: '確認送出收貨申請？',
+    const ok = await confirmDialog({ title: '確認送出巡迴物品轉運申請？',
       text: '送出後系統將<b>立即自動媒合</b>並告知班次時間與車號。' });
     if (!ok) return;
     const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
@@ -881,7 +893,7 @@ function renderAApplyNew(p) {
     guideSubmitted(aApply, app.id); // 申請引導紀錄回填單號
     if (result.ok) {
       const veh = DB.vehicles.find(v => v.id === result.shift.vehicle);
-      toast(`${app.id} 已自動媒合：${result.shift.label}／車 ${veh ? veh.id : result.shift.vehicle}／到站約 ${result.arrival}`, 'ok');
+      toast(`${app.id} 已自動媒合：${result.shift.label}／車 ${veh ? veh.id : result.shift.vehicle}／到站約 ${result.arrival}（待調度主管簽審）`, 'ok');
     } else {
       toast(`${app.id}｜${result.msg}`, 'err');
     }
@@ -995,7 +1007,7 @@ function renderADispatchList() {
     </div>`;
   p.innerHTML = `
     <div class="section-h">車次追蹤／異動（業務單位）</div>
-    <div class="section-sub">使用者送出收貨申請時系統即自動媒合，本單元不再執行媒合。<b>追蹤</b>已排定車次（含已交貨）與未排入待改期；點「細節」進入明細頁調整所屬<b>班次</b>、修改車次的<b>車輛／司機</b>、<b>新增／移出</b>申請單，並進行<b>駕駛異常回報</b>。路線與班次查詢請至獨立單元「路線與班次」。</div>
+    <div class="section-sub">使用者送出巡迴物品轉運申請時系統即自動媒合，本單元不再執行媒合。<b>追蹤</b>已排定車次（含已交貨）與未排入待改期；點「細節」進入明細頁調整所屬<b>班次</b>、修改車次的<b>車輛／司機</b>、<b>新增／移出</b>申請單，並進行<b>駕駛異常回報</b>。路線與班次查詢請至獨立單元「路線與班次」。</div>
     <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="ad-goto-driver">🧑‍✈️ 查看司機任務單</button>
       <button class="btn btn-ghost btn-sm" id="ad-goto-route">🚌 路線與班次</button></div>
     ${unschedCard}
@@ -1231,7 +1243,7 @@ RENDER.a_masonry = function () {
 
   p.innerHTML = `
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>收貨申請 · ${a.id}</span>
+      <div class="card-title" style="justify-content:space-between;"><span>巡迴物品轉運申請 · ${a.id}</span>
         <button class="btn btn-ghost btn-sm" id="m-relayout">↻ 重新排版</button></div>
       <div class="fgrid" id="m-grid">
         <div class="grid-sizer"></div>
@@ -1284,8 +1296,8 @@ function renderBApplyList(p) {
     ['delivered', '已交貨'], ['rejected', '已駁回']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">幹線託運申請（使用者）</div>
-    <div class="section-sub">先查詢歷史託運紀錄，點擊任一筆可檢視明細；或按「新增」建立新的幹線託運單。</div>
+    <div class="section-h">院區物品轉運申請（使用者）</div>
+    <div class="section-sub">先查詢歷史託運紀錄，點擊任一筆可檢視明細；或按「新增」建立新的院區物品轉運申請單。</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
         <span>查詢條件</span>
@@ -1370,7 +1382,7 @@ function renderBGrid() {
         <td>${o.volume}L</td>
         <td>${o.dispatchVehicle ? '<b>' + o.dispatchVehicle + '</b>' : '<span class="muted">—</span>'}</td>
         <td>${o.pickupTime ? '<b style="color:var(--navy);">' + o.pickupTime + '</b>' : '<span class="muted">待派車</span>'}</td>
-        <td>${stBadge(o.status)}</td></tr>`).join('')}
+        <td>${stBadge(o.status)}${signBadge(o)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至託運單明細。幹線車沿南北路線逐據點收貨，<b>來收時間依收貨據點遠近而不同</b>（越南邊越晚），非全部由同一地點出發。</div>`;
   $$('#bq-grid [data-detail]').forEach(b => b.onclick = () => {
@@ -1388,9 +1400,9 @@ function renderBApplyDetail(p, id) {
   if (o.status === 'loaded') action = `<button class="btn btn-accent" data-brecv="${o.id}">確認已收到貨</button>`;
   else if (o.status === 'delivered') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
-    <div class="section-h">幹線託運單明細 · ${o.id}</div>
+    <div class="section-h">院區物品轉運申請明細 · ${o.id}</div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${stBadge(o.status)}${signBadge(o)}</span></div>
       ${infoGrid('bd-basic', [
         fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
         fItem('申請人', o.applicant),
@@ -1433,7 +1445,7 @@ function renderBApplyDetail(p, id) {
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   initMasonry(p);
   const rcv = $('#page-b_apply [data-brecv]');
-  if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此託運單將標記為已交貨。' }, () => { ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
+  if (rcv) rcv.onclick = confirmThen({ title: '確認已收到貨？', text: '確認後此託運單將標記為已交貨。' }, () => { if (!signGate(o)) return; ModuleB.confirmDelivery(o, o.applicant); toast(`${o.id} 已確認收到貨`, 'ok'); RENDER.b_apply(); if ($('#br-tracking')) renderBr_tracking(); });
 }
 
 /* ---------- 新增畫面 ---------- */
@@ -1442,9 +1454,9 @@ function renderBaCargo() { renderCargoGrid('#ba-items', baItems, true, renderBaC
 function renderBApplyNew(p) {
   const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">新增幹線託運單</div>
+    <div class="section-h">新增院區物品轉運申請單</div>
     <div class="card">
-      <div class="card-title">建立幹線託運單 <span class="g-tag">G38/G40</span></div>
+      <div class="card-title">建立院區物品轉運申請單 <span class="g-tag">G38/G40</span></div>
       ${infoGrid('ba-fields0', fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`))}
       <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。<br>
         目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；現行車次模型為「自基地南下、折返北上回基地」，<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
@@ -1505,7 +1517,7 @@ function renderBApplyNew(p) {
   $('#ba-submit').onclick = async () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
     if ($('#ba-site').value === $('#ba-dest').value) { toast('收貨據點與送貨據點不可相同', 'err'); return; }
-    const ok = await confirmDialog({ title: '確認送出幹線託運單？',
+    const ok = await confirmDialog({ title: '確認送出院區物品轉運申請單？',
       text: '送出後將等待主管准駁，再由業務單位派車。' });
     if (!ok) return;
     const o = ModuleB.createOrder({
@@ -1555,7 +1567,7 @@ function renderBApproveList(p) {
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">主管准駁（直屬主管）</div>
-    <div class="section-sub">員工建立幹線託運單後由直屬主管准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進派車池。（G63）</div>
+    <div class="section-sub">員工建立院區物品轉運申請單後由直屬主管准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進派車池。（G63）</div>
     <div class="card">
       <div class="card-title">查詢條件</div>
       ${infoGrid('bap-q-fields', [
@@ -1597,7 +1609,7 @@ function renderBApproveGrid() {
         <td>${ModuleB.isSouthbound(o) ? '去程（南下）' : '回程（北上）'}</td>
         <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
-        <td>${o.volume}L</td><td>${stBadge(o.status)}</td></tr>`).join('')}
+        <td>${o.volume}L</td><td>${stBadge(o.status)}${signBadge(o)}</td></tr>`).join('')}
     </tbody></table></div>`;
   $$('#bap-grid [data-bvdetail]').forEach(b => b.onclick = () => { bApprove.detailId = b.dataset.bvdetail; bApprove.view = 'detail'; RENDER.b_approve(); });
 }
@@ -1608,7 +1620,7 @@ function renderBApproveDetail(p, id) {
   p.innerHTML = `
     <div class="section-h">託運單審核 · ${o.id}</div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(o.status)}</div>
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${stBadge(o.status)}${signBadge(o)}</span></div>
       ${infoGrid('bap-basic', [
         fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
         fItem('申請人', o.applicant),
@@ -1768,7 +1780,7 @@ function renderBr_tracking() {
     </tbody></table></div>`;
   $$('#br-tracking [data-bdeliver]').forEach(b => b.onclick = confirmThen({ title: '確認交貨？', text: '確認後此託運單將標記為已交貨。' }, () => {
     const o = ModuleB.orders.find(x => x.id === b.dataset.bdeliver);
-    ModuleB.confirmDelivery(o, '調度室'); toast(`${o.id} 已確認交貨`, 'ok');
+    if (!signGate(o)) return; ModuleB.confirmDelivery(o, '調度室'); toast(`${o.id} 已確認交貨`, 'ok');
     renderBr_tracking(); renderBaList();
   }));
 };
@@ -1877,8 +1889,8 @@ function renderCApplyList(p) {
     ['boarded', '已上車'], ['completed', '行程完成'], ['coordinate', '待人工協調'], ['void', '逾期作廢'], ['rejected', '已駁回']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">出差用車申請（使用者）</div>
-    <div class="section-sub">先查詢歷史用車申請，點擊任一筆可檢視明細；或按「新增」建立新的出差用車申請單。</div>
+    <div class="section-h">差旅共乘申請（使用者）</div>
+    <div class="section-sub">先查詢歷史用車申請，點擊任一筆可檢視明細；或按「新增」建立新的差旅共乘申請單。</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
         <span>查詢條件</span>
@@ -1940,7 +1952,7 @@ function renderCGrid() {
         <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
         <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '<span class="muted">—</span>'}</td>
         <td>${a.pax}</td>
-        <td>${stBadge(a.status, 'C')}</td><td class="muted">${fmtTime(a.createdAt)}</td></tr>`).join('')}
+        <td>${stBadge(a.status, 'C')}${signBadge(a)}</td><td class="muted">${fmtTime(a.createdAt)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至申請單明細。</div>`;
   $$('#cq-grid [data-detail]').forEach(b => b.onclick = () => {
@@ -1959,9 +1971,9 @@ function renderCApplyDetail(p, id) {
   else if (a.status === 'boarded') action = `<button class="btn btn-accent" data-done="${a.id}">確認行程完成</button>`;
   else if (a.status === 'completed') action = '<span class="badge b-green">✓ 已完成</span>';
   p.innerHTML = `
-    <div class="section-h">出差用車申請明細 · ${a.id}</div>
+    <div class="section-h">差旅共乘申請明細 · ${a.id}</div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${stBadge(a.status, 'C')}${signBadge(a)}</span></div>
       ${infoGrid('cd-basic', [
         fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
         fItem('申請人', `${a.applicant}（${a.dept}/${a.ext}）`),
@@ -1997,9 +2009,9 @@ function renderCApplyDetail(p, id) {
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
   initMasonry(p);
   const brd = $('#page-c_apply [data-board]');
-  if (brd) brd.onclick = confirmThen({ title: '確認上車？', text: '確認後此趟共乘將標記為已上車。' }, () => { ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
+  if (brd) brd.onclick = confirmThen({ title: '確認上車？', text: '確認後此趟共乘將標記為已上車。' }, () => { if (!signGate(a)) return; ModuleC.confirmBoard(a); toast(`${a.id} 已確認上車`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
   const dn = $('#page-c_apply [data-done]');
-  if (dn) dn.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成。' }, () => { ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
+  if (dn) dn.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成。' }, () => { if (!signGate(a)) return; ModuleC.completeTrip(a, a.applicant); toast(`${a.id} 行程完成`, 'ok'); RENDER.c_apply(); if ($('#cr-tab-track')) renderCr_track(); });
   const find = $('#cd-find');
   if (find) find.onclick = () => {
     const cands = ModuleC.manualCandidates(a);
@@ -2025,9 +2037,9 @@ function renderCApplyNew(p) {
   const oOpts = DB.bizOrigins.map(o => `<option>${o}</option>`).join('');
   const dOpts = DB.bizDests.map(d => `<option>${d}</option>`).join('');
   p.innerHTML = `
-    <div class="section-h">新增出差用車申請單</div>
+    <div class="section-h">新增差旅共乘申請單</div>
     <div class="card">
-      <div class="card-title">出差用車申請 <span class="g-tag">G50/G54</span></div>
+      <div class="card-title">差旅共乘申請 <span class="g-tag">G50/G54</span></div>
       ${infoGrid('ca-fields', [
         fInput('申請人', `<input type="text" id="ca-applicant" value="業務部-周雅婷">`),
         fInput('部門', `<input type="text" id="ca-dept" value="業務部">`),
@@ -2083,7 +2095,7 @@ function renderCApplyNew(p) {
       if (!returnDate) { toast('來回單請選擇回程日期', 'err'); return; }
       if (returnDate < departDate) { toast('回程日期不可早於出發日期', 'err'); return; }
     }
-    const ok = await confirmDialog({ title: '確認送出出差用車申請？',
+    const ok = await confirmDialog({ title: '確認送出差旅共乘申請？',
       text: '送出後將等待主管准駁，再由系統批次媒合。' });
     if (!ok) return;
     const app = ModuleC.createApp({
@@ -2142,7 +2154,7 @@ function renderCApproveList(p) {
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">主管准駁（直屬主管）</div>
-    <div class="section-sub">員工填單後由直屬主管審核出差用車准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進排班池。（G63）</div>
+    <div class="section-sub">員工填單後由直屬主管審核差旅共乘申請准駁。點「細節」進入單據檢視與審核；駁回保留紀錄但不進排班池。（G63）</div>
     <div class="card">
       <div class="card-title">查詢條件</div>
       ${infoGrid('cap-q-fields', [
@@ -2163,7 +2175,7 @@ function renderCApproveList(p) {
     cApprove.query = { applicant: $('#cap-q-applicant').value.trim(), type: $('#cap-q-type').value, status: $('#cap-q-status').value };
     renderCApproveGrid(); toast('查詢完成', 'ok');
   };
-  $('#cap-approve-all').onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准目前清單中所有「待准駁」出差用車申請。' }, () => {
+  $('#cap-approve-all').onclick = confirmThen({ title: '確認全部核准？', text: '確認後將核准目前清單中所有「待准駁」差旅共乘申請。' }, () => {
     const subs = cApproveRows().filter(a => a.status === 'submitted');
     subs.forEach(a => ModuleC.approve(a));
     toast(`已核准 ${subs.length} 筆`, 'ok');
@@ -2184,7 +2196,7 @@ function renderCApproveGrid() {
         <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin}→${a.dest}</td>
         <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
         <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '<span class="muted">—</span>'}</td>
-        <td>${a.pax}</td><td>${stBadge(a.status, 'C')}</td></tr>`).join('')}
+        <td>${a.pax}</td><td>${stBadge(a.status, 'C')}${signBadge(a)}</td></tr>`).join('')}
     </tbody></table></div>`;
   $$('#cap-grid [data-cvdetail]').forEach(b => b.onclick = () => { cApprove.detailId = b.dataset.cvdetail; cApprove.view = 'detail'; RENDER.c_approve(); });
 }
@@ -2193,9 +2205,9 @@ function renderCApproveDetail(p, id) {
   if (!a) { cApprove.view = 'list'; return RENDER.c_approve(); }
   const pending = a.status === 'submitted';
   p.innerHTML = `
-    <div class="section-h">出差用車審核 · ${a.id}</div>
+    <div class="section-h">差旅共乘申請審核 · ${a.id}</div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span>${stBadge(a.status, 'C')}</div>
+      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${stBadge(a.status, 'C')}${signBadge(a)}</span></div>
       ${infoGrid('cap-basic', [
         fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
         fItem('申請人', `${a.applicant}（${a.dept}/${a.ext}）`),
@@ -2311,7 +2323,7 @@ function renderCr_track() {
     </div>`;
   $$('#cr-tab-track [data-ccomplete]').forEach(b => b.onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟共乘將標記為行程完成，車輛與司機當前位置回復歸屬據點。' }, () => {
     const a = ModuleC.applications.find(x => x.id === b.dataset.ccomplete);
-    ModuleC.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok');
+    if (!signGate(a)) return; ModuleC.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok');
     renderCr_track(); renderCaList();
   }));
   $$('#cr-tab-track [data-coverride]').forEach(b => b.onclick = () => openOverrideDialog(b.dataset.coverride));
@@ -2453,7 +2465,7 @@ function renderCr_void() {
       ${active.length === 0 ? `<div class="empty">無可作廢單</div>` : `
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>去程</th><th>狀態</th><th>操作</th></tr></thead><tbody>
         ${active.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.origin}→${a.dest}</td>
-          <td>${a.departDate.slice(5)} ${a.earliestPickup}</td><td>${stBadge(a.status, 'C')}</td>
+          <td>${a.departDate.slice(5)} ${a.earliestPickup}</td><td>${stBadge(a.status, 'C')}${signBadge(a)}</td>
           <td><button class="btn btn-danger btn-sm" data-void="${a.id}">模擬逾期作廢</button></td></tr>`).join('')}
       </tbody></table></div>`}
     </div>`;
@@ -2598,7 +2610,7 @@ RENDER.master = function () {
 /* 模組 A · 司機任務單：以「班次（車輛）」為單位，沿固定 10 站路線的收送任務 */
 RENDER.a_driver = function () {
   const p = $('#page-a_driver');
-  const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status) && a.assignedShift);
+  const rows = ModuleA.applications.filter(a => ['matched', 'delivered'].includes(a.status) && a.assignedShift && Signoff.effective(a)); // 簽審通過才生效
   // 以「日期＋班次」為一張任務單（不同日期不可混在同一張）
   const byKey = {};
   rows.forEach(a => { const k = (a.serviceDate || '—') + '|' + a.assignedShift; (byKey[k] = byKey[k] || []).push(a); });
@@ -2644,7 +2656,7 @@ RENDER.a_driver = function () {
         <th>順序</th><th>停靠站</th><th>抵達</th><th>作業（卸貨／取貨）</th>
       </tr></thead><tbody>${body}</tbody></table></div></div>`;
   }).join('');
-  if (!cards) cards = `<div class="card"><div class="empty">今日尚無已排定的班次任務。使用者送出收貨申請並自動媒合成功後，這裡會依班次（車輛）顯示司機任務單。</div></div>`;
+  if (!cards) cards = `<div class="card"><div class="empty">今日尚無已排定的班次任務。使用者送出巡迴物品轉運申請並自動媒合成功後，這裡會依班次（車輛）顯示司機任務單。</div></div>`;
   p.innerHTML = `
     <div class="section-h">巡迴物品轉運作業 · 司機任務單（駕駛）</div>
     <div class="section-sub">以「日期＋班次（車輛）」為單位，沿據點固定 9 站路線<b>一次通過</b>：每個停靠站依站序列出要<b>卸貨</b>與<b>取貨</b>的單、抵達時間、貨物與接收人（同一站的收貨自動彙整在一起）。</div>
@@ -2654,7 +2666,7 @@ RENDER.a_driver = function () {
 /* 模組 B · 司機任務單：以「車輛」為單位，這一趟停靠哪些據點、各站取貨／卸貨 */
 RENDER.b_driver = function () {
   const p = $('#page-b_driver');
-  const rows = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status) && o.dispatchVehicle);
+  const rows = ModuleB.orders.filter(o => ['loaded', 'delivered'].includes(o.status) && o.dispatchVehicle && Signoff.effective(o)); // 簽審通過才生效
   // 一張任務單＝一趟「車輛×方向」：去程（南下）與回程（北返）是兩段不同的實體行程，
   // 各有獨立時間軸，不可併在同一條路線上排序（否則同一車會「同時」出現在南北兩地）。
   const byTrip = {};
@@ -2721,7 +2733,7 @@ RENDER.b_driver = function () {
 /* 模組 C · 司機任務單：以「駕駛」為單位，今日整個行程要接誰、去哪裡 */
 RENDER.c_driver = function () {
   const p = $('#page-c_driver');
-  const rows = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status) && a.driver && a.vehicle);
+  const rows = ModuleC.applications.filter(a => ['matched', 'boarded', 'completed'].includes(a.status) && a.driver && a.vehicle && Signoff.effective(a)); // 簽審通過才生效
   const byDriver = {};
   rows.forEach(a => { (byDriver[a.driver] = byDriver[a.driver] || []).push(a); });
   let cards = Object.keys(byDriver).map(did => {
@@ -2786,7 +2798,7 @@ function dCatBadge(a) {
   return a.category === 'routine' ? '<span class="badge b-amber">★ 例行用車</span>' : '<span class="badge b-gray">一般用車</span>';
 }
 function dStatusCell(a) {
-  return stBadge(a.status, 'D') + (a.pendingReturn ? ' <span class="badge b-amber">提前歸還待確認</span>' : '');
+  return stBadge(a.status, 'D') + signBadge(a) + (a.pendingReturn ? ' <span class="badge b-amber">提前歸還待確認</span>' : '');
 }
 function dCargoSummary(a) {
   if (!a.items || !a.items.length) return '<span class="muted">無</span>';
@@ -2946,9 +2958,9 @@ function renderDApplyDetail(p, id) {
     cancelled: '此申請已整單撤回。',
     completed: '此趟用車已完成。',
     returned: '已整段提前歸還（未出車），車輛／司機已釋放。',
-    dispatched: '調度已完成確認：不再撤回或修改。需要<b>換車、換司機、展延</b>請以電話等方式聯繫調度，由調度在系統處理（不需簽核）；<b>提前歸還</b>請於上方自行提出，經調度確認後生效（G83）。',
+    dispatched: Signoff.isPending(a) ? '調度已做出派車判斷，<b>待調度主管簽審</b>；簽審通過後才生效並寄送派車結果通知。' : '調度已完成確認：不再撤回或修改。需要<b>換車、換司機、展延</b>請以電話等方式聯繫調度，由調度在系統處理（不需簽核）；<b>提前歸還</b>請於上方自行提出，經調度確認後生效（G83）。',
   }[a.status];
-  const live = a.status === 'dispatched';
+  const live = a.status === 'dispatched' && Signoff.effective(a); // 簽審通過才可提出提前歸還
   const pr = a.pendingReturn;
   const sp = ModuleD.span(a);
   const defRet = ModuleD.fromAbs(Math.max(sp.start, Math.min(dNowAbs(), sp.end - 60)));
@@ -3447,7 +3459,7 @@ function dDriverOpts(free, cur, emptyLabel) {
 function renderDReviewDetail(p, id) {
   const a = ModuleD.applications.find(x => x.id === id);
   if (!a) { dReview.view = 'list'; return RENDER.d_review(); }
-  const pending = a.status === 'approved', live = a.status === 'dispatched';
+  const pending = a.status === 'approved', live = a.status === 'dispatched' && Signoff.effective(a); // 生命週期操作須簽審通過
   let body = '';
   if (pending) {
     const res = ModuleD.resources(a), state = ModuleD.resourceState(a);
@@ -3494,6 +3506,7 @@ function renderDReviewDetail(p, id) {
         a.releasedAt ? fItem('資源釋放', `${fmtTime(a.releasedAt)}（提前歸還確認）`) : '',
       ].join(''))}
     </div>
+    ${a.status !== 'approved' && Signoff.isPending(a) ? `<div class="callout" style="margin-bottom:14px;">此派車判斷<b>待調度主管簽審</b>（D｜調度主管簽審）：簽審通過才生效並寄送通知；被退回時會回到「已核准待調度」重新判斷。</div>` : ''}
     ${live && pr ? `<div class="card">
       <div class="card-title">提前歸還待確認 <span class="g-tag">G83</span></div>
       <div class="callout" style="margin-bottom:12px;">申請人於 ${fmtTime(pr.at)} 提出：結束時間 <b>${a.endDate} ${a.endTime}</b> → <b>${pr.date} ${pr.time}</b>${pr.reason ? `（${pr.reason}）` : ''}${ModuleD.absMin(pr.date, pr.time) === ModuleD.span(a).start ? '｜<b>整段不用車</b>' : ''}。確認後立即生效並釋放之後時段的車輛／司機。</div>
@@ -3563,7 +3576,7 @@ function renderDReviewDetail(p, id) {
     preview();
     const finish = (out) => {
       if (!out.ok) { toast(out.error, 'err'); return; }
-      toast(`${a.id}｜${ModuleD.OUTCOME_TEXT[out.outcome]}，已寄送結果通知（示意）`, out.outcome === 'noVehicle' ? 'err' : 'ok');
+      toast(`${a.id}｜${ModuleD.OUTCOME_TEXT[out.outcome]}，已送調度主管簽審（通過後才生效並通知申請人）`, 'ok');
       rerender();
     };
     $('#dr-ok').onclick = async () => {
@@ -3571,13 +3584,13 @@ function renderDReviewDetail(p, id) {
       if (r.error) { toast(r.error, 'err'); return; }
       const peers = ModuleD.priorityPeers(a);
       const ok = await confirmDialog({ title: '確認派車判斷？',
-        text: `結果：<b>${ModuleD.OUTCOME_TEXT[r.outcome]}</b>${peers.length ? `<br>★ 同時段尚有例行用車 ${peers.map(x => x.id).join('、')} 待調度，請確認已優先分配。` : ''}<br>確認後即為「調度完成確認」並 Email 通知申請人；之後異動改用換車／換司機／展延／提前歸還（G83）。` });
+        text: `結果：<b>${ModuleD.OUTCOME_TEXT[r.outcome]}</b>${peers.length ? `<br>★ 同時段尚有例行用車 ${peers.map(x => x.id).join('、')} 待調度，請確認已優先分配。` : ''}<br>確認後送<b>調度主管簽審</b>，簽審通過才生效並 Email 通知申請人；之後異動改用換車／換司機／展延／提前歸還（G83）。` });
       if (!ok) return;
       finish(ModuleD.dispatch(a, sel(), $('#dr-by').value.trim(), $('#dr-note').value.trim()));
     };
     $('#dr-none').onclick = async () => {
       const ok = await confirmDialog({ title: '確認判定無車可派？',
-        text: '將告知申請人<b>無車可派</b>（不進候補、不佔用資源）並 Email 通知；此為調度完成確認，申請人需重新申請。' });
+        text: '判定<b>無車可派</b>（不進候補、不佔用資源）並送<b>調度主管簽審</b>；簽審通過後才 Email 通知申請人重新申請。' });
       if (!ok) return;
       finish(ModuleD.dispatch(a, { noVehicle: true }, $('#dr-by').value.trim(), $('#dr-note').value.trim()));
     };
@@ -3597,7 +3610,7 @@ function renderDReviewDetail(p, id) {
     if (sp2) sp2.onclick = () => openDReassign(a, true, rerender);
     $('#dr-extend').onclick = () => openDExtend(a, rerender);
     $('#dr-complete').onclick = confirmThen({ title: '確認行程完成？', text: '確認後此趟用車標記為完成，車輛與司機即釋放回共用資源池。' }, () => {
-      ModuleD.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok'); rerender();
+      if (!signGate(a)) return; ModuleD.completeTrip(a, '調度室'); toast(`${a.id} 行程完成`, 'ok'); rerender();
     });
   }
   initMasonry(p);
@@ -3703,7 +3716,7 @@ function dDriverCargo(a) {
 }
 RENDER.d_driver = function () {
   const p = $('#page-d_driver');
-  const apps = ModuleD.applications.filter(a => ['dispatched', 'completed'].includes(a.status));
+  const apps = ModuleD.applications.filter(a => ['dispatched', 'completed'].includes(a.status) && Signoff.effective(a)); // 簽審通過才生效
   const byDriver = {}, selfRows = [];
   apps.forEach(a => ModuleD.liveSegs(a).forEach(s => {
     if (!s.drivers.length) { selfRows.push({ a, s }); return; }
@@ -3751,6 +3764,280 @@ RENDER.d_driver = function () {
       RENDER.d_driver(); renderDaList();
     }));
 };
+
+/* ============================================================
+   共用：調度主管簽審（A／B／C／D 各一個軟體單元，共用同一套畫面）
+   index：上半查詢條件、下半簽審紀錄 grid（最左「明細」）；
+   明細：申請內容、派車結果、簽審歷程；待簽審者才出現「主管同意」，已簽審者不再出現。
+   簽審通過才生效；退回由各模組把單子放回調度待處理（signReject）。
+   ============================================================ */
+// 其他清單用：派車結果的簽審狀態小徽章（已同意不另顯示）
+function signBadge(rec) {
+  if (Signoff.isPending(rec)) return ' <span class="badge b-amber">待調度主管簽審</span>';
+  if (rec.sign && rec.sign.status === 'rejected') return ' <span class="badge b-red">主管已退回</span>';
+  return '';
+}
+function signStateBadge(rec) {
+  const st = Signoff.stateOf(rec);
+  if (!st) return '<span class="muted">—</span>';
+  const [t, c] = Signoff.STATUS[st];
+  return `<span class="badge ${c}">${t}</span>`;
+}
+// 生效前的操作守門：交貨／上車／完成行程等
+function signGate(rec) {
+  if (Signoff.effective(rec)) return true;
+  toast('派車結果尚待調度主管簽審，簽審通過後才可操作', 'err');
+  return false;
+}
+const stnName = id => { const s = DB.stations.find(x => x.id === id); return s ? s.name : (id || '—'); };
+const siteNm = id => { const s = DB.sites.find(x => x.id === id); return s ? s.name : (id || '—'); };
+const drvNm = id => { const d = DB.drivers.find(x => x.id === id); return d ? d.name : (id || '—'); };
+
+const SIGN_UNITS = {
+  a_sign: {
+    mod: 'A', title: '巡迴物品轉運作業 · 調度主管簽審', M: () => ModuleA, applyPage: 'a_apply', applyState: () => aApply,
+    dispatchPage: 'a_dispatch', dispatchName: '車次追蹤／異動',
+    what: r => `${r.serviceDate}｜${brName(r.branch)}｜${stnName(r.pickStation)} → ${stnName(r.station)}`,
+    infoItems: r => [
+      fItem('單號', `<b style="color:var(--navy);">${r.id}</b>`),
+      fItem('申請人', `${r.applicant}${r.applyUnit ? `（${r.applyUnit}/${r.applyExt}）` : ''}`),
+      fItem('收貨日期', r.serviceDate),
+      fItem('車屬院區', brName(r.branch)),
+      fItem('收貨站點 → 送貨站點', `${stnName(r.pickStation)} → ${stnName(r.station)}`, { w2: true }),
+      fItem('收貨時間模式', r.recvMode === 'exact' ? `指定期望時間 ${r.deliverTime || ''}` : '越快越好'),
+      fItem('申請狀態', stBadge(r.status)),
+    ],
+    items: r => r.items || [], hazard: false,
+    resultItems: r => {
+      if (r.status !== 'matched' || !r.assignedShift) return [fItem('目前排班', '<span class="muted">已移出班次（未排入）</span>', { w2: true })];
+      const sh = DB.regionalShifts.find(s => s.id === r.assignedShift), plan = ModuleA.shiftPlan(r.serviceDate, r.assignedShift);
+      return [fItem('班次', sh ? sh.label : r.assignedShift), fItem('車輛', plan.vehicle || '—'), fItem('司機', drvNm(plan.driver)), fItem('到站時間', r.arrival || '—')];
+    },
+    effect: '生效後才會出現在司機任務單、可確認交貨。',
+    rejectEffect: '退回後此單移出班次回「未排入」，由調度在「車次追蹤／異動」重新安排班次後再送簽審。',
+  },
+  b_sign: {
+    mod: 'B', title: '院區物品轉運作業 · 調度主管簽審', M: () => ModuleB, applyPage: 'b_apply', applyState: () => bApply,
+    dispatchPage: 'b_review', dispatchName: '派車調度',
+    what: r => `${siteNm(r.pickSite)} → ${siteNm(r.dropSite)}${r.direct ? '｜直達' : ''}`,
+    infoItems: r => [
+      fItem('單號', `<b style="color:var(--navy);">${r.id}</b>`),
+      fItem('申請人', r.applicant),
+      fItem('收貨據點 → 送貨據點', `${siteNm(r.pickSite)} → ${siteNm(r.dropSite)}`, { w2: true }),
+      fItem('派送型態', r.direct ? '直達' : '非直達（沿線收送）'),
+      fItem('希望收貨時間', r.wantReceiveTime || '—'),
+      fItem('申請狀態', stBadge(r.status)),
+    ],
+    items: r => r.items || [], hazard: false,
+    resultItems: r => r.dispatchVehicle ? [
+      fItem('車輛', r.dispatchVehicle), fItem('派遣模式', r.dispatchMode || '—'),
+      fItem('方向', r.dispatchDir === 'north' ? '北返（回程）' : '南下（去程）'),
+      fItem('收貨時間', r.pickupTime || '—'), fItem('送達時間', r.dispatchDropTime || '—'),
+    ] : [fItem('目前派車', '<span class="muted">已卸下（回已核准待派車）</span>', { w2: true })],
+    effect: '生效後才會出現在司機任務單、可確認交貨。',
+    rejectEffect: '退回後此單卸下派車結果、回「已核准待派車」，由調度重新派車後再送簽審。',
+  },
+  c_sign: {
+    mod: 'C', title: '差旅共乘作業 · 調度主管簽審', M: () => ModuleC, applyPage: 'c_apply', applyState: () => cApply,
+    dispatchPage: 'c_review', dispatchName: '媒合調度',
+    what: r => `${r.departDate} ${r.earliestPickup}｜${r.origin} → ${r.dest}｜${r.type === 'round' ? '來回' : '單程'}`,
+    infoItems: r => [
+      fItem('單號', `<b style="color:var(--navy);">${r.id}</b>`),
+      fItem('申請人', `${r.applicant}${r.dept ? `（${r.dept}/${r.ext}）` : ''}`),
+      fItem('任務型態', r.type === 'round' ? '來回單' : '單程單'),
+      fItem('出發地 → 目的地', `${r.origin} → ${r.dest}`, { w2: true }),
+      fItem('去程', `${r.departDate} ${r.earliestPickup}`),
+      fItem('回程', r.type === 'round' ? `${r.returnDate} ${r.earliestReturn}` : '—'),
+      fItem('人數', `${r.pax} 人`),
+      fItem('申請狀態', stBadge(r.status, 'C')),
+    ],
+    items: null,
+    resultItems: r => r.vehicle ? [
+      fItem('車輛', r.vehicle), fItem('司機', drvNm(r.driver)), fItem('併車群組', r.groupId || '—'),
+      r.overridden ? fItem('人工改派', '是') : '',
+    ] : [fItem('目前派車', '<span class="muted">已清除（回已核准待媒合）</span>', { w2: true })],
+    effect: '生效後才會出現在司機任務單、可確認上車與完成行程。',
+    rejectEffect: '退回後此單清除車輛／司機、回「已核准待媒合」，由調度重新媒合或改派後再送簽審。',
+  },
+  d_sign: {
+    mod: 'D', title: '一般用車申請作業 · 調度主管簽審', M: () => ModuleD, applyPage: 'd_apply', applyState: () => dApply,
+    dispatchPage: 'd_review', dispatchName: '派車調度',
+    what: r => `${dPeriodShort(r)}｜${r.pax} 人｜自駕：${r.selfDrive ? '是' : '否'}`,
+    infoItems: r => [
+      fItem('單號', `<b style="color:var(--navy);">${r.id}</b>`),
+      fItem('申請人', `${r.applicant}${r.dept ? `（${r.dept}/${r.ext}）` : ''}`),
+      fItem('用車類別', dCatBadge(r)),
+      fItem('用車時段', dPeriod(r), { w2: true }),
+      fItem('人數', `${r.pax} 人`),
+      fItem('是否自駕', r.selfDrive ? `是${r.waitDriver ? '（願意等待駕駛媒合）' : ''}` : '否'),
+      fItem('需求標記', dNeedTags(r), { w2: true }),
+      fItem('申請狀態', stBadge(r.status, 'D')),
+    ],
+    items: r => r.items || [], hazard: true,
+    resultItems: r => r.outcome ? [
+      fItem('派車判斷', dOutcomeBadge(r)),
+      fItem('車輛', r.vehicle ? dVehName(r.vehicle) : '<span class="muted">—</span>'),
+      fItem('司機', dDriversText(r), { w2: true }),
+      fItem('調度人員', r.dispatchedBy || '—'),
+      fItem('調度備註', r.dispatchNote || '<span class="muted">—</span>', { w2: true }),
+    ] : [fItem('目前派車', '<span class="muted">已撤銷（回已核准待調度）</span>', { w2: true })],
+    effect: '生效後才寄出派車結果通知、出現在司機任務單，並可進行換車／換司機／展延／提前歸還與完成行程。',
+    rejectEffect: '退回後撤銷派車判斷、資源釋放，此單回「已核准待調度」，由調度重新判斷後再送簽審。',
+  },
+};
+const signUi = {};
+Object.keys(SIGN_UNITS).forEach(k => {
+  signUi[k] = { view: 'list', detailId: null, query: { kw: '', status: '' } };
+  RENDER[k] = () => {
+    const p = $('#page-' + k), st = signUi[k];
+    if (st.view === 'detail') return renderSignDetail(k, p, st.detailId);
+    return renderSignList(k, p);
+  };
+});
+const SIGN_STATUS_OPTS = [['', '全部'], ['pending', '待調度主管簽審'], ['approved', '主管已同意'], ['rejected', '主管已退回']];
+
+function signRows(k) {
+  const cfg = SIGN_UNITS[k], q = signUi[k].query, kw = (q.kw || '').trim();
+  const rank = r => Signoff.isPending(r) ? 0 : 1;
+  const lastAt = r => { const l = (r.signLog || []).filter(x => x.action === '送簽審').pop(); return l ? +new Date(l.at) : 0; };
+  return cfg.M().signRecords()
+    .filter(r => (!kw || r.id.includes(kw) || (r.applicant || '').includes(kw)) && (!q.status || Signoff.stateOf(r) === q.status))
+    .sort((x, y) => rank(x) - rank(y) || lastAt(y) - lastAt(x));
+}
+function renderSignList(k, p) {
+  const cfg = SIGN_UNITS[k], q = signUi[k].query;
+  const pend = cfg.M().signRecords().filter(r => Signoff.isPending(r)).length;
+  const stOpts = SIGN_STATUS_OPTS.map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">調度主管簽審（調度主管）</div>
+    <div class="section-sub">調度做出的派車結果一律送調度主管簽審，<b>簽審通過才生效</b>。${cfg.effect}不同意時須填意見；${cfg.rejectEffect}</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="${k}-q-search">🔍 查詢</button>
+      </div>
+      ${infoGrid(`${k}-q`, [
+        fInput('單號／申請人（模糊）', `<input type="text" id="${k}-q-kw" value="${gEsc(q.kw)}" placeholder="輸入單號或姓名/部門關鍵字">`),
+        fInput('簽審狀態', `<select id="${k}-q-status">${stOpts}</select>`),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史簽審紀錄</span>
+        <span>${pend ? `<span class="badge b-amber">待簽審 ${pend} 筆</span> ` : ''}<span class="muted" id="${k}-count"></span></span>
+      </div>
+      <div id="${k}-grid"></div>
+    </div>`;
+  $(`#${k}-q-search`).onclick = () => {
+    signUi[k].query = { kw: $(`#${k}-q-kw`).value.trim(), status: $(`#${k}-q-status`).value };
+    renderSignGrid(k); toast('查詢完成', 'ok');
+  };
+  renderSignGrid(k);
+  initMasonry(p);
+}
+function renderSignGrid(k) {
+  const cfg = SIGN_UNITS[k], box = $(`#${k}-grid`);
+  if (!box) return;
+  const rows = signRows(k);
+  $(`#${k}-count`).textContent = `${rows.length} 筆`;
+  box.innerHTML = rows.length === 0
+    ? `<div class="empty"><div class="big">🖋</div>查無簽審紀錄。調度在「${cfg.dispatchName}」做出派車結果後，會出現在這裡等待簽審。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>申請內容</th><th>派車結果</th><th>送簽</th><th>簽審狀態</th><th>簽審人／時間</th></tr></thead><tbody>
+      ${rows.map(r => { const s = r.sign, last = (r.signLog || []).filter(l => l.action === '送簽審').pop() || {};
+        const dec = (r.signLog || []).filter(l => ['主管同意', '主管退回'].includes(l.action)).pop();
+        return `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-sgdetail="${r.id}">明細</button></td>
+        <td><b style="color:var(--navy);">${r.id}</b></td><td>${r.applicant}</td>
+        <td style="text-align:left;">${cfg.what(r)}</td>
+        <td style="text-align:left;">${s ? s.summary : (last.note || '—')}</td>
+        <td class="muted">${last.at ? fmtTime(last.at) : '—'}<br>${last.by || ''}${s && s.round > 1 ? `｜第 ${s.round} 輪` : ''}</td>
+        <td>${signStateBadge(r)}</td>
+        <td class="muted">${dec && !(s && s.status === 'pending') ? `${dec.by}<br>${fmtTime(dec.at)}` : '—'}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊左側「明細」查看申請內容與派車結果；待簽審者於明細頁進行主管同意。</div>`;
+  $$(`#${k}-grid [data-sgdetail]`).forEach(b => b.onclick = () => {
+    signUi[k].detailId = b.dataset.sgdetail; signUi[k].view = 'detail'; RENDER[k]();
+  });
+}
+function renderSignDetail(k, p, id) {
+  const cfg = SIGN_UNITS[k], r = cfg.M().signRecords().find(x => x.id === id);
+  if (!r) { signUi[k].view = 'list'; return RENDER[k](); }
+  const pending = Signoff.isPending(r), s = r.sign;
+  const items = cfg.items ? cfg.items(r) : null;
+  const dec = (r.signLog || []).filter(l => ['主管同意', '主管退回'].includes(l.action)).pop();
+  const outcomeNote = pending
+    ? `<div class="callout" style="margin-bottom:14px;">此派車結果<b>尚待簽審</b>，簽審通過前不生效（${cfg.effect.replace(/。$/, '')}）。</div>`
+    : (Signoff.stateOf(r) === 'rejected'
+      ? `<div class="callout" style="margin-bottom:14px;">主管已退回：${dec ? dec.note : ''}。${cfg.rejectEffect}</div>`
+      : `<div class="callout info" style="margin-bottom:14px;">主管已同意，派車結果已生效。</div>`);
+  p.innerHTML = `
+    <div class="section-h">調度主管簽審明細 · ${r.id}</div>
+    ${outcomeNote}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>申請內容</span>${signStateBadge(r)}</div>
+      ${infoGrid(`${k}-d-info`, cfg.infoItems(r).join(''))}
+    </div>
+    ${items ? `<div class="card"><div class="card-title">貨物清單</div><div id="${k}-d-items"></div></div>` : ''}
+    <div class="card">
+      <div class="card-title">派車結果${s && s.round > 1 ? ` <span class="g-tag">第 ${s.round} 輪</span>` : ''}</div>
+      ${infoGrid(`${k}-d-res`, [
+        fItem('送簽內容', s ? s.summary : '—', { full: true }),
+        fItem('送簽人', s ? s.submittedBy : '—'),
+        fItem('送簽時間', s ? fmtTime(s.submittedAt) : '—'),
+      ].concat(cfg.resultItems(r)).join(''))}
+    </div>
+    ${pending ? `
+    <div class="card">
+      <div class="card-title">主管同意</div>
+      ${infoGrid(`${k}-sv`, [
+        fInput('是否同意', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="${k}-yes-pill"><input type="radio" name="${k}-agree" value="yes" checked>同意（派車結果生效）</label>
+            <label class="radio-pill" id="${k}-no-pill"><input type="radio" name="${k}-agree" value="no">不同意（退回調度重新處理）</label>
+          </div>`, { stack: true, full: true }),
+        fInput('簽審意見 <span class="hint" id="' + k + '-req" style="display:none;color:#c0392b;">（不同意時必填）</span>', `<input type="text" id="${k}-note" placeholder="請輸入簽審意見">`, { full: true }),
+        fInput('簽審人', `<input type="text" id="${k}-by" value="${Signoff.SUPERVISOR}-值班主管">`),
+      ].join(''))}
+      <div style="text-align:center;margin-top:18px;">
+        <button class="btn btn-primary" id="${k}-submit">▶ 送出</button>
+        <button class="btn btn-ghost" id="${k}-cancel">取消</button>
+      </div>
+    </div>` : ''}
+    <div class="card"><div class="card-title">簽審歷程</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
+      ${(r.signLog || []).map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td>${l.note || '—'}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div style="text-align:center;"><button class="btn btn-ghost" id="${k}-goapply">📄 查看申請單</button>
+      <button class="btn btn-ghost" id="${k}-godispatch">🚚 前往${cfg.dispatchName}</button></div>
+    ${backBar(k + '-back')}`;
+  if (items) renderCargoGrid(`#${k}-d-items`, items, false, null, { hazard: cfg.hazard, emptyText: '無貨物。' });
+  const back = () => { signUi[k].view = 'list'; RENDER[k](); };
+  $(`#${k}-back`).onclick = back;
+  $(`#${k}-goapply`).onclick = () => { const st = cfg.applyState(); st.view = 'detail'; st.detailId = r.id; goto(cfg.applyPage); };
+  $(`#${k}-godispatch`).onclick = () => goto(cfg.dispatchPage);
+  if (pending) {
+    $$(`#page-${k} input[name=${k}-agree]`).forEach(x => x.onchange = () => {
+      const no = $(`#page-${k} input[name=${k}-agree][value=no]`).checked;
+      $(`#${k}-yes-pill`).classList.toggle('sel', !no); $(`#${k}-no-pill`).classList.toggle('sel', no);
+      $(`#${k}-req`).style.display = no ? 'inline' : 'none';
+    });
+    $(`#${k}-cancel`).onclick = back;
+    $(`#${k}-submit`).onclick = async () => {
+      const agree = $(`#page-${k} input[name=${k}-agree]:checked`).value === 'yes';
+      const note = $(`#${k}-note`).value.trim(), by = $(`#${k}-by`).value.trim() || Signoff.SUPERVISOR;
+      if (!agree && !note) { toast('不同意時「簽審意見」為必填', 'err'); $(`#${k}-note`).focus(); return; }
+      const ok = await confirmDialog({ title: agree ? '確認同意？' : '確認退回？',
+        text: agree ? `同意後派車結果立即生效。${cfg.effect}` : cfg.rejectEffect });
+      if (!ok) return;
+      const res = agree ? cfg.M().signApprove(r, by, note) : cfg.M().signReject(r, by, note);
+      if (!res.ok) { toast(res.error, 'err'); return; }
+      toast(`${r.id} ${agree ? '已同意，派車結果生效' : '已退回調度重新處理'}`, agree ? 'ok' : 'err');
+      RENDER[k]();
+    };
+  }
+  initMasonry(p);
+}
 
 /* ============================================================
    共用單元：申請引導（建議規格 v0.2）
@@ -3852,7 +4139,7 @@ function renderGuideGrid() {
     guideState.detailId = b.dataset.gdetail; guideState.view = 'detail'; RENDER.guide();
   });
 }
-// 範例：收貨申請（待送出）、出差用車（已送出，實際建立申請單）、一般用車（待送出）
+// 範例：巡迴物品轉運申請（待送出）、差旅共乘申請（已送出，實際建立申請單）、一般用車申請（待送出）
 function loadGuideDemo() {
   const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; };
   const base = o => Object.assign(guideDefaults(), o);

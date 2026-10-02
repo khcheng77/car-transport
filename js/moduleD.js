@@ -306,8 +306,37 @@ const ModuleD = {
     }
     this._sync(app);
     app.dispatchedAt = new Date(); app.dispatchedBy = by; app.dispatchNote = note || '';
-    this.sendResultMail(app);
+    // 派車結果送調度主管簽審；簽審通過才生效並寄送結果通知
+    Signoff.mark(app, this.signSummary(app), by);
     return { ok: true, outcome: r.outcome };
+  },
+
+  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  signSummary(app) {
+    if (app.outcome === 'noVehicle') return '判定無車可派';
+    const dn = id => (DB.drivers.find(d => d.id === id) || {}).name || id;
+    return `${this.OUTCOME_TEXT[app.outcome]}｜車 ${app.vehicle}｜${app.drivers.length ? '司機 ' + app.drivers.map(dn).join('＋') : '使用者自駕'}`;
+  },
+  signRecords() { return this.applications.filter(a => Signoff.inScope(a)); },
+  // 同意：派車結果生效，寄送結果通知（G80）
+  signApprove(app, by, note) {
+    const r = Signoff.decide(app, true, by, note);
+    if (r.ok) this.sendResultMail(app);
+    return r;
+  },
+  // 退回：撤銷派車判斷、回到「已核准待調度」（資源釋放），由調度重新判斷後再送簽審
+  signReject(app, by, note) {
+    const r = Signoff.decide(app, false, by, note);
+    if (!r.ok) return r;
+    app.status = 'approved'; app.outcome = null; app.segs = []; this._sync(app);
+    app.dispatchedAt = null; app.dispatchedBy = ''; app.dispatchNote = '';
+    this._log(app, '調度主管退回', by || Signoff.SUPERVISOR, app.sign.note);
+    return r;
+  },
+  _live(app, what) {
+    if (app.status !== 'dispatched') return `僅已派車的申請可${what}`;
+    if (!Signoff.effective(app)) return `派車結果尚待調度主管簽審，簽審通過後才可${what}`;
+    return null;
   },
 
   /* ================= 調度確認後的生命週期操作（G83，兩類別通用）=================
@@ -317,7 +346,7 @@ const ModuleD = {
   /* 換車／換司機（含補派司機、加派第二位、雙駕駛單獨更換其一 G84/G88）
      o：{ date, time（生效時點）, vehicle?, drivers?, reason, by }；生效時點起新資源、前一刻止舊資源 */
   reassign(app, o) {
-    if (app.status !== 'dispatched') return { ok: false, error: '僅已派車的申請可換車／換司機' };
+    const ng = this._live(app, '換車／換司機'); if (ng) return { ok: false, error: ng };
     const last = this.lastSeg(app), sp = this.span(app);
     if (!o.date || !o.time) return { ok: false, error: '請填寫生效日期與時間' };
     const eff = this.absMin(o.date, o.time);
@@ -355,7 +384,7 @@ const ModuleD = {
 
   /* 展延（G83）：延後用車結束時間；僅調度、不需簽核；延長區段內目前的車輛／司機須仍可用（先佔先贏） */
   extend(app, o) {
-    if (app.status !== 'dispatched') return { ok: false, error: '僅已派車的申請可展延' };
+    const ng = this._live(app, '展延'); if (ng) return { ok: false, error: ng };
     if (!o.date || !o.time) return { ok: false, error: '請填寫新的用車結束日期與時間' };
     const sp = this.span(app), ne = this.absMin(o.date, o.time);
     if (ne <= sp.end) return { ok: false, error: `新的結束時間須晚於目前結束 ${this.fmtAbs(sp.end)}` };
@@ -378,7 +407,7 @@ const ModuleD = {
   /* 提前歸還（G83）：使用者在系統發起（填新的結束時間），待調度確認才生效；
      新結束時間＝用車起時代表整段不用車（確認後狀態為「已歸還（未出車）」）。 */
   requestEarlyReturn(app, o, by) {
-    if (app.status !== 'dispatched') return { ok: false, error: '僅已派車的申請可提出提前歸還' };
+    const ng = this._live(app, '提出提前歸還'); if (ng) return { ok: false, error: ng };
     if (app.pendingReturn) return { ok: false, error: '已有待調度確認的提前歸還申請' };
     if (!o.date || !o.time) return { ok: false, error: '請填寫提前歸還的日期與時間' };
     const sp = this.span(app), ne = this.absMin(o.date, o.time);
@@ -413,7 +442,7 @@ const ModuleD = {
 
   /* 行程完成（dispatched → completed）：司機回報或調度確認；完成後即不再佔用資源 */
   completeTrip(app, by) {
-    if (app.status !== 'dispatched') return false;
+    if (app.status !== 'dispatched' || !Signoff.effective(app)) return false;
     app.status = 'completed'; app.completedAt = new Date(); app.completedBy = by || '調度室';
     app.pendingReturn = null;
     return true;

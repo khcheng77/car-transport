@@ -9,10 +9,10 @@ const Guide = {
   OTHER: '__other',     // 出發地／目的地選「其他地點」
 
   UNITS: {
-    A: { page: 'a_apply', name: '收貨申請', module: '巡迴物品轉運作業' },
-    B: { page: 'b_apply', name: '幹線託運申請', module: '院區物品轉運作業' },
-    C: { page: 'c_apply', name: '出差用車', module: '差旅共乘作業' },
-    D: { page: 'd_apply', name: '一般用車', module: '一般用車申請作業' },
+    A: { page: 'a_apply', name: '巡迴物品轉運申請', module: '巡迴物品轉運作業' },
+    B: { page: 'b_apply', name: '院區物品轉運申請', module: '院區物品轉運作業' },
+    C: { page: 'c_apply', name: '差旅共乘申請', module: '差旅共乘作業' },
+    D: { page: 'd_apply', name: '一般用車申請', module: '一般用車申請作業' },
   },
 
   todayStr() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; },

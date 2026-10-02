@@ -141,7 +141,35 @@ const ModuleB = {
   },
 
   // 交貨確認（loaded → delivered）
-  confirmDelivery(o, by) { if (o.status === 'loaded') { o.status = 'delivered'; o.deliveredAt = Date.now(); o.deliveredBy = by || '調度室'; } },
+  // 簽審通過才生效：待調度主管簽審的派車不可確認交貨
+  confirmDelivery(o, by) {
+    if (o.status !== 'loaded' || !Signoff.effective(o)) return false;
+    o.status = 'delivered'; o.deliveredAt = Date.now(); o.deliveredBy = by || '調度室';
+    return true;
+  },
+
+  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  signSummary(o) {
+    const nm = id => (this.siteById(id) || {}).name || id;
+    return `${o.dispatchVehicle}｜${o.dispatchMode || ''}｜${o.dispatchDir === 'north' ? '北返' : '南下'}｜${nm(o.pickSite)} → ${nm(o.dropSite)}`;
+  },
+  // 本次派車新裝載的單（尚未送簽或前次被退回者）送簽審
+  _signLoaded() {
+    this.orders.filter(o => o.status === 'loaded' && !Signoff.isPending(o) && !Signoff.isApproved(o))
+      .forEach(o => Signoff.mark(o, this.signSummary(o), '調度室'));
+  },
+  signRecords() { return this.orders.filter(o => Signoff.inScope(o)); },
+  signApprove(o, by, note) { return Signoff.decide(o, true, by, note); },
+  // 退回：卸下派車結果、回到「已核准待派車」，由調度重新派車後再送簽審
+  signReject(o, by, note) {
+    const r = Signoff.decide(o, false, by, note);
+    if (!r.ok) return r;
+    o.status = 'approved';
+    ['dispatchVehicle', 'dispatchMode', 'dispatchEndpoint', 'dispatchOrigin', 'dispatchDir', 'pickupTime', 'dispatchDay', 'dispatchDropTime']
+      .forEach(k => { o[k] = null; });
+    o.signReturnNote = o.sign.note;
+    return r;
+  },
 
   /* ---- 2.9 據點相互路程表查表（分大車／小車，同車型內對稱）---- */
   travelMin(fromId, toId, sizeClass) {
@@ -412,6 +440,11 @@ const ModuleB = {
   /* 派車：對某台車 + 一批待處理單跑貪婪 / 直達邏輯，回傳決策
      只處理已核准的南下貨；originId 可指定出發據點（2.22，預設主檔 homeSite） */
   dispatch(vehicleId, mode, dispatchDate, originId) {
+    const r = this._dispatch(vehicleId, mode, dispatchDate, originId);
+    this._signLoaded();
+    return r;
+  },
+  _dispatch(vehicleId, mode, dispatchDate, originId) {
     const veh = DB.vehicles.find(v => v.id === vehicleId);
     const trace = [];
     const origin = originId || DB.homeSite; // 2.22：出發據點可為任一據點
@@ -584,6 +617,11 @@ const ModuleB = {
 
   /* ---- 回程派車：全域直達鎖定 + 五列決策矩陣（G36/G40/G41/G42/G43）---- */
   dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet) {
+    const r = this._dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet);
+    this._signLoaded();
+    return r;
+  },
+  _dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet) {
     const veh = DB.vehicles.find(v => v.id === vehicleId);
     const trace = [];
     startNet = startNet || 0;
