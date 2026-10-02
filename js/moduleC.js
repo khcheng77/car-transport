@@ -386,6 +386,11 @@ const ModuleC = {
     const d = DB.drivers.find(x => x.id === a.driver);
     return `${a.departDate} ${a.earliestPickup}｜${a.origin} → ${a.dest}｜車 ${a.vehicle || '—'}／司機 ${d ? d.name : '—'}`;
   },
+  /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程）---- */
+  USAGE_POOL: 'BIZ',
+  usagePlan(a) { return { vehicle: a.vehicle || null, drivers: a.driver ? [a.driver] : [] }; },
+  usageRecords() { return this.applications.filter(a => Usage.inScope(a)); },
+  usageSave(a, data, by) { return Usage.save(a, data, by, { pool: this.USAGE_POOL }); },
   signRecords() { return this.applications.filter(a => Signoff.inScope(a)); },
   signApprove(a, by, note) { return Signoff.decide(a, true, by, note); },
   // 退回：清除媒合結果、回到「已核准待媒合」，由調度重新媒合／改派後再送簽審

@@ -146,26 +146,27 @@ const DB = {
   },
 
   /* ---- 車輛主檔（含資源池別 G05/G60）----
+     type＝車種類型（車輛使用實登的第一層選單，選定後再選車號）
      homeSite＝歸屬據點：行政與資產管理上固定隸屬（保養、常駐、鑰匙管理），不因單次出差改變（C-2）
      currentSite＝當前位置：排班可用性判斷依據（G59）；無進行中多天任務時兩者相同 */
   vehicles: [
     // 物流池（模組 A/B）
-    { id: 'V-L01', name: '物流貨車 01', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
+    { id: 'V-L01', type: '物流貨車', name: '物流貨車 01', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 420, w: 180, h: 190 }, volume: 420*180*190/1000, weight: 3000 },
-    { id: 'V-L02', name: '物流貨車 02', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
+    { id: 'V-L02', type: '物流貨車', name: '物流貨車 02', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10',
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
     // sizeClass：3.1 天數表查表維度＋2.17 車型自動判斷之代表車（大車 big／小車 small）
     //   2.17（暫定）：依當日該路線總貨量門檻自動選車，超過小車容量上限即派大車（見 ModuleB.decideSizeClass）
-    { id: 'V-T01', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
+    { id: 'V-T01', type: '幹線聯結車', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
       dims: { l: 600, w: 240, h: 240 }, volume: 600*240*240/1000, weight: 8000 },
-    { id: 'V-T02', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'small',
+    { id: 'V-T02', type: '幹線貨車', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'small',
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
     // 商務池（模組 C/D 共用）— 與物流池完全分開（資源池原則）
     //   permits：管制區通行證（綁車輛、可多證；一般用車交集篩選 G85）；tons：車重（台北市噸位提示 G86）
-    { id: 'V-B01', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7, permits: ['K'], tons: 3.5 },
-    { id: 'V-B02', name: '商務轎車 02', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 4, permits: [], tons: 2.0 },
-    { id: 'V-B03', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9, permits: ['K', 'P'], tons: 7.2 },
-    { id: 'V-B04', name: '商務廂車 04', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 5, permits: ['P'], tons: 3.0 },
+    { id: 'V-B01', type: '商務廂車', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7, permits: ['K'], tons: 3.5 },
+    { id: 'V-B02', type: '商務轎車', name: '商務轎車 02', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 4, permits: [], tons: 2.0 },
+    { id: 'V-B03', type: '商務廂車', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9, permits: ['K', 'P'], tons: 7.2 },
+    { id: 'V-B04', type: '商務廂車', name: '商務廂車 04', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 5, permits: ['P'], tons: 3.0 },
   ],
 
   /* ---- 司機主檔（獨立資源 G61）---- */

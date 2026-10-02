@@ -169,6 +169,11 @@ const ModuleB = {
     this.orders.filter(o => o.status === 'loaded' && !Signoff.isPending(o) && !Signoff.isApproved(o))
       .forEach(o => Signoff.mark(o, this.signSummary(o), '調度室'));
   },
+  /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程；B 派車只指定車輛）---- */
+  USAGE_POOL: 'LOGI',
+  usagePlan(o) { return { vehicle: o.dispatchVehicle || null, drivers: [] }; },
+  usageRecords() { return this.orders.filter(o => Usage.inScope(o)); },
+  usageSave(o, data, by) { return Usage.save(o, data, by, { pool: this.USAGE_POOL }); },
   signRecords() { return this.orders.filter(o => Signoff.inScope(o)); },
   signApprove(o, by, note) { return Signoff.decide(o, true, by, note); },
   // 退回：卸下派車結果、回到「已核准待派車」，由調度重新派車後再送簽審

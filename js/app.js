@@ -96,6 +96,7 @@ const NAV = [
     { id: 'a_apply', ico: '📝', label: 'A｜巡迴物品轉運申請（使用者）' },
     { id: 'a_dispatch', ico: '🗂', label: 'A｜車次追蹤／異動（業務）' },
     { id: 'a_sign', ico: '🖋', label: 'A｜運輸主管簽審（運輸主管）' },
+    { id: 'a_usage', ico: '⛽', label: 'A｜車輛使用實登（業務）' },
     { id: 'a_route', ico: '🚌', label: 'A｜路線與班次（業務）' },
     { id: 'a_masonry', ico: '🧩', label: 'A｜資訊卡試做（Masonry）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
@@ -105,6 +106,7 @@ const NAV = [
     { id: 'b_approve', ico: '✅', label: 'B｜單位主管審核（主管）' },
     { id: 'b_review', ico: '🚚', label: 'B｜派車調度（業務）' },
     { id: 'b_sign', ico: '🖋', label: 'B｜運輸主管簽審（運輸主管）' },
+    { id: 'b_usage', ico: '⛽', label: 'B｜車輛使用實登（業務）' },
     { id: 'b_driver', ico: '🧑‍✈️', label: 'B｜司機任務單（駕駛）' },
   ] },
   { group: '模組 C · 差旅共乘作業', items: [
@@ -112,6 +114,7 @@ const NAV = [
     { id: 'c_approve', ico: '✅', label: 'C｜單位主管審核（主管）' },
     { id: 'c_review', ico: '🔀', label: 'C｜媒合調度（業務）' },
     { id: 'c_sign', ico: '🖋', label: 'C｜運輸主管簽審（運輸主管）' },
+    { id: 'c_usage', ico: '⛽', label: 'C｜車輛使用實登（業務）' },
     { id: 'c_driver', ico: '🧑‍✈️', label: 'C｜司機任務單（駕駛）' },
   ] },
   { group: '模組 D · 一般用車申請作業', items: [
@@ -119,14 +122,19 @@ const NAV = [
     { id: 'd_approve', ico: '✅', label: 'D｜單位主管審核（主管）' },
     { id: 'd_review', ico: '🚗', label: 'D｜派車調度（業務）' },
     { id: 'd_sign', ico: '🖋', label: 'D｜運輸主管簽審（運輸主管）' },
+    { id: 'd_usage', ico: '⛽', label: 'D｜車輛使用實登（業務）' },
     { id: 'd_driver', ico: '🧑‍✈️', label: 'D｜司機任務單（駕駛）' },
   ] },
 ];
 const PAGE_META = {
   a_sign: { title: '巡迴物品轉運作業 · 運輸主管簽審（運輸主管）', crumb: '模組 A · 運輸主管端 · 派車結果覆核（通過才生效）' },
+  a_usage: { title: '巡迴物品轉運作業 · 車輛使用實登（業務）', crumb: '模組 A · 業務端 · 派車生效後登打實際車輛／駕駛／里程' },
   b_sign: { title: '院區物品轉運作業 · 運輸主管簽審（運輸主管）', crumb: '模組 B · 運輸主管端 · 派車結果覆核（通過才生效）' },
+  b_usage: { title: '院區物品轉運作業 · 車輛使用實登（業務）', crumb: '模組 B · 業務端 · 派車生效後登打實際車輛／駕駛／里程' },
   c_sign: { title: '差旅共乘作業 · 運輸主管簽審（運輸主管）', crumb: '模組 C · 運輸主管端 · 派車結果覆核（通過才生效）' },
+  c_usage: { title: '差旅共乘作業 · 車輛使用實登（業務）', crumb: '模組 C · 業務端 · 派車生效後登打實際車輛／駕駛／里程' },
   d_sign: { title: '一般用車申請作業 · 運輸主管簽審（運輸主管）', crumb: '模組 D · 運輸主管端 · 派車結果覆核（通過才生效）' },
+  d_usage: { title: '一般用車申請作業 · 車輛使用實登（業務）', crumb: '模組 D · 業務端 · 派車生效後登打實際車輛／駕駛／里程' },
   dashboard: { title: '系統儀表板', crumb: '車輛派遣系統整合 · 原型 v0.2' },
   guide: { title: '申請引導', crumb: '共用 · 查詢引導紀錄／新增引導（依填寫內容判定申請並帶入）' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
@@ -210,22 +218,26 @@ RENDER.dashboard = function () {
       ${unitCard('📝 A｜巡迴物品轉運申請', '使用者填收貨單，送出即自動媒合並告知班次時間與車號；查看狀態、接受排班與交貨確認。', 'a_apply', '申請端')}
       ${unitCard('🗂 A｜車次追蹤／異動', '追蹤已排定車次、未排入待改期與交貨狀態；並可調整車次的車輛／司機、加移單、駕駛異常回報。', 'a_dispatch', '審核端')}
       ${unitCard('🖋 A｜運輸主管簽審', '調度做出的派車結果送運輸主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'a_sign', '運輸主管')}
+      ${unitCard('⛽ A｜車輛使用實登', '派車結果生效後，登打實際使用的車種類型、車號、駕駛人1／駕駛人2 與起訖里程；可修改並保留歷程。', 'a_usage', '審核端')}
       ${unitCard('🚌 A｜路線與班次', '獨立單元：各分公司固定 9 站路線與每小時班次／車輛對應查詢。', 'a_route', '審核端')}
       ${unitCard('🧑‍✈️ A｜司機任務單', '駕駛端：以班次（車輛）為單位，沿據點 9 站路線的收送任務、到站時間、接收人。', 'a_driver', '駕駛')}
       ${unitCard('📝 B｜院區物品轉運申請', '使用者建立院區物品轉運申請單（直達/非直達）、查看狀態。', 'b_apply', '申請端')}
       ${unitCard('✅ B｜單位主管審核', '直屬單位主管審核院區物品轉運申請；退回修編者由申請人修改後重新送出。', 'b_approve', '主管')}
       ${unitCard('🚚 B｜派車調度', '貪婪/直達派車決策、回程直達鎖定、決策矩陣、貨況追蹤。', 'b_review', '審核端')}
       ${unitCard('🖋 B｜運輸主管簽審', '調度做出的派車結果送運輸主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'b_sign', '運輸主管')}
+      ${unitCard('⛽ B｜車輛使用實登', '派車結果生效後，登打實際使用的車種類型、車號、駕駛人1／駕駛人2 與起訖里程；可修改並保留歷程。', 'b_usage', '審核端')}
       ${unitCard('🧑‍✈️ B｜司機任務單', '駕駛端：以車輛為單位，這一趟停靠哪些據點、各站取貨／卸貨。', 'b_driver', '駕駛')}
       ${unitCard('📝 C｜差旅共乘申請', '使用者填來回/單程用車申請、查看狀態、手動併車找便車。', 'c_apply', '申請端')}
       ${unitCard('✅ C｜單位主管審核', '直屬單位主管審核差旅共乘申請；退回修編者由申請人修改後重新送出。', 'c_approve', '主管')}
       ${unitCard('🔀 C｜媒合調度', '批次媒合、資源檢核、逾期作廢、派車追蹤。', 'c_review', '審核端')}
       ${unitCard('🖋 C｜運輸主管簽審', '調度做出的派車結果送運輸主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'c_sign', '運輸主管')}
+      ${unitCard('⛽ C｜車輛使用實登', '派車結果生效後，登打實際使用的車種類型、車號、駕駛人1／駕駛人2 與起訖里程；可修改並保留歷程。', 'c_usage', '審核端')}
       ${unitCard('🧑‍✈️ C｜司機任務單', '駕駛端：以駕駛為單位，今日整個行程要接誰、去哪裡。', 'c_driver', '駕駛')}
       ${unitCard('📝 D｜一般用車申請', '起訖時間（數小時～數個月）、人數、自駕／願意等待駕駛媒合、通行證與提示欄位、隨行貨物；例行用車類別限特定角色；派車後可提出提前歸還。', 'd_apply', '申請端')}
       ${unitCard('✅ D｜單位主管審核', '直屬單位主管審核首次申請（兩類別相同），通過才進調度；退回修編者由申請人修改後重新送出。', 'd_approve', '主管')}
       ${unitCard('🚗 D｜派車調度', '通行證交集篩選、例行用車優先、雙駕駛、剩餘加班工時；派車後換車／換司機／補派／展延、確認提前歸還。', 'd_review', '審核端')}
       ${unitCard('🖋 D｜運輸主管簽審', '調度做出的派車結果送運輸主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'd_sign', '運輸主管')}
+      ${unitCard('⛽ D｜車輛使用實登', '派車結果生效後，登打實際使用的車種類型、車號、駕駛人1／駕駛人2 與起訖里程；可修改並保留歷程。', 'd_usage', '審核端')}
       ${unitCard('🧑‍✈️ D｜司機任務單', '駕駛端：依指派區間列出任務（雙駕駛標示搭檔）、使用人、隨行貨物（含危險品提示）。', 'd_driver', '駕駛')}
     </div>
 
@@ -4107,6 +4119,212 @@ function renderSignDetail(k, p, id) {
       RENDER[k]();
     };
   }
+  initMasonry(p);
+}
+
+/* ============================================================
+   共用單元：車輛使用實登（A／B／C／D）
+   index：查詢條件＋歷史實登 grid（最左「明細」）；detail：上方派車基本資料、下方實登內容。
+   派車結果經運輸主管簽審通過（生效）才可實登；資料邏輯在 usage.js（Usage）與各模組 usage*()。
+   申請內容／派車結果的欄位沿用 SIGN_UNITS 的設定，兩個單元看到的派車資料一致。
+   ============================================================ */
+const USAGE_UNITS = { a_usage: 'a_sign', b_usage: 'b_sign', c_usage: 'c_sign', d_usage: 'd_sign' };
+const usageUi = {};
+Object.keys(USAGE_UNITS).forEach(k => {
+  usageUi[k] = { view: 'list', detailId: null, editing: false, query: { kw: '', status: '' } };
+  RENDER[k] = () => {
+    const p = $('#page-' + k), st = usageUi[k];
+    if (st.view === 'detail') return renderUsageDetail(k, p, st.detailId);
+    return renderUsageList(k, p);
+  };
+});
+const usageCfg = k => SIGN_UNITS[USAGE_UNITS[k]];
+const USAGE_STATUS_OPTS = [['', '全部'], ['todo', '待實登'], ['done', '已實登']];
+function usageBadge(r) { const [t, c] = Usage.STATUS[Usage.stateOf(r)]; return `<span class="badge ${c}">${t}</span>`; }
+const usageVehText = id => { const v = DB.vehicles.find(x => x.id === id); return v ? `${v.id}（${v.name}）` : (id || '—'); };
+function usageDrvText(r, id) {
+  if (!id) return '<span class="muted">—</span>';
+  return id === Usage.SELF ? `使用者自駕（${r.applicant}）` : drvNm(id);
+}
+const usageKm = n => (n == null || n === '') ? '—' : Number(n).toLocaleString('zh-TW', { maximumFractionDigits: 1 });
+// 派車規劃的車輛／駕駛（顯示用）
+function usagePlanText(k, r) {
+  const pl = usageCfg(k).M().usagePlan(r);
+  const drv = pl.drivers.length ? pl.drivers.map(drvNm).join('＋') : (k === 'b_usage' ? '未指定（依車輛出車）' : (r.selfDrive ? '使用者自駕' : '—'));
+  return { veh: pl.vehicle ? usageVehText(pl.vehicle) : '—', drv };
+}
+
+function usageRows(k) {
+  const q = usageUi[k].query, kw = (q.kw || '').trim();
+  const at = r => r.usage ? +new Date(r.usage.at) : (r.sign && r.sign.decidedAt ? +new Date(r.sign.decidedAt) : 0);
+  return usageCfg(k).M().usageRecords()
+    .filter(r => (!kw || r.id.includes(kw) || (r.applicant || '').includes(kw) || (r.usage && r.usage.vehicle.includes(kw)))
+      && (!q.status || Usage.stateOf(r) === q.status))
+    .sort((x, y) => (x.usage ? 1 : 0) - (y.usage ? 1 : 0) || at(y) - at(x));
+}
+function renderUsageList(k, p) {
+  const cfg = usageCfg(k), q = usageUi[k].query;
+  const todo = cfg.M().usageRecords().filter(r => !r.usage).length;
+  const stOpts = USAGE_STATUS_OPTS.map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
+  p.innerHTML = `
+    <div class="section-h">車輛使用實登（業務）</div>
+    <div class="section-sub">派車結果經運輸主管簽審<b>通過（生效）</b>後，登打實際使用的車種類型、車號、駕駛人1／駕駛人2 與起始／結束里程。實登可修改，每次儲存都保留歷程。</div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="${k}-q-search">🔍 查詢</button>
+      </div>
+      ${infoGrid(`${k}-q`, [
+        fInput('單號／申請人／車號（模糊）', `<input type="text" id="${k}-q-kw" value="${gEsc(q.kw)}" placeholder="輸入單號、姓名/部門或實登車號關鍵字">`),
+        fInput('實登狀態', `<select id="${k}-q-status">${stOpts}</select>`),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>歷史實登紀錄</span>
+        <span>${todo ? `<span class="badge b-amber">待實登 ${todo} 筆</span> ` : ''}<span class="muted" id="${k}-count"></span></span>
+      </div>
+      <div id="${k}-grid"></div>
+    </div>`;
+  $(`#${k}-q-search`).onclick = () => {
+    usageUi[k].query = { kw: $(`#${k}-q-kw`).value.trim(), status: $(`#${k}-q-status`).value };
+    renderUsageGrid(k); toast('查詢完成', 'ok');
+  };
+  renderUsageGrid(k);
+  initMasonry(p);
+}
+function renderUsageGrid(k) {
+  const cfg = usageCfg(k), box = $(`#${k}-grid`);
+  if (!box) return;
+  const rows = usageRows(k);
+  $(`#${k}-count`).textContent = `${rows.length} 筆`;
+  box.innerHTML = rows.length === 0
+    ? `<div class="empty"><div class="big">⛽</div>查無實登紀錄。派車結果經運輸主管簽審通過後，會出現在這裡等待實登。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>單號</th><th>申請人</th><th>申請內容</th><th>派車車輛／駕駛</th><th>實登狀態</th><th>實登車號</th><th>實登駕駛</th><th>起訖里程</th><th>行駛里程</th><th>實登人／時間</th></tr></thead><tbody>
+      ${rows.map(r => { const u = r.usage, pl = usagePlanText(k, r);
+        return `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-usdetail="${r.id}">明細</button></td>
+        <td><b style="color:var(--navy);">${r.id}</b></td><td>${r.applicant}</td>
+        <td style="text-align:left;">${cfg.what(r)}</td>
+        <td style="text-align:left;">${pl.veh}<br><span class="muted">${pl.drv}</span></td>
+        <td>${usageBadge(r)}</td>
+        <td>${u ? `${u.vehicle}<br><span class="muted">${u.vehicleType}</span>` : '—'}</td>
+        <td>${u ? [u.driver1, u.driver2].filter(Boolean).map(id => usageDrvText(r, id)).join('<br>') : '—'}</td>
+        <td>${u ? `${usageKm(u.startKm)} → ${usageKm(u.endKm)}` : '—'}</td>
+        <td>${u ? `<b>${usageKm(u.distance)}</b> km` : '—'}</td>
+        <td class="muted">${u ? `${u.by}<br>${fmtTime(u.at)}` : '—'}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">點擊左側「明細」查看派車基本資料並登打（或修改）實登內容。</div>`;
+  $$(`#${k}-grid [data-usdetail]`).forEach(b => b.onclick = () => {
+    Object.assign(usageUi[k], { detailId: b.dataset.usdetail, view: 'detail', editing: false }); RENDER[k]();
+  });
+}
+function renderUsageDetail(k, p, id) {
+  const cfg = usageCfg(k), M = cfg.M(), r = M.usageRecords().find(x => x.id === id);
+  if (!r) { usageUi[k].view = 'list'; return RENDER[k](); }
+  const u = r.usage, pool = M.USAGE_POOL, plan = M.usagePlan(r);
+  const editing = !u || usageUi[k].editing;
+  const allowSelf = k === 'd_usage' && !!r.selfDrive;
+  const items = cfg.items ? cfg.items(r) : null;
+  const diffs = Usage.diffs(r, plan);
+  // 預設值：已實登取實登值，否則帶入派車規劃（自駕單駕駛人1 帶「使用者自駕」）
+  const dv = u ? Object.assign({}, u) : (() => {
+    const v = DB.vehicles.find(x => x.id === plan.vehicle);
+    return { vehicleType: v ? v.type : '', vehicle: plan.vehicle || '', driver1: plan.drivers[0] || (allowSelf ? Usage.SELF : ''),
+      driver2: plan.drivers[1] || '', startKm: '', endKm: '' };
+  })();
+  const opt = (v, t, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${t}</option>`;
+  const drvOpts = (cur, withSelf, blank) => opt('', blank, cur)
+    + (withSelf ? opt(Usage.SELF, `使用者自駕（${r.applicant}）`, cur) : '')
+    + Usage.driversOf(pool).map(d => opt(d.id, `${d.name}（${d.id}）`, cur)).join('');
+  const notEff = !Signoff.effective(r);
+  p.innerHTML = `
+    <div class="section-h">車輛使用實登明細 · ${r.id}</div>
+    ${notEff ? `<div class="callout" style="margin-bottom:14px;">此單派車結果目前未生效（${Signoff.stateOf(r) === 'pending' ? '異動後重新送運輸主管簽審中' : '已撤銷或退回'}），以下保留先前的實登紀錄。</div>` : ''}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>派車基本資料</span>${signStateBadge(r)}</div>
+      ${infoGrid(`${k}-d-info`, cfg.infoItems(r).join(''))}
+    </div>
+    ${items ? `<div class="card"><div class="card-title">貨物清單</div><div id="${k}-d-items"></div></div>` : ''}
+    <div class="card">
+      <div class="card-title">派車結果</div>
+      ${infoGrid(`${k}-d-res`, cfg.resultItems(r).concat([
+        fItem('簽審人／時間', r.sign && r.sign.decidedAt ? `${r.sign.decidedBy}｜${fmtTime(r.sign.decidedAt)}` : '—'),
+      ]).join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>實登內容</span>
+        <span>${usageBadge(r)}${u && !editing ? ` <button class="btn btn-ghost btn-sm" id="${k}-edit" style="margin-left:8px;">✎ 修改實登</button>` : ''}</span></div>
+      ${u && !editing ? `
+        ${diffs.length ? `<div class="callout" style="margin-bottom:12px;">實際使用的<b>${diffs.join('、')}</b>與派車結果不同。</div>` : ''}
+        ${infoGrid(`${k}-u-view`, [
+          fItem('車種類型', u.vehicleType), fItem('車號', usageVehText(u.vehicle)),
+          fItem('駕駛人1', usageDrvText(r, u.driver1)), fItem('駕駛人2', usageDrvText(r, u.driver2)),
+          fItem('起始里程', `${usageKm(u.startKm)} km`), fItem('結束里程', `${usageKm(u.endKm)} km`),
+          fItem('行駛里程', `<b>${usageKm(u.distance)}</b> km`),
+          fItem('實登人', u.by), fItem('實登時間', fmtTime(u.at)),
+        ].join(''))}` : `
+        ${infoGrid(`${k}-u-form`, [
+          fInput('車種類型 <span style="color:#c0392b;">*</span>', `<select id="${k}-u-type">${opt('', '請選擇', dv.vehicleType)}${Usage.types(pool).map(t => opt(t, t, dv.vehicleType)).join('')}</select>`),
+          fInput('車號 <span style="color:#c0392b;">*</span>', `<select id="${k}-u-veh"></select>`),
+          fInput('駕駛人1 <span style="color:#c0392b;">*</span>', `<select id="${k}-u-d1">${drvOpts(dv.driver1, allowSelf, '請選擇')}</select>`),
+          fInput('駕駛人2', `<select id="${k}-u-d2">${drvOpts(dv.driver2, false, '（無）')}</select>`),
+          fInput('起始里程（km）<span style="color:#c0392b;">*</span>', `<input type="number" min="0" step="0.1" id="${k}-u-start" value="${dv.startKm}" placeholder="出車時里程表讀數">`),
+          fInput('結束里程（km）<span style="color:#c0392b;">*</span>', `<input type="number" min="0" step="0.1" id="${k}-u-end" value="${dv.endKm}" placeholder="還車時里程表讀數">`),
+          fItem('行駛里程', `<b id="${k}-u-dist">—</b>`),
+          fInput('實登人', `<input type="text" id="${k}-u-by" value="${gEsc(u ? u.by : '調度室')}">`),
+        ].join(''))}
+        <div class="muted" style="margin-top:8px;">已帶入派車結果的車輛與駕駛，若實際使用不同請直接修改。結束里程不可小於起始里程。</div>
+        <div style="text-align:center;margin-top:18px;">
+          <button class="btn btn-primary" id="${k}-u-save">💾 ${u ? '儲存修改' : '儲存實登'}</button>
+          ${u ? `<button class="btn btn-ghost" id="${k}-u-cancel">取消</button>` : ''}
+        </div>`}
+    </div>
+    ${(r.usageLog || []).length ? `<div class="card"><div class="card-title">實登歷程</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>車號</th><th>駕駛</th><th>起訖里程</th><th>行駛里程</th></tr></thead><tbody>
+      ${r.usageLog.map(l => { const x = l.snapshot; return `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td>
+        <td>${x.vehicle}（${x.vehicleType}）</td><td>${[x.driver1, x.driver2].filter(Boolean).map(id => usageDrvText(r, id)).join('＋')}</td>
+        <td>${usageKm(x.startKm)} → ${usageKm(x.endKm)}</td><td>${usageKm(x.distance)} km</td></tr>`; }).join('')}
+      </tbody></table></div></div>` : ''}
+    ${backBar(k + '-back')}`;
+  if (items) renderCargoGrid(`#${k}-d-items`, items, false, null, { hazard: cfg.hazard, emptyText: '無貨物。' });
+  $(`#${k}-back`).onclick = () => { Object.assign(usageUi[k], { view: 'list', editing: false }); RENDER[k](); };
+  if (u && !editing) { $(`#${k}-edit`).onclick = () => { usageUi[k].editing = true; RENDER[k](); }; initMasonry(p); return; }
+  // 車種類型 → 車號連動
+  const fillVeh = cur => {
+    const t = $(`#${k}-u-type`).value;
+    $(`#${k}-u-veh`).innerHTML = opt('', t ? '請選擇' : '請先選車種類型', cur)
+      + (t ? Usage.vehiclesOf(pool, t).map(v => opt(v.id, `${v.id}（${v.name}）`, cur)).join('') : '');
+  };
+  fillVeh(dv.vehicle);
+  $(`#${k}-u-type`).onchange = () => fillVeh('');
+  const showDist = () => {
+    const s = $(`#${k}-u-start`).value, e = $(`#${k}-u-end`).value, el = $(`#${k}-u-dist`);
+    if (s === '' || e === '') { el.textContent = '—'; el.style.color = ''; return; }
+    const d = Number(e) - Number(s);
+    el.textContent = d < 0 ? '結束里程小於起始里程' : `${usageKm(Math.round(d * 10) / 10)} km`;
+    el.style.color = d < 0 ? '#c0392b' : '';
+  };
+  $(`#${k}-u-start`).oninput = showDist; $(`#${k}-u-end`).oninput = showDist; showDist();
+  if (u) $(`#${k}-u-cancel`).onclick = () => { usageUi[k].editing = false; RENDER[k](); };
+  $(`#${k}-u-save`).onclick = async () => {
+    const data = { vehicleType: $(`#${k}-u-type`).value, vehicle: $(`#${k}-u-veh`).value,
+      driver1: $(`#${k}-u-d1`).value, driver2: $(`#${k}-u-d2`).value,
+      startKm: $(`#${k}-u-start`).value, endKm: $(`#${k}-u-end`).value };
+    const by = $(`#${k}-u-by`).value.trim() || '調度室';
+    // 先以副本試算驗證，避免確認視窗後才報錯
+    const chk = Usage.save({ usage: u || null, sign: r.sign, applicant: r.applicant }, data, by, { pool, allowSelf });
+    if (!chk.ok) { toast(chk.error, 'err'); return; }
+    const ok = await confirmDialog({ title: u ? '確認修改實登？' : '確認儲存實登？',
+      text: `${data.vehicle}（${data.vehicleType}）｜駕駛 ${[data.driver1, data.driver2].filter(Boolean).map(id => usageDrvText(r, id)).join('＋')}｜里程 ${usageKm(data.startKm)} → ${usageKm(data.endKm)}，行駛 <b>${usageKm(chk.usage.distance)}</b> km${u ? '。修改後保留前次紀錄於實登歷程。' : '。'}` });
+    if (!ok) return;
+    const res = M.usageSave(r, data, by);
+    if (!res.ok) { toast(res.error, 'err'); return; }
+    usageUi[k].editing = false;
+    toast(`${r.id} ${u ? '實登已修改' : '已完成實登'}`, 'ok');
+    RENDER[k]();
+  };
   initMasonry(p);
 }
 

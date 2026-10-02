@@ -149,6 +149,16 @@ const ModuleA = {
     return app;
   },
 
+  /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程）---- */
+  USAGE_POOL: 'LOGI',
+  usagePlan(app) {
+    if (!app.assignedShift) return { vehicle: null, drivers: [] };
+    const plan = this.shiftPlan(app.serviceDate, app.assignedShift);
+    return { vehicle: plan.vehicle, drivers: plan.driver ? [plan.driver] : [] };
+  },
+  usageRecords() { return this.applications.filter(a => Usage.inScope(a)); },
+  usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL }); },
+
   /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
   signSummary(app) {
     const sh = DB.regionalShifts.find(s => s.id === app.assignedShift);

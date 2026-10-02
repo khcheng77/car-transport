@@ -1726,6 +1726,86 @@ group('運輸主管簽審（A/B/C/D 派車結果覆核）', () => {
   });
 });
 
+group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛／里程）', () => {
+  const U = { vehicleType: '物流貨車', vehicle: 'V-L01', driver1: 'DR1', driver2: '', startKm: '12000', endKm: '12035.5' };
+
+  test('共用規則：未生效不可實登；必填、車種與車號相符、駕駛不可重複、結束里程 ≥ 起始', () => {
+    const H = fresh(), S = H.Signoff, Us = H.Usage, rec = {}, opts = { pool: 'LOGI' };
+    S.mark(rec, '派車', '調度室');
+    ok(Us.save(rec, U, '調度室', opts).error.includes('生效'), '待簽審不可實登');
+    eq(Us.inScope(rec), false, '未生效不列入實登清單');
+    S.decide(rec, true, '運輸主管');
+    eq(Us.stateOf(rec), 'todo');
+    ok(Us.save(rec, Object.assign({}, U, { vehicleType: '' }), '', opts).error.includes('車種類型'));
+    ok(Us.save(rec, Object.assign({}, U, { vehicleType: '幹線貨車' }), '', opts).error.includes('不符'), '車號須屬於所選車種');
+    ok(Us.save(rec, Object.assign({}, U, { vehicleType: '商務廂車', vehicle: 'V-B01' }), '', opts).error.includes('資源池'), '不可登其他資源池的車');
+    ok(Us.save(rec, Object.assign({}, U, { driver1: '' }), '', opts).error.includes('駕駛人1'));
+    ok(Us.save(rec, Object.assign({}, U, { driver2: 'DR1' }), '', opts).error.includes('同一人'));
+    ok(Us.save(rec, Object.assign({}, U, { driver1: 'DR3' }), '', opts).error.includes('駕駛名單'), '商務池司機不可登物流單');
+    ok(Us.save(rec, Object.assign({}, U, { endKm: '11999' }), '', opts).error.includes('不可小於'));
+    ok(Us.save(rec, Object.assign({}, U, { startKm: '' }), '', opts).error.includes('起始里程'));
+    ok(Us.save(rec, U, '調度室', opts).ok);
+    eq(rec.usage.distance, 35.5, '行駛里程＝結束－起始'); eq(Us.stateOf(rec), 'done');
+  });
+
+  test('修改實登保留歷程；派車異動重新送簽後仍保留已實登紀錄', () => {
+    const H = fresh(), S = H.Signoff, Us = H.Usage, rec = {}, opts = { pool: 'LOGI' };
+    S.mark(rec, '派車', '調度室'); S.decide(rec, true, '運輸主管');
+    Us.save(rec, U, '調度室', opts);
+    ok(Us.save(rec, Object.assign({}, U, { vehicle: 'V-L02', driver2: 'DR2', endKm: '12050' }), '調度室-王', opts).ok);
+    eq(rec.usageLog.map(l => l.action).join('/'), '實登/修改實登');
+    eq(rec.usageLog[0].snapshot.vehicle, 'V-L01', '前次紀錄不被覆蓋'); eq(rec.usage.distance, 50);
+    S.mark(rec, '派車異動', '調度室');
+    ok(Us.inScope(rec), '已實登者派車異動後仍列在清單'); eq(Us.diffs(rec, { vehicle: 'V-L01', drivers: ['DR1'] }).join('/'), '車號/駕駛人');
+  });
+
+  test('A：排班簽審通過後帶出班次車輛／司機，可實登', () => {
+    const H = fresh(), A = H.ModuleA;
+    A.now = () => new Date(2026, 8, 2, 6, 0);
+    const app = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
+      items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15 }).app;
+    eq(A.usageRecords().length, 0, '待簽審不列入');
+    A.signApprove(app, '運輸主管');
+    const pl = A.usagePlan(app);
+    ok(pl.vehicle && pl.drivers.length === 1, '派車規劃含班次車輛與司機');
+    eq(A.usageRecords().map(a => a.id).join(), app.id);
+    const v = H.DB.vehicles.find(x => x.id === pl.vehicle);
+    ok(A.usageSave(app, { vehicleType: v.type, vehicle: v.id, driver1: pl.drivers[0], startKm: 100, endKm: 142 }, '調度室').ok);
+    eq(app.usage.distance, 42);
+  });
+
+  test('B：派車只指定車輛，實登須補駕駛人1；C：沿用派車車輛／司機', () => {
+    const H = fresh(), B = H.ModuleB, C = H.ModuleC;
+    const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });
+    B.approve(o); B.dispatch('V-T02', 'greedy'); B.signApprove(o, '運輸主管');
+    eq(B.usagePlan(o).vehicle, 'V-T02'); eq(B.usagePlan(o).drivers.length, 0);
+    ok(B.usageSave(o, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: '', startKm: 1, endKm: 2 }).error.includes('駕駛人1'));
+    ok(B.usageSave(o, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR1', driver2: 'DR2', startKm: 5000, endKm: 5320 }).ok, '實際改用聯結車＋雙駕駛');
+    const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
+      returnDate: '2026-08-28', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
+    C.approve(a); C.runBatch('2026-08-26', 't1'); C.signApprove(a, '運輸主管');
+    const pl = C.usagePlan(a); eq(pl.vehicle, a.vehicle); eq(pl.drivers[0], a.driver);
+    const v = H.DB.vehicles.find(x => x.id === a.vehicle);
+    ok(C.usageSave(a, { vehicleType: v.type, vehicle: v.id, driver1: a.driver, startKm: 0, endKm: 260 }).ok);
+  });
+
+  test('D：無車可派不需實登；自駕單駕駛人1 可登「使用者自駕」，一般單不可', () => {
+    const H = fresh(), D = H.ModuleD, Us = H.Usage;
+    const mk = o => D.createApp(Object.assign({ applicant: '業務部-周雅婷', startDate: '2026-10-01', startTime: '09:00',
+      endDate: '2026-10-01', endTime: '12:00', pax: 2, selfDrive: false, items: [] }, o || {}));
+    const a = mk(); D.approve(a); D.dispatch(a, { vehicle: 'V-B01', drivers: ['DR3', 'DR4'] }); D.signApprove(a, '運輸主管');
+    eq(D.usagePlan(a).drivers.join(), 'DR3,DR4', '雙駕駛帶入駕駛人1／2');
+    ok(D.usageSave(a, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: Us.SELF, startKm: 1, endKm: 2 }).error.includes('駕駛名單'));
+    ok(D.usageSave(a, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR3', driver2: 'DR4', startKm: 30210, endKm: 30288 }).ok);
+    const b = mk({ selfDrive: true, startTime: '13:00', endTime: '15:00' }); D.approve(b);
+    ok(D.dispatch(b, { vehicle: 'V-B04', driver: 'DR5' }).ok); D.signApprove(b, '運輸主管');
+    ok(D.usageSave(b, { vehicleType: '商務廂車', vehicle: 'V-B04', driver1: Us.SELF, startKm: 800, endKm: 845 }).ok, '申請可自駕者，實際由使用者自駕可登「使用者自駕」');
+    const c = mk({ startTime: '16:00', endTime: '17:00' }); D.approve(c);
+    D.dispatch(c, { noVehicle: true }); D.signApprove(c, '運輸主管');
+    ok(!D.usageRecords().includes(c), '無車可派不列入實登清單');
+  });
+});
+
 /* =================================================================
    共用單元：申請引導（建議規格 v0.2 卡片出現規則 5.2／判定決策表 R1/R2/R4/R5；R3 隨例行用車移除）
    ================================================================= */

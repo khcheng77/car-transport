@@ -321,6 +321,14 @@ const ModuleD = {
     const dn = id => (DB.drivers.find(d => d.id === id) || {}).name || id;
     return `${this.OUTCOME_TEXT[app.outcome]}｜車 ${app.vehicle}｜${app.drivers.length ? '司機 ' + app.drivers.map(dn).join('＋') : '使用者自駕'}`;
   },
+  /* ---- 車輛使用實登（派車結果生效後登打；無車可派者不需實登；自駕者駕駛人1 可登「使用者自駕」）---- */
+  USAGE_POOL: 'BIZ',
+  usagePlan(app) { return { vehicle: app.vehicle || null, drivers: (app.drivers || []).slice() }; },
+  usageRecords() { return this.applications.filter(a => a.outcome !== 'noVehicle' && Usage.inScope(a)); },
+  usageSave(app, data, by) {
+    if (app.outcome === 'noVehicle') return { ok: false, error: '判定無車可派的申請不需實登' };
+    return Usage.save(app, data, by, { pool: this.USAGE_POOL, allowSelf: !!app.selfDrive });
+  },
   signRecords() { return this.applications.filter(a => Signoff.inScope(a)); },
   // 同意：派車結果生效，寄送結果通知（G80）
   signApprove(app, by, note) {
