@@ -42,7 +42,7 @@ const ModuleC = {
   reject(app, note) { app.status = 'rejected'; app.approvedAt = null; if (note != null) app.reviewNote = note; },
 
   // 乘客確認上車（matched → boarded）
-  // 簽審通過才生效：待調度主管簽審的媒合結果不可上車／完成
+  // 簽審通過才生效：待運輸主管簽審的媒合結果不可上車／完成
   confirmBoard(app) {
     if (app.status !== 'matched' || !Signoff.effective(app)) return false;
     app.status = 'boarded'; app.boardedAt = Date.now();
@@ -150,7 +150,7 @@ const ModuleC = {
   /* ---- 批次媒合引擎（按鈕觸發 G53/G54）---- */
   runBatch(fromDate, triggeredBy) {
     const r = this._runBatch(fromDate, triggeredBy);
-    // 批次媒合產生的派車結果（新媒合或前次被退回者）送調度主管簽審
+    // 批次媒合產生的派車結果（新媒合或前次被退回者）送運輸主管簽審
     this.applications.filter(a => a.status === 'matched' && !Signoff.isPending(a) && !Signoff.isApproved(a))
       .forEach(a => Signoff.mark(a, this.signSummary(a), triggeredBy || '調度室'));
     return r;
@@ -371,7 +371,7 @@ const ModuleC = {
     Signoff.mark(app, this.signSummary(app) + `（手動併車：搭 ${targetApp.id}）`, app.applicant);
   },
 
-  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
   signSummary(a) {
     const d = DB.drivers.find(x => x.id === a.driver);
     return `${a.departDate} ${a.earliestPickup}｜${a.origin} → ${a.dest}｜車 ${a.vehicle || '—'}／司機 ${d ? d.name : '—'}`;
@@ -383,7 +383,7 @@ const ModuleC = {
     const r = Signoff.decide(a, false, by, note);
     if (!r.ok) return r;
     a.status = 'approved'; a.vehicle = null; a.driver = null; a.groupId = null;
-    a.note = `調度主管退回：${a.sign.note}；待重新媒合。`;
+    a.note = `運輸主管退回：${a.sign.note}；待重新媒合。`;
     return r;
   },
 

@@ -148,8 +148,8 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const { app } = submit(H);
     eq(app.status, 'matched', '媒合成功即已排班');
     ok(typeof H.ModuleA.acceptSchedule === 'undefined', '不應再有確認接受排班步驟');
-    ok(!H.ModuleA.confirmDelivery(app, '接收人'), '待調度主管簽審時不可交貨');
-    ok(H.ModuleA.signApprove(app, '調度主管').ok);
+    ok(!H.ModuleA.confirmDelivery(app, '接收人'), '待運輸主管簽審時不可交貨');
+    ok(H.ModuleA.signApprove(app, '運輸主管').ok);
     H.ModuleA.confirmDelivery(app, '接收人');
     eq(app.status, 'delivered', 'matched 應可直接進入已交貨');
   });
@@ -795,8 +795,8 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     const o = mkOrder(H, { site: 'D9', destSite: 'D3' });
     H.ModuleB.approve(o); H.ModuleB.dispatch('V-T02', 'greedy');
     eq(o.status, 'loaded', '派車後為 loaded');
-    ok(!H.ModuleB.confirmDelivery(o, '調度室'), '待調度主管簽審時不可交貨');
-    ok(H.ModuleB.signApprove(o, '調度主管').ok);
+    ok(!H.ModuleB.confirmDelivery(o, '調度室'), '待運輸主管簽審時不可交貨');
+    ok(H.ModuleB.signApprove(o, '運輸主管').ok);
     H.ModuleB.confirmDelivery(o, '調度室');
     eq(o.status, 'delivered', 'loaded 應可直接進入 delivered');
   });
@@ -1182,8 +1182,8 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     eq(a.status, 'matched');
     const v = H.DB.vehicles.find(x => x.id === a.vehicle);
     v.currentSite = 'D1'; // 模擬外派中
-    ok(!H.ModuleC.confirmBoard(a), '待調度主管簽審時不可上車');
-    H.ModuleC.signApprove(a, '調度主管');
+    ok(!H.ModuleC.confirmBoard(a), '待運輸主管簽審時不可上車');
+    H.ModuleC.signApprove(a, '運輸主管');
     H.ModuleC.confirmBoard(a); H.ModuleC.completeTrip(a, '調度室');
     eq(v.currentSite, v.homeSite, '行程完成後當前位置應回復歸屬據點');
   });
@@ -1276,8 +1276,8 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
       endDate: DAY, endTime: '12:00', pax: 2, selfDrive: false, items: [] }, o || {}));
   }
   const BIZ_DRIVERS = ['DR3', 'DR4', 'DR5', 'DR6'];
-  // 派車＋調度主管同意（生命週期操作與行程完成須簽審通過後才可進行）
-  const go = (H, a, sel) => { const r = H.ModuleD.dispatch(a, sel); if (r.ok) H.ModuleD.signApprove(a, '調度主管'); return r; };
+  // 派車＋運輸主管同意（生命週期操作與行程完成須簽審通過後才可進行）
+  const go = (H, a, sel) => { const r = H.ModuleD.dispatch(a, sel); if (r.ok) H.ModuleD.signApprove(a, '運輸主管'); return r; };
   const allDriversOnLeave = (H, date) => BIZ_DRIVERS.forEach(d =>
     H.DB.driverLeaves.push({ driver: d, date: date || DAY, from: '07:00', to: '20:00', type: '全天' }));
 
@@ -1437,16 +1437,16 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     ok(D.isConfirmed(b), '無車可派亦算調度完成確認'); ok(!D.canWithdrawToEdit(b));
   });
 
-  test('G80 派車結果經調度主管同意後才寄送通知（收件人＝申請人）；無車可派亦同', () => {
+  test('G80 派車結果經運輸主管同意後才寄送通知（收件人＝申請人）；無車可派亦同', () => {
     const H = fresh(), D = H.ModuleD;
     const a = dApp(H); D.approve(a); D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' });
     const b = dApp(H, { startDate: '2026-10-05', endDate: '2026-10-05' }); D.approve(b); D.dispatch(b, { noVehicle: true });
     eq(D.mailLog.length, 0, '待簽審不寄送'); eq(a.sign.status, 'pending'); eq(b.sign.status, 'pending');
-    ok(D.signApprove(a, '調度主管').ok); ok(D.signApprove(b, '調度主管').ok);
+    ok(D.signApprove(a, '運輸主管').ok); ok(D.signApprove(b, '運輸主管').ok);
     eq(D.mailLog.length, 2); ok(a.notifiedAt && b.notifiedAt);
     eq(D.mailLog[0].to, '業務部-周雅婷'); eq(D.mailLog[1].outcome, 'noVehicle');
     ok(!D.dispatch(a, { noVehicle: true }).ok, '已確認的單不可再次判斷'); eq(D.mailLog.length, 2, '不重複寄送');
-    ok(!D.signApprove(a, '調度主管').ok, '已簽審的單不再出現主管同意');
+    ok(!D.signApprove(a, '運輸主管').ok, '已簽審的單不再出現主管同意');
   });
 
   test('G61 請假重疊（多天用車跨日亦檢查）；行程完成即釋放', () => {
@@ -1603,9 +1603,9 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
 });
 
 /* =================================================================
-   共用：調度主管簽審（派車結果覆核，簽審通過才生效；退回調度重新處理）
+   共用：運輸主管簽審（派車結果覆核，簽審通過才生效；退回調度重新處理）
    ================================================================= */
-group('調度主管簽審（A/B/C/D 派車結果覆核）', () => {
+group('運輸主管簽審（A/B/C/D 派車結果覆核）', () => {
   function aSubmit(H) {
     H.ModuleA.now = () => new Date(2026, 8, 2, 6, 0);
     return H.ModuleA.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
@@ -1616,9 +1616,9 @@ group('調度主管簽審（A/B/C/D 派車結果覆核）', () => {
     const H = fresh(), S = H.Signoff, rec = {};
     S.mark(rec, '派車 A', '調度室');
     ok(S.isPending(rec) && !S.effective(rec), '送簽後為待簽審、尚未生效');
-    ok(!S.decide(rec, false, '調度主管', '  ').ok, '退回須填意見');
-    ok(S.decide(rec, true, '調度主管', '').ok); ok(S.effective(rec));
-    ok(!S.decide(rec, true, '調度主管').ok, '已同意不可再簽');
+    ok(!S.decide(rec, false, '運輸主管', '  ').ok, '退回須填意見');
+    ok(S.decide(rec, true, '運輸主管', '').ok); ok(S.effective(rec));
+    ok(!S.decide(rec, true, '運輸主管').ok, '已同意不可再簽');
     S.mark(rec, '派車 B（異動）', '調度室');
     eq(rec.sign.round, 2, '異動後重新送簽為第 2 輪'); ok(!S.effective(rec), '異動後重新待簽審');
     eq(rec.signLog.map(l => l.action).join('/'), '送簽審/主管同意/送簽審');
@@ -1628,18 +1628,18 @@ group('調度主管簽審（A/B/C/D 派車結果覆核）', () => {
     const H = fresh(), A = H.ModuleA;
     const app = aSubmit(H);
     eq(app.status, 'matched'); eq(app.sign.status, 'pending'); ok(app.sign.summary.includes('司機'), '摘要含車輛／司機');
-    ok(!A.signReject(app, '調度主管', '').ok, '退回須填意見');
-    ok(A.signReject(app, '調度主管', '改走下午班次').ok);
+    ok(!A.signReject(app, '運輸主管', '').ok, '退回須填意見');
+    ok(A.signReject(app, '運輸主管', '改走下午班次').ok);
     eq(app.status, 'unscheduled'); eq(app.assignedShift, null); ok(app.note.includes('改走下午班次'));
     const shift = H.DB.regionalShifts.find(s => s.branch === app.branch && s.label.includes('3'));
     A.reassignShift(app, (shift || H.DB.regionalShifts.find(s => s.branch === app.branch)).id);
     eq(app.sign.status, 'pending'); eq(app.sign.round, 2);
-    ok(A.signApprove(app, '調度主管').ok); ok(A.confirmDelivery(app, '接收人'));
+    ok(A.signApprove(app, '運輸主管').ok); ok(A.confirmDelivery(app, '接收人'));
   });
 
   test('A：車次改派車輛／司機 → 該車次已同意的單重新送簽審', () => {
     const H = fresh(), A = H.ModuleA;
-    const app = aSubmit(H); A.signApprove(app, '調度主管');
+    const app = aSubmit(H); A.signApprove(app, '運輸主管');
     A.setShiftPlan(app.serviceDate, app.assignedShift, { vehicle: 'V-L02', driver: 'DR2' });
     eq(app.sign.status, 'pending', '派車結果改變須重新簽審'); ok(app.sign.summary.includes('V-L02'));
   });
@@ -1649,7 +1649,7 @@ group('調度主管簽審（A/B/C/D 派車結果覆核）', () => {
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });
     B.approve(o); B.dispatch('V-T02', 'greedy');
     eq(o.status, 'loaded'); eq(o.sign.status, 'pending'); ok(o.sign.summary.includes('V-T02'));
-    ok(B.signReject(o, '調度主管', '改派大車').ok);
+    ok(B.signReject(o, '運輸主管', '改派大車').ok);
     eq(o.status, 'approved'); eq(o.dispatchVehicle, null, '退回後卸下派車結果');
     B.dispatch('V-T01', 'greedy');
     eq(o.status, 'loaded'); eq(o.sign.status, 'pending'); eq(o.sign.round, 2);
@@ -1661,11 +1661,11 @@ group('調度主管簽審（A/B/C/D 派車結果覆核）', () => {
       returnDate: '2026-08-28', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
     C.approve(a); C.runBatch('2026-08-26', 't1');
     eq(a.status, 'matched'); eq(a.sign.status, 'pending');
-    ok(C.signReject(a, '調度主管', '改派 9 人座').ok);
+    ok(C.signReject(a, '運輸主管', '改派 9 人座').ok);
     eq(a.status, 'approved'); eq(a.vehicle, null); eq(a.driver, null);
     C.runBatch('2026-08-26', 't2');
     eq(a.status, 'matched'); eq(a.sign.round, 2);
-    const v = a.vehicle; C.signApprove(a, '調度主管');
+    const v = a.vehicle; C.signApprove(a, '運輸主管');
     C.overrideAssign(a, { vehicle: v === 'V-B03' ? 'V-B01' : 'V-B03', note: '調度改派' }, '調度室');
     eq(a.sign.status, 'pending', '人工改派須重新簽審');
   });
@@ -1679,7 +1679,7 @@ group('調度主管簽審（A/B/C/D 派車結果覆核）', () => {
     ok(D.vehicleBusy('V-B01', b), '待簽審期間資源仍保留，避免重複指派');
     ok(D.reassign(a, { date: '2026-10-01', time: '10:00', vehicle: 'V-B03' }).error.includes('簽審'), '未簽審前不可做生命週期操作');
     ok(!D.completeTrip(a, '調度室'), '未簽審前不可完成行程');
-    ok(D.signReject(a, '調度主管', '請改派 9 人座').ok);
+    ok(D.signReject(a, '運輸主管', '請改派 9 人座').ok);
     eq(a.status, 'approved'); eq(a.outcome, null); eq(a.vehicle, null); eq(D.isConfirmed(a), false);
     eq(D.vehicleBusy('V-B01', b), null, '退回後資源釋放');
     eq(D.mailLog.length, 0, '退回不寄派車結果通知');

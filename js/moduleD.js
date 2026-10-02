@@ -306,12 +306,12 @@ const ModuleD = {
     }
     this._sync(app);
     app.dispatchedAt = new Date(); app.dispatchedBy = by; app.dispatchNote = note || '';
-    // 派車結果送調度主管簽審；簽審通過才生效並寄送結果通知
+    // 派車結果送運輸主管簽審；簽審通過才生效並寄送結果通知
     Signoff.mark(app, this.signSummary(app), by);
     return { ok: true, outcome: r.outcome };
   },
 
-  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
   signSummary(app) {
     if (app.outcome === 'noVehicle') return '判定無車可派';
     const dn = id => (DB.drivers.find(d => d.id === id) || {}).name || id;
@@ -330,12 +330,12 @@ const ModuleD = {
     if (!r.ok) return r;
     app.status = 'approved'; app.outcome = null; app.segs = []; this._sync(app);
     app.dispatchedAt = null; app.dispatchedBy = ''; app.dispatchNote = '';
-    this._log(app, '調度主管退回', by || Signoff.SUPERVISOR, app.sign.note);
+    this._log(app, '運輸主管退回', by || Signoff.SUPERVISOR, app.sign.note);
     return r;
   },
   _live(app, what) {
     if (app.status !== 'dispatched') return `僅已派車的申請可${what}`;
-    if (!Signoff.effective(app)) return `派車結果尚待調度主管簽審，簽審通過後才可${what}`;
+    if (!Signoff.effective(app)) return `派車結果尚待運輸主管簽審，簽審通過後才可${what}`;
     return null;
   },
 

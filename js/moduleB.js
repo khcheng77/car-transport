@@ -141,14 +141,14 @@ const ModuleB = {
   },
 
   // 交貨確認（loaded → delivered）
-  // 簽審通過才生效：待調度主管簽審的派車不可確認交貨
+  // 簽審通過才生效：待運輸主管簽審的派車不可確認交貨
   confirmDelivery(o, by) {
     if (o.status !== 'loaded' || !Signoff.effective(o)) return false;
     o.status = 'delivered'; o.deliveredAt = Date.now(); o.deliveredBy = by || '調度室';
     return true;
   },
 
-  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
   signSummary(o) {
     const nm = id => (this.siteById(id) || {}).name || id;
     return `${o.dispatchVehicle}｜${o.dispatchMode || ''}｜${o.dispatchDir === 'north' ? '北返' : '南下'}｜${nm(o.pickSite)} → ${nm(o.dropSite)}`;

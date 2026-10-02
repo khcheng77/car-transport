@@ -63,7 +63,7 @@ const ModuleA = {
     const r = this.match(app);
     app.matchTrace = r.trace;
     if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }
-    else Signoff.mark(app, this.signSummary(app), '系統自動排班');   // 派車結果送調度主管簽審（通過才生效）
+    else Signoff.mark(app, this.signSummary(app), '系統自動排班');   // 派車結果送運輸主管簽審（通過才生效）
     return { app, result: r };
   },
 
@@ -80,7 +80,7 @@ const ModuleA = {
 
   // 媒合成功即完成排班，不需接收人「確認接受」；交貨確認可由 matched 直接進入
   // 交貨確認（matched → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
-  // 簽審通過才生效：待調度主管簽審的排班不可交貨確認
+  // 簽審通過才生效：待運輸主管簽審的排班不可交貨確認
   confirmDelivery(app, by) {
     if (app.status !== 'matched' || !Signoff.effective(app)) return false;
     app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室';
@@ -125,7 +125,7 @@ const ModuleA = {
   },
   setShiftPlan(date, shiftId, plan) {
     this.shiftPlans[date + '|' + shiftId] = { vehicle: plan.vehicle, driver: plan.driver };
-    // 車次車輛／司機異動＝派車結果改變：該車次的單重新送調度主管簽審
+    // 車次車輛／司機異動＝派車結果改變：該車次的單重新送運輸主管簽審
     this.applications.filter(a => a.status === 'matched' && a.assignedShift === shiftId && a.serviceDate === date)
       .forEach(a => Signoff.mark(a, this.signSummary(a), '調度室'));
     return this.shiftPlans[date + '|' + shiftId];
@@ -149,7 +149,7 @@ const ModuleA = {
     return app;
   },
 
-  /* ---- 調度主管簽審（派車結果覆核，簽審通過才生效）---- */
+  /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
   signSummary(app) {
     const sh = DB.regionalShifts.find(s => s.id === app.assignedShift);
     const plan = this.shiftPlan(app.serviceDate, app.assignedShift);
@@ -163,7 +163,7 @@ const ModuleA = {
     const r = Signoff.decide(app, false, by, note);
     if (!r.ok) return r;
     app.assignedShift = null; app.arrival = null; app.status = 'unscheduled';
-    app.note = `調度主管退回：${app.sign.note}；待調度重新安排班次。`;
+    app.note = `運輸主管退回：${app.sign.note}；待調度重新安排班次。`;
     return r;
   },
 
