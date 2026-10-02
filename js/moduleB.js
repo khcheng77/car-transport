@@ -60,6 +60,24 @@ const ModuleB = {
   // 幹線貨物多筆項目，每筆填獨立尺寸與重量（品名/長寬高/類別/數量/單件重），比照模組 A（G13）
   // 整張表單為裝載最小單位（G34）；相容：若帶 volume 而無尺寸則以整批貨量計（demo/測試）
   createOrder(data) {
+    const o = Object.assign({ id: 'LB' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
+      approvedAt: null,
+      status: 'submitted',  // submitted → approved/rejected(退回修編) →（派車）loaded →（確認收到）delivered（B-2 無 accepted）
+      createdAt: new Date(),
+    });
+    this.recompute(o);      // 由 items 加總 volume/weight/有效體積
+    this.orders.push(o);
+    return o;
+  },
+  // 退回修編 → 申請人修改後重新送出：沿用原單號，回到待單位主管審核
+  resubmit(o, data) {
+    if (o.status !== 'rejected') throw new Error('僅「退回修編」的申請可修改後重新送出');
+    (o.revisions = o.revisions || []).push({ at: new Date(), returnNote: o.reviewNote || '' });
+    Object.assign(o, this._fields(data), { status: 'submitted', approvedAt: null, reviewNote: '' });
+    this.recompute(o);
+    return o;
+  },
+  _fields(data) {
     const items = (data.items && data.items.length)
       ? data.items.map(x => ({ ...x, name: x.name || '貨物', qty: x.qty || 1, category: x.category || 'BOX', weight: +x.weight || 0 }))
       : [{ name: '貨物', volume: +data.volume || 0, weight: +data.weight || 0, category: data.category || 'BOX' }];
@@ -70,8 +88,7 @@ const ModuleB = {
     const handleMin = split ? (loadMin + unloadMin) : (+data.handleMin || 0);
     const pickSite = data.site;
     const dropSite = data.destSite || DB.homeSite; // 未指定迄點 → 預設送回出發據點（相容）
-    const o = {
-      id: 'LB' + String(this.seq++).padStart(3, '0'),
+    return {
       applicant: data.applicant,
       pickSite,                            // 收貨據點（起）
       dropSite,                            // 送貨據點（迄）
@@ -85,13 +102,7 @@ const ModuleB = {
       items,                 // 貨物項目清單
       loadMin, unloadMin,    // 上貨/下貨時間（分）
       handleMin,             // 裝卸時間＝上貨＋下貨（G35）
-      approvedAt: null,
-      status: 'submitted',  // submitted → approved/rejected →（派車）loaded →（確認收到）delivered（B-2 無 accepted）
-      createdAt: new Date(),
     };
-    this.recompute(o);      // 由 items 加總 volume/weight/有效體積
-    this.orders.push(o);
-    return o;
   },
 
   // 由貨物項目清單重算整單彙總值（新增或編輯後呼叫）

@@ -1603,6 +1603,44 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
 });
 
 /* =================================================================
+   單位主管審核：退回修編 → 申請人修改後重新送出（B／C／D）
+   ================================================================= */
+group('單位主管審核（退回修編與重新送出）', () => {
+  test('B：退回修編後沿用原單號修改重送，回到待審核並保留退回紀錄；非退回修編不可重送', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', items: [{ name: '箱', l: 50, w: 40, h: 30, qty: 1, category: 'BOX', weight: 5 }] });
+    let threw = false; try { B.resubmit(o, {}); } catch (e) { threw = true; } ok(threw, '待審核不可重送');
+    B.reject(o, '請補送貨建物'); eq(o.status, 'rejected');
+    const id = o.id;
+    B.resubmit(o, { applicant: 'X', site: 'D9', destSite: 'D2', deliverLoc: '物流中心', items: [{ name: '箱', l: 50, w: 40, h: 30, qty: 2, category: 'BOX', weight: 5 }] });
+    eq(o.id, id, '沿用原單號'); eq(o.status, 'submitted'); eq(o.dropSite, 'D2'); eq(o.deliverLoc, '物流中心');
+    eq(o.items[0].qty, 2); ok(o.volume > 0, '重新計算貨量'); eq(o.revisions[0].returnNote, '請補送貨建物'); eq(o.reviewNote, '');
+    eq(B.orders.length, 1, '不新增單據');
+  });
+
+  test('C：退回修編後修改重送回到待審核；核准後才進入批次媒合', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
+      returnDate: '2026-08-28', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
+    C.reject(a, '人數請確認');
+    C.resubmit(a, Object.assign({}, a, { pax: 3 }));
+    eq(a.status, 'submitted'); eq(a.pax, 3); eq(a.revisions.length, 1);
+    C.runBatch('2026-08-26', 't'); eq(a.status, 'submitted', '未核准不進媒合');
+  });
+
+  test('D：退回修編可修改重送或整單撤回；重送須重新經單位主管審核', () => {
+    const H = fresh(), D = H.ModuleD;
+    const a = D.createApp({ applicant: '業務部-周雅婷', startDate: '2026-10-01', startTime: '09:00', endDate: '2026-10-01', endTime: '12:00', pax: 2, selfDrive: false, items: [] });
+    D.reject(a, '時段請改下午');
+    ok(D.canEdit(a) && D.canCancel(a), '退回修編可修改或撤回');
+    D.resubmit(a, Object.assign({}, a, { startTime: '13:00', endTime: '16:00' }));
+    eq(a.status, 'submitted'); eq(a.startTime, '13:00');
+    ok(a.log[a.log.length - 1].note.includes('時段請改下午'), '異動紀錄保留退回意見');
+    ok(!D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' }).ok, '須重新審核才可調度');
+  });
+});
+
+/* =================================================================
    共用：運輸主管簽審（派車結果覆核，簽審通過才生效；退回調度重新處理）
    ================================================================= */
 group('運輸主管簽審（A/B/C/D 派車結果覆核）', () => {

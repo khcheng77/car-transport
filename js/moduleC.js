@@ -13,8 +13,26 @@ const ModuleC = {
 
   // 申請端只負責建立，狀態為「待審核」（G63 員工填單 → 主管准駁）
   createApp(data) {
-    const app = {
-      id: 'BZ' + String(this.seq++).padStart(3, '0'),
+    const app = Object.assign({ id: 'BZ' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
+      approvedAt: null,
+      status: 'submitted',         // submitted|approved|rejected(退回修編)|matched|manual|coordinate|void
+      vehicle: null, driver: null,
+      groupId: null,
+      note: '',
+      createdAt: new Date(),
+    });
+    this.applications.push(app);
+    return app;
+  },
+  // 退回修編 → 申請人修改後重新送出：沿用原單號，回到待單位主管審核
+  resubmit(app, data) {
+    if (app.status !== 'rejected') throw new Error('僅「退回修編」的申請可修改後重新送出');
+    (app.revisions = app.revisions || []).push({ at: new Date(), returnNote: app.reviewNote || '' });
+    Object.assign(app, this._fields(data), { status: 'submitted', approvedAt: null, reviewNote: '' });
+    return app;
+  },
+  _fields(data) {
+    return {
       applicant: data.applicant,
       dept: data.dept,
       ext: data.ext,
@@ -26,15 +44,7 @@ const ModuleC = {
       returnDate: data.returnDate || data.departDate, // 結束日期（回程當天）；單程單不適用
       earliestReturn: data.earliestReturn, // 回程上車時間（來回單）HH:MM
       pax: data.pax,
-      approvedAt: null,
-      status: 'submitted',         // submitted|approved|rejected|matched|manual|coordinate|void
-      vehicle: null, driver: null,
-      groupId: null,
-      note: '',
-      createdAt: new Date(),
     };
-    this.applications.push(app);
-    return app;
   },
 
   // 主管准駁；駁回保留紀錄不進排班池（G63）；note＝審核備註（選填/駁回必填）

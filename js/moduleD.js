@@ -133,16 +133,20 @@ const ModuleD = {
     app.status = 'draft'; app.approvedAt = null; app.reviewNote = '';
     return true;
   },
+  // 草稿（撤回修改）或「退回修編」（單位主管退回）可修改後重新送出，回到待單位主管審核
+  canEdit(app) { return ['draft', 'rejected'].includes(app.status); },
   resubmit(app, data) {
-    if (app.status !== 'draft') throw new Error('僅草稿（已撤回修改）可重新送出');
+    if (!this.canEdit(app)) throw new Error('僅草稿或「退回修編」的申請可修改後重新送出');
     const errs = this.validate(data);
     if (errs.length) throw new Error(errs.join('；'));
+    const wasReturned = app.status === 'rejected';
     Object.assign(app, this._fields(data));
     app.status = 'submitted';
-    this._log(app, '修改後重新送出', data.applicant);
+    this._log(app, '修改後重新送出', data.applicant, wasReturned ? `退回修編意見：${app.reviewNote || '—'}` : '');
+    app.reviewNote = '';
     return app;
   },
-  canCancel(app) { return ['submitted', 'approved', 'draft'].includes(app.status) && !this.isConfirmed(app); },
+  canCancel(app) { return ['submitted', 'approved', 'draft', 'rejected'].includes(app.status) && !this.isConfirmed(app); },
   cancel(app, by) {
     if (!this.canCancel(app)) return false;
     this._log(app, '整單撤回', by, '');
