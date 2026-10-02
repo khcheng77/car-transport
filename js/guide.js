@@ -55,7 +55,7 @@ const Guide = {
       if (!v.fromSite || !v.toSite) return { unit: null, hint: '請選擇寄件據點與收件據點。' };
       return v.fromSite === v.toSite
         ? { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，由院區內固定班次巡迴收送，送出即自動排入最近班次。` }
-        : { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由南北幹線車沿線收送，需主管核准後派車。` };
+        : { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由院區物品轉運車沿線收送，需主管核准後派車。` };
     }
     if (!v.startDate || !v.endDate) return { unit: null, hint: '請填寫用車起日與迄日。' };
     const n = this.days(v.startDate, v.endDate);

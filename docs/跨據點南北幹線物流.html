@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>跨據點南北幹線物流 — 需求討論報告</title>
+<title>院區物品轉運作業 — 需求討論報告</title>
 <style>
   :root {
     --ink: #1c1f26;
@@ -284,10 +284,10 @@
 <header class="hero">
   <div class="wrap">
     <div class="eyebrow">物流子系統 · 需求討論記錄</div>
-    <h1>跨據點南北幹線車輛派遣邏輯</h1>
+    <h1>院區物品轉運作業：跨據點車輛派遣邏輯</h1>
     <p class="hero-sub">
-      本文件整理「南北幹線跨據點物流」議題的需求釐清過程與已確認決策，
-      並列出尚待業務單位確認的開放問題，供討論與核對。
+      本文件整理「院區物品轉運作業（跨據點物流）」議題的需求釐清過程與已確認決策，
+      並列出尚待業務單位確認的開放問題，供討論與核對。<br><span style="font-size:.9em;opacity:.8">模組名稱已於 2026-10-02 更名（原名：跨據點南北幹線物流）</span>
     </p>
     <p style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
       <b>前版修訂摘要（依實作回填）</b>：<br>
@@ -338,7 +338,7 @@
       ・<b>Q4 新增</b>——收貨時間窗的 4 小時長度是否全公司統一固定值，尚待業務單位確認。
     </p>
     <div class="hero-meta">
-      <span>議題範圍：<b>單一車輛、單趟南北幹線（含急件直達分流）</b></span>
+      <span>議題範圍：<b>單一車輛、單趟院區物品轉運（含急件直達分流）</b></span>
       <span>狀態：<b>核心邏輯已定案；4 項待業務單位確認、1 項待覆核、2 項 PLAN.md 待同步</b></span>
     </div>
   </div>
@@ -379,7 +379,7 @@
     <div class="scope-box in">
       <div class="title">✓ 本次討論範圍內</div>
       <ul>
-        <li>單一車輛、單趟南北幹線的收送貨與終點判斷邏輯</li>
+        <li>單一車輛、單趟院區物品轉運的收送貨與終點判斷邏輯</li>
         <li>去程 / 回程的容量與時間規則</li>
         <li>據點層級的路由（不含據點內建物排序）</li>
       </ul>
@@ -503,12 +503,12 @@
   <div class="decision-card">
     <div class="label">決策</div>
     <div class="content">
-      南北幹線的容量判定<b>只採 Level 1（有效體積，含類別浪費係數與形狀懲罰）＋ 總重量上限</b>，
-      <b>不執行區域內物流所用的 Level 2 單品六方向維度檢查</b>。
+      院區物品轉運作業的容量判定<b>只採 Level 1（有效體積，含類別浪費係數與形狀懲罰）＋ 總重量上限</b>，
+      <b>不執行巡迴物品轉運作業所用的 Level 2 單品六方向維度檢查</b>。
     </div>
     <div class="why">
       幹線一趟會跨多個據點、反覆卸裝，同一台車的裝載狀態變化次數遠高於區域內單趟路線；逐站重跑 Level 2 的成本與收益不成比例。
-      風險是「單件超長貨物體積過關但實際塞不進車廂」——此情境由據點端收貨時人工目視把關。<b>此為與區域內物流刻意不一致之處，非疏漏。</b>
+      風險是「單件超長貨物體積過關但實際塞不進車廂」——此情境由據點端收貨時人工目視把關。<b>此為與巡迴物品轉運作業刻意不一致之處，非疏漏。</b>
     </div>
   </div>
 
@@ -705,8 +705,8 @@
     <div class="content">
       因 2.21 判定媒合不到、且為急件的申請單，由<b>當地據點另行派車</b>送出，循既有 <b>3.2 急件直達</b>邏輯處理
       （獨立派車、單一目的地、純容量加總）。
-      <div style="margin-top:8px"><b>本版澄清</b>：南北幹線的「出發據點」並非固定為龍潭，<b>任一據點皆可作為某趟車次的出發點</b>——
-      此次當地據點自行派車，本質上就是一台走既有南北幹線規則的車，只是出發據點剛好是台中（或其他中途站），不是另立新的派車類型。</div>
+      <div style="margin-top:8px"><b>本版澄清</b>：院區物品轉運作業的「出發據點」並非固定為龍潭，<b>任一據點皆可作為某趟車次的出發點</b>——
+      此次當地據點自行派車，本質上就是一台走既有院區物品轉運作業規則的車，只是出發據點剛好是台中（或其他中途站），不是另立新的派車類型。</div>
     </div>
     <div class="why">
       媒合不到的急件單，其急件、獨立派車、單一目的地等特徵與 3.2 定義的急件直達完全吻合，不需另立新規則；
@@ -914,7 +914,7 @@
     <p>
       公司開發團隊已依本報告產出 <code>docs/PLAN.md</code>（Claude Code 執行版開發計畫書，
       <a href="https://github.com/khcheng77/car-transport/blob/main/docs/PLAN.md" style="color:var(--accent)">GitHub 連結</a>），
-      將南北幹線相關決策轉為 Phase 4 的任務清單（T4-1～T4-6）與不可違反決策（Guardrails G30–G44）。
+      將院區物品轉運作業相關決策轉為 Phase 4 的任務清單（T4-1～T4-6）與不可違反決策（Guardrails G30–G44）。
       該檔案為<b>某個時間點的快照</b>，之後本報告又經過數輪修訂，下列為交叉比對後發現的落差，
       建議先確認、必要時回頭更新 PLAN.md，再據此繼續執行 Phase 4。<b>本版新增／修正的站內移動時間（2.18）、收貨時間窗擴大適用所有單（2.19）、站內外媒合統一判斷（2.20–2.21）、13.5 小時修正（2.13），PLAN.md 尚未涵蓋，須一併補上。</b>
     </p>
@@ -981,7 +981,7 @@
 
   <h3>5.3　仍屬有效的 Guardrails（G30、G31、G33、G34、G36、G39–G44）</h3>
   <p style="font-size:14px">
-    除 5.1 列出的 G32、G35、G37、G38 外，PLAN.md 其餘南北幹線 Guardrails（G30、G31、G33、G34、G36、G39、G40、G41、G42、G43、G44）
+    除 5.1 列出的 G32、G35、G37、G38 外，PLAN.md 其餘院區物品轉運作業 Guardrails（G30、G31、G33、G34、G36、G39、G40、G41、G42、G43、G44）
     與本報告目前內容一致，可直接作為 Phase 4 開發依據，不需修改。
   </p>
 
@@ -997,7 +997,7 @@
     <tr><td>2.7</td><td>回程規則（基本）</td><td>固定回到出發據點，邏輯同去程</td><td><span class="badge done">已確認</span></td></tr>
     <tr><td>2.8</td><td>多車協調</td><td>列為下一階段獨立議題</td><td><span class="badge done">已確認（範疇排除）</span></td></tr>
     <tr><td>2.9</td><td>時間參數基準</td><td>改採業務單位提供之 10 據點相互路程表；排班以表定 08:00 為基準</td><td><span class="badge done">已確認（本版更新）</span></td></tr>
-    <tr><td>2.10</td><td>容量判定層級</td><td>只採 Level 1 有效體積＋重量，不做 Level 2 維度檢查（與區域內物流刻意不同）</td><td><span class="badge done">已確認（本版新增）</span></td></tr>
+    <tr><td>2.10</td><td>容量判定層級</td><td>只採 Level 1 有效體積＋重量，不做 Level 2 維度檢查（與巡迴物品轉運作業刻意不同）</td><td><span class="badge done">已確認（本版新增）</span></td></tr>
     <tr><td>2.11</td><td>交貨時間門檻</td><td>託運單可填交貨時間，直達／非直達皆作硬性門檻，未過即留下一班</td><td><span class="badge done">已確認（本版新增）</span></td></tr>
     <tr><td>2.12</td><td>司機休息與用餐規則</td><td>依累積行駛時間觸發五個門檻，共用不歸零時數線，每日重新歸零，計入總時間上限</td><td><span class="badge done">已確認（本版新增）</span></td></tr>
     <tr><td>2.13</td><td>每日總時間上限組成</td><td>上限由 12.5 修正為 <b>13.5 小時</b>；涵蓋待勤、前後緩衝、裝卸、行駛、站內移動、收貨等待、休息用餐</td><td><span class="badge done">已確認（本版修正）</span></td></tr>
