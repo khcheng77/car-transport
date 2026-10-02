@@ -3,7 +3,7 @@
    純前端記憶體版原型（無資料庫、無後端）
 
    架構：使用者「申請端」與業務單位「審核/調度端」分離，
-   四模組（A 區域內物流／B 南北幹線／C 差旅共乘／D 一般用車）各拆成
+   四模組（A 巡迴物品轉運作業／B 院區物品轉運作業／C 差旅共乘作業／D 一般用車申請作業）各拆成
    申請／主管／調度／司機等軟體單元。
    ============================================================ */
 
@@ -92,26 +92,26 @@ const NAV = [
     { id: 'engine', ico: '⚙', label: '裝載判定引擎' },
     { id: 'master', ico: '▦', label: '主檔資料' },
   ] },
-  { group: '模組 A · 區域內物流', items: [
+  { group: '模組 A · 巡迴物品轉運作業', items: [
     { id: 'a_apply', ico: '📝', label: 'A｜收貨申請（使用者）' },
     { id: 'a_dispatch', ico: '🗂', label: 'A｜車次追蹤／異動（業務）' },
     { id: 'a_route', ico: '🚌', label: 'A｜路線與班次（業務）' },
     { id: 'a_masonry', ico: '🧩', label: 'A｜資訊卡試做（Masonry）' },
     { id: 'a_driver', ico: '🧑‍✈️', label: 'A｜司機任務單（駕駛）' },
   ] },
-  { group: '模組 B · 南北幹線', items: [
+  { group: '模組 B · 院區物品轉運作業', items: [
     { id: 'b_apply', ico: '📝', label: 'B｜幹線託運申請（使用者）' },
     { id: 'b_approve', ico: '✅', label: 'B｜主管准駁（主管）' },
     { id: 'b_review', ico: '🚚', label: 'B｜派車調度（業務）' },
     { id: 'b_driver', ico: '🧑‍✈️', label: 'B｜司機任務單（駕駛）' },
   ] },
-  { group: '模組 C · 差旅共乘', items: [
+  { group: '模組 C · 差旅共乘作業', items: [
     { id: 'c_apply', ico: '📝', label: 'C｜出差用車申請（使用者）' },
     { id: 'c_approve', ico: '✅', label: 'C｜主管准駁（主管）' },
     { id: 'c_review', ico: '🔀', label: 'C｜媒合調度（業務）' },
     { id: 'c_driver', ico: '🧑‍✈️', label: 'C｜司機任務單（駕駛）' },
   ] },
-  { group: '模組 D · 一般用車', items: [
+  { group: '模組 D · 一般用車申請作業', items: [
     { id: 'd_apply', ico: '📝', label: 'D｜一般用車申請（使用者）' },
     { id: 'd_approve', ico: '✅', label: 'D｜主管簽核（主管）' },
     { id: 'd_review', ico: '🚗', label: 'D｜派車調度（業務）' },
@@ -123,23 +123,23 @@ const PAGE_META = {
   guide: { title: '申請引導', crumb: '共用 · 查詢引導紀錄／新增引導（依填寫內容判定申請並帶入）' },
   engine: { title: '裝載判定引擎', crumb: '共用基礎層 · Phase 1 · G01–G05' },
   master: { title: '主檔資料', crumb: '共用基礎層 · Phase 0' },
-  a_apply: { title: '區域內物流 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
-  a_dispatch: { title: '區域內物流 · 車次追蹤／異動（業務單位）', crumb: '模組 A · 調度端 · 追蹤＋車次班次/車輛/司機調整 · G18/G20' },
-  a_route: { title: '區域內物流 · 路線與班次（業務單位）', crumb: '模組 A · 調度端 · 固定路線 / 每小時班次（查詢）' },
-  a_masonry: { title: '區域內物流 · 資訊卡試做（Masonry）', crumb: '模組 A · label+value 資訊區塊 · 自適應排版 POC' },
-  a_driver: { title: '區域內物流 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
-  b_apply: { title: '南北幹線 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
-  b_approve: { title: '南北幹線 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
-  b_review: { title: '南北幹線 · 派車調度（業務單位）', crumb: '模組 B · 調度端 · G30–G44' },
-  b_driver: { title: '南北幹線 · 司機任務單（駕駛）', crumb: '模組 B · 駕駛端 · 沿線取貨/卸貨' },
-  c_apply: { title: '差旅共乘 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55/G56' },
-  c_approve: { title: '差旅共乘 · 主管准駁（直屬主管）', crumb: '模組 C · 主管端 · G63' },
-  c_review: { title: '差旅共乘 · 媒合調度（業務單位）', crumb: '模組 C · 調度端 · G50–G63' },
-  c_driver: { title: '差旅共乘 · 司機任務單（駕駛）', crumb: '模組 C · 駕駛端 · 今日行程與乘客' },
-  d_apply: { title: '一般用車 · 一般用車申請（使用者）', crumb: '模組 D · 申請端 · G75/G79/G81/G83' },
-  d_approve: { title: '一般用車 · 主管簽核（直屬主管）', crumb: '模組 D · 主管端 · G74' },
-  d_review: { title: '一般用車 · 派車調度（業務單位）', crumb: '模組 D · 調度端 · G71–G89' },
-  d_driver: { title: '一般用車 · 司機任務單（駕駛）', crumb: '模組 D · 駕駛端 · 指派區間與使用人' },
+  a_apply: { title: '巡迴物品轉運作業 · 收貨申請（使用者）', crumb: '模組 A · 申請端 · 送出即自動媒合 · G10–G19' },
+  a_dispatch: { title: '巡迴物品轉運作業 · 車次追蹤／異動（業務單位）', crumb: '模組 A · 調度端 · 追蹤＋車次班次/車輛/司機調整 · G18/G20' },
+  a_route: { title: '巡迴物品轉運作業 · 路線與班次（業務單位）', crumb: '模組 A · 調度端 · 固定路線 / 每小時班次（查詢）' },
+  a_masonry: { title: '巡迴物品轉運作業 · 資訊卡試做（Masonry）', crumb: '模組 A · label+value 資訊區塊 · 自適應排版 POC' },
+  a_driver: { title: '巡迴物品轉運作業 · 司機任務單（駕駛）', crumb: '模組 A · 駕駛端 · 沿線收送任務' },
+  b_apply: { title: '院區物品轉運作業 · 幹線託運申請（使用者）', crumb: '模組 B · 申請端 · G34/G38' },
+  b_approve: { title: '院區物品轉運作業 · 主管准駁（直屬主管）', crumb: '模組 B · 主管端 · G63' },
+  b_review: { title: '院區物品轉運作業 · 派車調度（業務單位）', crumb: '模組 B · 調度端 · G30–G44' },
+  b_driver: { title: '院區物品轉運作業 · 司機任務單（駕駛）', crumb: '模組 B · 駕駛端 · 沿線取貨/卸貨' },
+  c_apply: { title: '差旅共乘作業 · 出差用車申請（使用者）', crumb: '模組 C · 申請端 · G54/G55/G56' },
+  c_approve: { title: '差旅共乘作業 · 主管准駁（直屬主管）', crumb: '模組 C · 主管端 · G63' },
+  c_review: { title: '差旅共乘作業 · 媒合調度（業務單位）', crumb: '模組 C · 調度端 · G50–G63' },
+  c_driver: { title: '差旅共乘作業 · 司機任務單（駕駛）', crumb: '模組 C · 駕駛端 · 今日行程與乘客' },
+  d_apply: { title: '一般用車申請作業 · 一般用車申請（使用者）', crumb: '模組 D · 申請端 · G75/G79/G81/G83' },
+  d_approve: { title: '一般用車申請作業 · 主管簽核（直屬主管）', crumb: '模組 D · 主管端 · G74' },
+  d_review: { title: '一般用車申請作業 · 派車調度（業務單位）', crumb: '模組 D · 調度端 · G71–G89' },
+  d_driver: { title: '一般用車申請作業 · 司機任務單（駕駛）', crumb: '模組 D · 駕駛端 · 指派區間與使用人' },
 };
 
 function buildNav() {
@@ -179,7 +179,7 @@ RENDER.dashboard = function () {
     + ModuleD.applications.filter(a => a.status === 'submitted').length;
   p.innerHTML = `
     <div class="section-h">系統儀表板</div>
-    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。依審批流程（G63）將「使用者申請」「主管准駁」「業務審核/調度」「司機任務單」四種角色各自獨立，四模組各拆成申請／主管／調度／司機等業務單元。物流（A/B）資源池獨立；差旅共乘（C）與一般用車（D）共用商務車輛／司機池，先佔先贏（G71/G72）。</div>
+    <div class="section-sub">車輛派遣系統整合原型 — 純前端可動版。依審批流程（G63）將「使用者申請」「主管准駁」「業務審核/調度」「司機任務單」四種角色各自獨立，四模組各拆成申請／主管／調度／司機等業務單元。巡迴物品轉運作業（A）與院區物品轉運作業（B）的物流資源池獨立；差旅共乘作業（C）與一般用車申請作業（D）共用商務車輛／司機池，先佔先贏（G71/G72）。</div>
     <div class="stat-row">
       <div class="stat"><div class="k">待主管准駁（各模組）</div><div class="v accent">${pendReview}</div></div>
       <div class="stat"><div class="k">物流 · 已排班</div><div class="v">${aMatched}</div></div>
@@ -2572,7 +2572,7 @@ RENDER.master = function () {
         <div class="card-desc">依純累積行駛時間觸發，共用不歸零時數線，每日歸零。</div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>項目</th><th>觸發條件</th><th>耗時</th></tr></thead><tbody>${brkBody}</tbody></table></div></div>
 
-      <div class="card"><div class="card-title">區域內物流班次（每日 5 班）<span class="g-tag">G18</span></div>
+      <div class="card"><div class="card-title">巡迴物品轉運作業班次（每日 5 班）<span class="g-tag">G18</span></div>
         <div class="card-desc">人工每日排定，兩台車輪替。</div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>發車</th><th>車輛</th></tr></thead><tbody>${shiftBody}</tbody></table></div></div>
 
@@ -2646,7 +2646,7 @@ RENDER.a_driver = function () {
   }).join('');
   if (!cards) cards = `<div class="card"><div class="empty">今日尚無已排定的班次任務。使用者送出收貨申請並自動媒合成功後，這裡會依班次（車輛）顯示司機任務單。</div></div>`;
   p.innerHTML = `
-    <div class="section-h">區域內物流 · 司機任務單（駕駛）</div>
+    <div class="section-h">巡迴物品轉運作業 · 司機任務單（駕駛）</div>
     <div class="section-sub">以「日期＋班次（車輛）」為單位，沿據點固定 9 站路線<b>一次通過</b>：每個停靠站依站序列出要<b>卸貨</b>與<b>取貨</b>的單、抵達時間、貨物與接收人（同一站的收貨自動彙整在一起）。</div>
     ${cards}`;
 };
@@ -2713,7 +2713,7 @@ RENDER.b_driver = function () {
   }).join('');
   if (!cards) cards = `<div class="card"><div class="empty">今日尚無已派車的幹線任務。於「B｜派車調度」執行派車後，這裡會依車輛顯示沿線取貨／卸貨的司機任務單。</div></div>`;
   p.innerHTML = `
-    <div class="section-h">南北幹線 · 司機任務單（駕駛）</div>
+    <div class="section-h">院區物品轉運作業 · 司機任務單（駕駛）</div>
     <div class="section-sub">以「車輛×趟次（去程南下／回程北返）」為單位，各為一張任務單；同一趟沿線依<b>到站時間＋路線方向</b>排序停靠據點。去程與回程是兩段獨立行程、時間軸<b>不混疊</b>，避免同一車在南北兩地同時出現。</div>
     ${cards}`;
 };
@@ -2758,7 +2758,7 @@ RENDER.c_driver = function () {
   }).join('');
   if (!cards) cards = `<div class="card"><div class="empty">今日尚無已媒合的共乘任務。於「C｜媒合調度」執行批次媒合後，這裡會依駕駛顯示每趟要接誰、去哪裡的司機任務單。</div></div>`;
   p.innerHTML = `
-    <div class="section-h">差旅共乘 · 司機任務單（駕駛）</div>
+    <div class="section-h">差旅共乘作業 · 司機任務單（駕駛）</div>
     <div class="section-sub">以「駕駛」為單位，顯示今日整個行程：每趟出發時間、起訖地、車輛，以及要接送的乘客（單位/分機/人數）。</div>
     ${cards}`;
 };
@@ -3345,7 +3345,7 @@ function renderDReviewList(p) {
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">派車調度（業務單位）</div>
-    <div class="section-sub">主管簽核通過的申請，由調度<b>人工確認</b>共用商務車輛／司機池是否可用（保修、請假、差旅共乘與其他用車佔用一併列出，先佔先贏），依<b>派車判斷矩陣</b>做出最終判斷，不進候補。<b>例行用車</b>類別在資源尚未分配前優先（排在清單最前），已生效的佔用不溯及。派車後的換車、換司機（含補派、雙駕駛）、展延由調度直接處理，提前歸還由使用者提出、調度確認後生效。</div>
+    <div class="section-sub">主管簽核通過的申請，由調度<b>人工確認</b>共用商務車輛／司機池是否可用（保修、請假、差旅共乘作業與其他用車佔用一併列出，先佔先贏），依<b>派車判斷矩陣</b>做出最終判斷，不進候補。<b>例行用車</b>類別在資源尚未分配前優先（排在清單最前），已生效的佔用不溯及。派車後的換車、換司機（含補派、雙駕駛）、展延由調度直接處理，提前歸還由使用者提出、調度確認後生效。</div>
     <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="dr-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
@@ -3458,7 +3458,7 @@ function renderDReviewDetail(p, id) {
     body = `
     <div class="card">
       <div class="card-title">資源可用性 · 共用商務池 <span class="g-tag">G71/G72/G85</span></div>
-      <div class="card-desc">用車時段 <b>${dPeriod(a)}</b>。差旅共乘與一般用車共用同一批車輛／司機，<b>先佔先贏</b>：與差旅共乘以「日」為佔用單位，一般用車之間依指派區間的實際時段判斷；保修（G60）與請假（G61）同樣排除。</div>
+      <div class="card-desc">用車時段 <b>${dPeriod(a)}</b>。差旅共乘作業與一般用車申請作業共用同一批車輛／司機，<b>先佔先贏</b>：與差旅共乘以「日」為佔用單位，一般用車之間依指派區間的實際時段判斷；保修（G60）與請假（G61）同樣排除。</div>
       ${dResourceTables(a, res)}
     </div>
     <div class="card">
@@ -3740,7 +3740,7 @@ RENDER.d_driver = function () {
       </tbody></table></div>
     </div>`;
   p.innerHTML = `
-    <div class="section-h">一般用車 · 司機任務單（駕駛）</div>
+    <div class="section-h">一般用車申請作業 · 司機任務單（駕駛）</div>
     <div class="section-sub">以「駕駛」為單位，依指派區間列出每段任務：車輛、使用人（分機／人數）、行程說明與隨行貨物；雙駕駛兩位各自列出並標示搭檔。完成後按「完成行程」即釋放車輛與司機回共用資源池。</div>
     ${cards}
     ${selfCard}`;
