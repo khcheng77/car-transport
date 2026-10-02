@@ -38,8 +38,21 @@ const ModuleB = {
   siteById(id) { return DB.sites.find(s => s.id === id); },
   homeOrder() { return this.siteById(DB.homeSite).order; },
 
-  /* B-2：方向由起迄推導（非申請人勾選）——送貨據點較南（order 較小）＝南下貨、較北＝北上貨 */
-  isSouthbound(o) { return this.siteById(o.dropSite).order < this.siteById(o.pickSite).order; },
+  /* B-2：方向由起迄推導（非申請人勾選）——送貨據點較南（order 較小）＝南下貨、較北＝北上貨
+     G111：起迄同一據點（不同建物）＝院區內建物間轉運，排入去程車次、於該據點收貨後即送達 */
+  isIntraSite(o) { return o.pickSite === o.dropSite; },
+  isSouthbound(o) { return this.isIntraSite(o) || this.siteById(o.dropSite).order < this.siteById(o.pickSite).order; },
+  dirLabel(o) { return this.isIntraSite(o) ? '院區內（同據點建物間）' : (this.isSouthbound(o) ? '去程（南下）' : '回程（北上）'); },
+
+  /* G111：起迄可為同一據點，但收貨建物與送貨建物不可相同（同據點時兩者皆須指定）*/
+  routeError(data) {
+    const pick = data.site, drop = data.destSite || DB.homeSite;
+    if (!pick || !drop || pick !== drop) return null;
+    const norm = x => String(x || '').trim();
+    if (!norm(data.pickupLoc) || !norm(data.deliverLoc)) return '收貨據點與送貨據點相同時，須指定收貨建物與送貨建物';
+    if (norm(data.pickupLoc) === norm(data.deliverLoc)) return '收貨據點與送貨據點相同時，收貨建物與送貨建物不可相同';
+    return null;
+  },
 
   /* ---- 可服務範圍：出發據點（origin）及其以南 ----
      現行車次模型為「自出發據點南下、折返北上回出發據點」，故出發據點以北據點不在該趟路線上。
@@ -60,6 +73,8 @@ const ModuleB = {
   // 幹線貨物多筆項目，每筆填獨立尺寸與重量（品名/長寬高/類別/數量/單件重），比照模組 A（G13）
   // 整張表單為裝載最小單位（G34）；相容：若帶 volume 而無尺寸則以整批貨量計（demo/測試）
   createOrder(data) {
+    const err = this.routeError(data);
+    if (err) throw new Error(err);
     const o = Object.assign({ id: 'LB' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
       approvedAt: null,
       status: 'submitted',  // submitted → approved/rejected(退回修編) →（派車）loaded →（確認收到）delivered（B-2 無 accepted）
@@ -72,6 +87,8 @@ const ModuleB = {
   // 退回修編 → 申請人修改後重新送出：沿用原單號，回到待單位主管審核
   resubmit(o, data) {
     if (o.status !== 'rejected') throw new Error('僅「退回修編」的申請可修改後重新送出');
+    const err = this.routeError(data);
+    if (err) throw new Error(err);
     (o.revisions = o.revisions || []).push({ at: new Date(), returnNote: o.reviewNote || '' });
     Object.assign(o, this._fields(data), { status: 'submitted', approvedAt: null, reviewNote: '' });
     this.recompute(o);
@@ -388,6 +405,18 @@ const ModuleB = {
           activity = true;
         }
         // 放不下整張 → 跳過留下一班（2.5），不停止延伸（2.3）
+      }
+
+      peakVol = Math.max(peakVol, netVol);   // 院區內貨卸下前的載量也計入峰值
+      // 3) 院區內轉運（G111）：本站收貨且送貨據點即本站者，於站內送達另一棟建物後卸貨釋出容量
+      for (let i = onboard.length - 1; i >= 0; i--) {
+        const o = onboard[i];
+        if (o.pickSite === siteId && o.dropSite === siteId) {
+          netVol -= this.effVolume(o); netWt -= o.weight; clock.addWork(o.unloadMin || 0);
+          unloaded += this.effVolume(o); onboard.splice(i, 1); delivered.add(o.id);
+          const inf = info.get(o.id); if (inf) { inf.dropTime = inf.pickupTime; inf.dropDay = clock.day; }
+          bldgs.add(bkey(o.deliverLoc));
+        }
       }
 
       // 收貨等待（2.19，早到等待一次至最晚窗口）＋站內建物間移動（2.18）皆計入在勤

@@ -1492,7 +1492,7 @@ function renderBApplyNew(p) {
     <div class="card">
       <div class="card-title">建立院區物品轉運申請單 <span class="g-tag">G38/G40</span></div>
       ${infoGrid('ba-fields0', fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`))}
-      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。<br>
+      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。起迄可為<b>同一據點</b>（院區內建物間轉運），但收貨建物與送貨建物不可相同。<br>
         目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；現行車次模型為「自基地南下、折返北上回基地」，<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
       ${infoGrid('ba-fields', [
         fInput('收貨據點（起）', `<select id="ba-site">${siteOpts}</select>`),
@@ -1567,7 +1567,9 @@ function renderBApplyNew(p) {
   $('#ba-cancel').onclick = bBack;
   $('#ba-submit').onclick = async () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return; }
-    if ($('#ba-site').value === $('#ba-dest').value) { toast('收貨據點與送貨據點不可相同', 'err'); return; }
+    const routeErr = ModuleB.routeError({ site: $('#ba-site').value, destSite: $('#ba-dest').value,
+      pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'), deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother') });
+    if (routeErr) { toast(routeErr, 'err'); return; }
     const ok = await confirmDialog({ title: editing ? '確認重新送出？' : '確認送出院區物品轉運申請單？',
       text: '送出後將等待單位主管審核，再由業務單位派車。' });
     if (!ok) return;
@@ -1658,7 +1660,7 @@ function renderBApproveGrid() {
       ${rows.map(o => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-bvdetail="${o.id}">細節</button></td>
         <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
-        <td>${ModuleB.isSouthbound(o) ? '去程（南下）' : '回程（北上）'}</td>
+        <td>${ModuleB.dirLabel(o)}</td>
         <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td><td>${stBadge(o.status)}${signBadge(o)}</td></tr>`).join('')}
@@ -1676,7 +1678,7 @@ function renderBApproveDetail(p, id) {
       ${infoGrid('bap-basic', [
         fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
         fItem('申請人', o.applicant),
-        fItem('行程方向 <span class="hint">由起迄自動判斷</span>', ModuleB.isSouthbound(o) ? '去程（南下）' : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`),
+        fItem('行程方向 <span class="hint">由起迄自動判斷</span>', ModuleB.isIntraSite(o) || ModuleB.isSouthbound(o) ? ModuleB.dirLabel(o) : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`),
         fItem('收貨據點（起）', ModuleB.siteById(o.pickSite).name),
         fItem('送貨據點（迄）', ModuleB.siteById(o.dropSite).name),
         fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
@@ -1842,7 +1844,7 @@ function renderBr_approved() {
   $('#br-approved').innerHTML = rows.length === 0 ? `<div class="muted">尚無已核准待派車託運單。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>裝卸</th></tr></thead><tbody>
       ${rows.map(o => `<tr><td>${o.id}${ModuleB.isServable(o) ? '' : ' <span class="badge b-red" title="' + ModuleB.unservableReason(o) + '">基地以北・待確認</span>'}</td>
-        <td>${ModuleB.isSouthbound(o) ? '<span class="badge b-navy">南下</span>' : '<span class="badge b-gray">北上</span>'}</td>
+        <td>${ModuleB.isIntraSite(o) ? '<span class="badge b-amber">院區內</span>' : ModuleB.isSouthbound(o) ? '<span class="badge b-navy">南下</span>' : '<span class="badge b-gray">北上</span>'}</td>
         <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td><td>${o.handleMin}分</td></tr>`).join('')}

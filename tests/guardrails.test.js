@@ -988,6 +988,33 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
       volume: 1000, category: 'BOX', weight: 100, handleMin: 20 });
     eq(Object.keys(o2.recipient).length, 0, '未帶接收人 → 空物件');
   });
+
+  test('G111 起迄可同一據點但不可同一建物；同據點須指定兩建物，重送同樣檢核', () => {
+    const H = fresh(), B = H.ModuleB;
+    const base = { applicant: 'X', site: 'D3', destSite: 'D3', direct: false, volume: 500, category: 'BOX', weight: 50, handleMin: 10 };
+    let err = ''; try { B.createOrder(Object.assign({}, base, { pickupLoc: '主倉', deliverLoc: '主倉' })); } catch (e) { err = e.message; }
+    ok(err.includes('不可相同'), '同據點同建物不可送出');
+    err = ''; try { B.createOrder(Object.assign({}, base, { pickupLoc: '主倉' })); } catch (e) { err = e.message; }
+    ok(err.includes('須指定'), '同據點須指定兩建物');
+    eq(B.routeError({ site: 'D3', destSite: 'D1', pickupLoc: '主倉', deliverLoc: '主倉' }), null, '不同據點不限建物');
+    const o = B.createOrder(Object.assign({}, base, { pickupLoc: '主倉', deliverLoc: '南棟月台' }));
+    ok(B.isIntraSite(o) && B.isSouthbound(o), '同據點＝院區內，排入去程車次');
+    B.reject(o, '補資料');
+    err = ''; try { B.resubmit(o, Object.assign({}, base, { pickupLoc: '南棟月台', deliverLoc: '南棟月台' })); } catch (e) { err = e.message; }
+    ok(err.includes('不可相同'), '修改重送同樣檢核');
+  });
+
+  test('G111 院區內轉運：派車行經該據點時收貨即送達另一棟建物（站內移動計 2 棟）', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = B.createOrder({ applicant: 'X', site: 'D3', destSite: 'D3', pickupLoc: '主倉', deliverLoc: '南棟月台',
+      direct: false, volume: 500, category: 'BOX', weight: 50, handleMin: 10, wantReceiveTime: '' });
+    B.approve(o);
+    const r = B.dispatch('V-T02', 'greedy');
+    eq(o.status, 'loaded', '院區內單可被派車');
+    eq(o.dispatchDropTime, o.pickupTime, '收貨後於同站送達');
+    const st = r.stops.find(x => x.site.id === 'D3');
+    ok(st && st.buildings === 2 && st.unloaded > 0, '站內兩棟建物、當站卸貨釋出容量');
+  });
 });
 
 /* =================================================================
