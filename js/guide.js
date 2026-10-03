@@ -192,6 +192,19 @@ const Guide = {
     return { rec, pf };
   },
   /* 目標功能送出成功：回填申請單號（只對待送出紀錄有效）*/
+  /* 目標功能按「暫存」：申請單成立為「申請中」，紀錄記下暫存單號（仍為已帶入待送出）；
+     之後該單從明細／編輯畫面送出時，以 draftSubmitted 回填申請單號 */
+  linkDraft(recId, appId) {
+    const rec = this.records.find(x => x.id === recId && x.status === 'handed');
+    if (!rec) return null;
+    rec.draftAppId = appId;
+    this._log(rec, '暫存申請單', rec.applicant, `${this.UNITS[rec.unit].name} 單號 ${appId}（申請中）`);
+    return rec;
+  },
+  draftSubmitted(appId) {
+    const rec = this.records.find(x => x.status === 'handed' && x.draftAppId === appId);
+    return rec ? this.markSubmitted(rec.id, appId) : null;
+  },
   markSubmitted(recId, appId) {
     const rec = this.records.find(x => x.id === recId && x.status === 'handed');
     if (!rec) return null;

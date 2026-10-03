@@ -764,6 +764,7 @@ function renderAApplyDetail(p, id) {
   const sd = $('#ad-submitdraft');
   if (sd) sd.onclick = confirmThen({ title: '確認送出巡迴物品轉運申請？', text: '送出後系統將<b>立即自動媒合</b>並告知班次時間與車號。' }, () => {
     const { result } = ModuleA.submitDraft(a);
+    guideSubmitted(null, a.id);   // 由引導帶入後暫存的單：回填引導紀錄
     toast(result.ok ? `${a.id} 已自動媒合：${result.shift.label}／到站約 ${result.arrival}` : `${a.id}｜${result.msg}`, result.ok ? 'ok' : 'err');
     RENDER.a_apply();
   });
@@ -861,6 +862,7 @@ function renderAApplyNew(p) {
     const data = aaFormData(); if (!data) return;
     if (!(await confirmDialog({ title: '確認暫存？', text: '將儲存為「申請中」，尚未送出、不會媒合；之後可於明細頁送出。' }))) return;
     const app = ModuleA.saveDraft(data);
+    guideDrafted(aApply, app.id);
     aaItems = [];
     toast(`${app.id} 已暫存（申請中）`, 'ok');
     aApply.resultIds = null; aApply.view = 'detail'; aApply.detailId = app.id; RENDER.a_apply();
@@ -1614,6 +1616,7 @@ function renderBApplyNew(p) {
     const data = formData(); if (!data) return;
     if (!(await confirmDialog({ title: '確認暫存？', text: '將儲存為「申請中」，尚未送出；之後可於明細頁編輯並送出。' }))) return;
     const o = editing ? ModuleB.saveDraft(editing, data) : ModuleB.createOrder(data, { draft: true });
+    if (!editing) guideDrafted(bApply, o.id);
     done(o, `${o.id} 已暫存（申請中）`);
   };
   $('#ba-submit').onclick = async () => {
@@ -1621,7 +1624,7 @@ function renderBApplyNew(p) {
     const ok = await confirmDialog({ title: '確認送出院區物品轉運申請單？', text: '送出後進入「待二級審」（單位主管審核），通過後由調度派車。' });
     if (!ok) return;
     const o = editing ? ModuleB.resubmit(editing, data) : ModuleB.createOrder(data);
-    if (!editing) guideSubmitted(bApply, o.id);
+    guideSubmitted(editing ? null : bApply, o.id);
     done(o, `${o.id} 已送出，待二級審`);
   };
 }
@@ -2244,6 +2247,7 @@ function renderCApplyNew(p) {
     const data = formData(); if (!data) return;
     if (!(await confirmDialog({ title: '確認暫存？', text: '將儲存為「申請中」，尚未送出；之後可於明細頁編輯並送出。' }))) return;
     const app = editing ? ModuleC.saveDraft(editing, data) : ModuleC.createApp(data, { draft: true });
+    if (!editing) guideDrafted(cApply, app.id);
     done(app, `${app.id} 已暫存（申請中）`);
   };
   $('#ca-submit').onclick = async () => {
@@ -2251,7 +2255,7 @@ function renderCApplyNew(p) {
     const ok = await confirmDialog({ title: '確認送出差旅共乘申請？', text: '送出後進入「待二級審」（單位主管審核），通過後由調度批次媒合產生派車單。' });
     if (!ok) return;
     const app = editing ? ModuleC.resubmit(editing, data) : ModuleC.createApp(data);
-    if (!editing) guideSubmitted(cApply, app.id);
+    guideSubmitted(editing ? null : cApply, app.id);
     done(app, `${app.id} 已送出，待二級審`);
   };
 }
@@ -3385,6 +3389,7 @@ function renderDApplyNew(p) {
     let app;
     try { app = editing ? ModuleD.saveDraft(editing, data) : ModuleD.createApp(data, { draft: true }); }
     catch (e) { toast(e.message, 'err'); return; }
+    if (!editing) guideDrafted(dApply, app.id);
     toast(`${app.id} 已暫存（申請中）`, 'ok');
     dApply.resultIds = null; dApply.editId = null; dApply.view = 'detail'; dApply.detailId = app.id;
     RENDER.d_apply();
@@ -3400,7 +3405,7 @@ function renderDApplyNew(p) {
     let app;
     try { app = editing ? ModuleD.resubmit(editing, data) : ModuleD.createApp(data); }
     catch (e) { toast(e.message, 'err'); return; }
-    if (!editing) guideSubmitted(dApply, app.id);
+    guideSubmitted(editing ? null : dApply, app.id);
     toast(`${app.id} 已送出，待二級審`, 'ok');
     dApply.resultIds = null; dApply.editId = null; dApply.view = 'detail'; dApply.detailId = app.id;
     RENDER.d_apply();
@@ -4627,7 +4632,7 @@ function renderGuideGrid() {
         <td><button class="btn btn-ghost btn-sm" data-gdetail="${r.id}">細節</button></td>
         <td><b style="color:var(--navy);">${r.id}</b></td><td>${gEsc(r.applicant)}</td><td>${gEsc(r.summary)}</td>
         <td>${gUnitTxt(r.unit)}</td><td><span class="g-tag">${r.rule}</span></td><td>${gStBadge(r.status)}</td>
-        <td>${r.appId ? `<b>${r.appId}</b>` : '<span class="muted">—</span>'}</td>
+        <td>${r.appId ? `<b>${r.appId}</b>` : r.draftAppId ? `<span class="muted">${r.draftAppId}（申請中）</span>` : '<span class="muted">—</span>'}</td>
         <td class="muted">${fmtTime(r.createdAt)}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊左側「細節」可查看該次引導的填寫內容、判定結果與歷程（回到修改／查看申請單於明細操作）。</div>`;
@@ -4674,7 +4679,7 @@ function renderGuideDetail(p, id) {
   }
   const acts = [];
   if (r.status === 'handed') acts.push(`<button class="btn btn-primary" id="gd-edit">✎ 回到引導修改</button>`);
-  if (r.appId) acts.push(`<button class="btn btn-primary" id="gd-app">📄 查看申請單 ${r.appId}</button>`);
+  if (r.appId || r.draftAppId) acts.push(`<button class="btn btn-primary" id="gd-app">📄 查看申請單 ${r.appId || r.draftAppId}${r.appId ? '' : '（申請中）'}</button>`);
   acts.push(`<button class="btn btn-ghost" id="gd-copy">⧉ 以此內容新增引導</button>`);
   p.innerHTML = `
     <div class="section-h">申請引導明細 · ${r.id}</div>
@@ -4685,7 +4690,7 @@ function renderGuideDetail(p, id) {
         fItem('申請人', gEsc(r.applicant)),
         fItem('建立時間', fmtTime(r.createdAt)),
         fItem('判定功能', `<b>${gUnitTxt(r.unit)}</b> <span class="g-tag">${r.rule}</span>`, { w2: true }),
-        fItem('申請單號', r.appId ? `<b>${r.appId}</b>（${fmtTime(r.submittedAt)} 送出）` : '<span class="muted">尚未送出</span>'),
+        fItem('申請單號', r.appId ? `<b>${r.appId}</b>（${fmtTime(r.submittedAt)} 送出）` : r.draftAppId ? `${r.draftAppId}（已暫存為申請中，送出後回填）` : '<span class="muted">尚未送出</span>'),
       ].join(''))}
     </div>
     <div class="card">
@@ -4718,7 +4723,7 @@ function renderGuideDetail(p, id) {
   const ed = $('#gd-edit');
   if (ed) ed.onclick = () => guideEdit(r.id);
   const ap = $('#gd-app');
-  if (ap) ap.onclick = () => { const st = guideUnitState(r.unit); st.view = 'detail'; st.detailId = r.appId; goto(u.page); };
+  if (ap) ap.onclick = () => { const st = guideUnitState(r.unit); st.view = 'detail'; st.detailId = r.appId || r.draftAppId; goto(u.page); };
   $('#gd-copy').onclick = () => {
     guideState.v = JSON.parse(JSON.stringify(r.v)); guideState.recId = null; guideState.view = 'new'; RENDER.guide();
     toast(`已複製 ${r.id} 的內容，可修改後重新判定`);
@@ -4908,10 +4913,15 @@ function guideGo() {
 }
 // 目標新增畫面取出帶入資料（只用一次，避免之後再進新增畫面重複帶入）；記住來源引導紀錄供送出後回填
 function guideTake(state) { const pf = state.prefill || null; state.prefill = null; state.guideRec = pf ? pf.recId : null; return pf; }
-// 目標功能送出成功：回填申請單號到引導紀錄
+// 目標功能送出成功：回填申請單號到引導紀錄（由引導帶入後直接送出，或先暫存、之後再送出）
 function guideSubmitted(state, appId) {
+  if (state && state.guideRec) { Guide.markSubmitted(state.guideRec, appId); state.guideRec = null; return; }
+  Guide.draftSubmitted(appId);
+}
+// 目標功能按「暫存」：引導紀錄記下暫存的申請單號，待該單送出時回填
+function guideDrafted(state, appId) {
   if (!state.guideRec) return;
-  Guide.markSubmitted(state.guideRec, appId);
+  Guide.linkDraft(state.guideRec, appId);
   state.guideRec = null;
 }
 // 新增畫面上方的帶入提示條（含「回到引導修改」）

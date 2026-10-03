@@ -2244,6 +2244,19 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     const n = G.hand(ev, rec.id).rec;
     eq(n.id, 'GD-0002', '指向已送出紀錄時另建新紀錄'); eq(G.records[0], n, '新紀錄排最前');
   });
+
+  test('引導紀錄：目標功能先暫存（申請中），之後送出時回填申請單號', () => {
+    const H = fresh(), G = H.Guide;
+    const ev = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: G.OTHER, otherPlace: '新竹客戶',
+      hasCargo: 'no', selfDrive: true });
+    const { rec } = G.hand(ev);
+    const d = H.ModuleD.createApp(Object.assign({}, G.prefill(ev).data, { role: '一般員工' }), { draft: true });
+    eq(G.linkDraft(rec.id, d.id), rec); eq(rec.status, 'handed', '暫存仍為已帶入待送出'); eq(rec.draftAppId, d.id);
+    eq(G.draftSubmitted('GU999'), null, '其他單號不影響');
+    H.ModuleD.resubmit(d, d);
+    eq(G.draftSubmitted(d.id), rec); eq(rec.status, 'submitted'); eq(rec.appId, d.id);
+    eq(rec.log.map(l => l.action).slice(-2).join('/'), '暫存申請單/送出申請');
+  });
 });
 
 /* ---- 總結 ---- */
