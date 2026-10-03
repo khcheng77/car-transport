@@ -151,6 +151,10 @@ const ModuleA = {
   },
   usageRecords() { return this.applications.filter(a => Usage.inScope(a, this.isScheduled(a))); },
   usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL, effective: this.isScheduled(app) }); },
+  /* 貨品回報狀態（G121）：同院區物品轉運（G120），A 排入班次即生效 */
+  ITEM_REPORTS: Usage.ITEM_REPORTS,
+  itemReport(it) { return Usage.itemReport(it); },
+  setItemReport(app, idx, status, by) { return Usage.setItemReport(app, idx, status, by, this.isScheduled(app)); },
 
   /* 站間行駛時間（分／站）：據點為在地路線、站點相鄰，行駛短。
      全程 9 站＝9×INTER_STATION_MIN，須明顯小於班距 60 分，確保整條路線在同一時段內走完。 */

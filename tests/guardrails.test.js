@@ -1796,6 +1796,19 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     eq(o.items[1].report, '不接收'); eq(B.itemReport(o.items[0]), '正常運送');
     eq(o.itemReportLog[0].before, '正常運送'); eq(o.itemReportLog[0].after, '不接收'); eq(o.itemReportLog[0].by, '調度室-王');
   });
+
+  test('G121 巡迴物品轉運實登貨品回報：排入班次即可回報；移出班次（未生效）不可回報', () => {
+    const H = fresh(), A = H.ModuleA;
+    A.now = () => new Date(2026, 8, 2, 6, 0);
+    const app = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
+      items: [item({ name: '文件箱', l: 40, w: 30, h: 30 }), item({ name: '樣品', l: 50, w: 40, h: 40 })], recvMode: 'asap', handleMin: 15 }).app;
+    eq(A.itemReport(app.items[0]), '正常運送');
+    ok(A.setItemReport(app, 0, '不運送', '調度室').ok, 'A 不經簽審，排班即可回報');
+    eq(app.items[0].report, '不運送'); eq(app.itemReportLog.length, 1);
+    const other = A.submit({ applicant: 'X', station: 'D1-300', building: '一號月台', items: [item({ l: 40, w: 30, h: 30 })], recvMode: 'asap', handleMin: 15 }).app;
+    A.removeFromShift(other);
+    ok(A.setItemReport(other, 0, '不接收').error.includes('生效'), '未排入班次不可回報');
+  });
 });
 
 /* =================================================================

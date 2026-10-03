@@ -188,20 +188,10 @@ const ModuleB = {
   usagePlan(o) { return { vehicle: o.dispatchVehicle || null, drivers: this.driversOf(o) }; },
   usageRecords() { return this.orders.filter(o => Usage.inScope(o)); },
   usageSave(o, data, by) { return Usage.save(o, data, by, { pool: this.USAGE_POOL }); },
-  /* 貨品回報狀態（G120）：車輛使用實登的貨物清單逐項回報；預設「正常運送」 */
-  ITEM_REPORTS: ['正常運送', '不運送', '不接收'],
-  itemReport(it) { return it.report || '正常運送'; },
-  setItemReport(o, idx, status, by) {
-    if (!Usage.inScope(o)) return { ok: false, error: '派車結果尚未生效，不可回報貨品狀態' };
-    const it = (o.items || [])[idx];
-    if (!it) return { ok: false, error: '查無此貨品' };
-    if (!this.ITEM_REPORTS.includes(status)) return { ok: false, error: '回報狀態須為：' + this.ITEM_REPORTS.join('／') };
-    const before = this.itemReport(it);
-    if (before === status) return { ok: true, changed: false };
-    it.report = status;
-    (o.itemReportLog = o.itemReportLog || []).push({ at: new Date(), by: by || '調度室', item: it.name || `第 ${idx + 1} 項`, before, after: status });
-    return { ok: true, changed: true };
-  },
+  /* 貨品回報狀態（G120）：車輛使用實登的貨物清單逐項回報；共用 Usage，生效依運輸主管簽審 */
+  ITEM_REPORTS: Usage.ITEM_REPORTS,
+  itemReport(it) { return Usage.itemReport(it); },
+  setItemReport(o, idx, status, by) { return Usage.setItemReport(o, idx, status, by); },
   signRecords() { return this.orders.filter(o => Signoff.inScope(o)); },
   signApprove(o, by, note) { return Signoff.decide(o, true, by, note); },
   // 退回：卸下派車結果、回到「已核准待派車」，由調度重新派車後再送簽審

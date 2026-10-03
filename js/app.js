@@ -4044,8 +4044,8 @@ const drvNm = id => { const d = DB.drivers.find(x => x.id === id); return d ? d.
 
 // 巡迴物品轉運：不經運輸主管簽審（排班即生效），派車資料欄位供「車輛使用實登」沿用
 const A_DISPATCH_VIEW = {
-  // incident：實登明細頁含駕駛異常回報（G20）
-  mod: 'A', signed: false, incident: true, M: () => ModuleA, applyPage: 'a_apply', applyState: () => aApply,
+  // incident：實登明細頁含駕駛異常回報（G20）；itemReport：貨物清單逐項回報狀態（G121）
+  mod: 'A', signed: false, incident: true, itemReport: true, M: () => ModuleA, applyPage: 'a_apply', applyState: () => aApply,
   dispatchPage: 'a_dispatch', dispatchName: '車次追蹤／異動',
   what: r => `${r.serviceDate}｜${brName(r.branch)}｜${stnName(r.pickStation)} → ${stnName(r.station)}`,
   infoItems: r => [
@@ -4458,7 +4458,7 @@ function renderUsageDetail(k, p, id) {
       <div class="card-title" style="justify-content:space-between;"><span>派車基本資料</span>${signed ? signStateBadge(r) : stBadge(r.status)}</div>
       ${infoGrid(`${k}-d-info`, cfg.infoItems(r).join(''))}
     </div>
-    ${items ? `<div class="card"><div class="card-title">貨物清單${cfg.itemReport ? ' <span class="g-tag">回報狀態 G120</span>' : ''}</div>
+    ${items ? `<div class="card"><div class="card-title">貨物清單${cfg.itemReport ? ' <span class="g-tag">回報狀態 ' + (cfg.mod === 'A' ? 'G121' : 'G120') + '</span>' : ''}</div>
       ${cfg.itemReport ? '<div class="card-desc">每項貨品預設「正常運送」；點左側<b>編輯</b>可將回報狀態改為不運送或不接收。</div>' : ''}<div id="${k}-d-items"></div></div>` : ''}
     <div class="card">
       <div class="card-title">派車結果</div>

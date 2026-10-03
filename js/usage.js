@@ -58,6 +58,22 @@ const Usage = {
     return { ok: true, usage: rec.usage };
   },
 
+  /* 貨品回報狀態（G120／G121）：實登明細的貨物清單逐項回報，預設「正常運送」；
+     eff＝模組自行判定的「已生效」（同 inScope），派車結果未生效不可回報；每次修改留 rec.itemReportLog */
+  ITEM_REPORTS: ['正常運送', '不運送', '不接收'],
+  itemReport(it) { return it.report || '正常運送'; },
+  setItemReport(rec, idx, status, by, eff) {
+    if (!this.inScope(rec, eff)) return { ok: false, error: '派車結果尚未生效，不可回報貨品狀態' };
+    const it = (rec.items || [])[idx];
+    if (!it) return { ok: false, error: '查無此貨品' };
+    if (!this.ITEM_REPORTS.includes(status)) return { ok: false, error: '回報狀態須為：' + this.ITEM_REPORTS.join('／') };
+    const before = this.itemReport(it);
+    if (before === status) return { ok: true, changed: false };
+    it.report = status;
+    (rec.itemReportLog = rec.itemReportLog || []).push({ at: new Date(), by: by || '調度室', item: it.name || `第 ${idx + 1} 項`, before, after: status });
+    return { ok: true, changed: true };
+  },
+
   // 實際與派車規劃不同的項目（提示用）：plan = { vehicle, drivers[] }
   diffs(rec, plan) {
     const u = rec.usage;
