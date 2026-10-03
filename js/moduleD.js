@@ -394,6 +394,36 @@ const ModuleD = {
     return { ok: true, kind };
   },
 
+  /* 替補自駕駕駛（G116）：其他申請單撤銷等原因使駕駛閒置時，替「被迫自駕」的已派車單補派司機。
+     對象：已派車且派車結果已生效、目前區間無司機（使用者自駕）且勾選「願意等待駕駛媒合」者（G84）；
+     依調度順序（例行用車優先、再依用車起始）逐單找整段剩餘時間皆空閒的司機，以補派司機（reassign）立即生效。
+     生效時點＝max（目前自駕區間起點, 現在）；已結束者略過。opts.now 供測試指定現在時刻。 */
+  selfDriveBackfillTargets() {
+    const rank = a => a.category === 'routine' ? 0 : 1;   // 例行用車優先（G82），再依用車起始
+    return this.applications.filter(a => a.status === 'dispatched' && Signoff.effective(a)
+      && a.waitDriver && this.lastSeg(a) && this.lastSeg(a).drivers.length === 0)
+      .sort((x, y) => rank(x) - rank(y) || this.span(x).start - this.span(y).start);
+  },
+  backfillSelfDrive(by, opts) {
+    const now = (opts && opts.now) || new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const nowAbs = this.absMin(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`, `${pad(now.getHours())}:${pad(now.getMinutes())}`);
+    const filled = [], skipped = [];
+    for (const app of this.selfDriveBackfillTargets()) {
+      const last = this.lastSeg(app), end = this.span(app).end;
+      const eff = Math.max(last.from, nowAbs);
+      if (eff >= end) { skipped.push({ app, reason: '用車時段已結束' }); continue; }
+      const rng = { start: eff, end };
+      const d = DB.drivers.find(x => x.pool === 'BIZ' && !this.driverBusyIn(x.id, rng, app.id));
+      if (!d) { skipped.push({ app, reason: '剩餘用車時段內沒有閒置駕駛' }); continue; }
+      const t = this.fromAbs(eff);
+      const r = this.reassign(app, { date: t.date, time: t.time, drivers: [d.id], reason: '替補自駕駕駛（駕駛閒置）', by: by || '調度室' });
+      if (r.ok) filled.push({ app, driver: d, from: this.fmtAbs(eff) });
+      else skipped.push({ app, reason: r.error });
+    }
+    return { filled, skipped };
+  },
+
   /* 展延（G83）：延後用車結束時間；僅調度、不需簽核；延長區段內目前的車輛／司機須仍可用（先佔先贏） */
   extend(app, o) {
     const ng = this._live(app, '展延'); if (ng) return { ok: false, error: ng };

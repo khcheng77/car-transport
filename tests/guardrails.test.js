@@ -1719,6 +1719,58 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
 });
 
 /* =================================================================
+   模組 D：派車調度 · 替補自駕駕駛（G116）
+   ================================================================= */
+group('一般用車 · 替補自駕駕駛（G116）', () => {
+  const T = '2026-10-05';
+  function setup() {
+    const H = fresh(), D = H.ModuleD;
+    const mk = o => { const a = D.createApp(Object.assign({ applicant: '業務部-周雅婷', startDate: T, startTime: '09:00',
+      endDate: T, endTime: '17:00', pax: 2, selfDrive: false, items: [] }, o)); D.approve(a); return a; };
+    const go = (a, sel) => { ok(D.dispatch(a, sel).ok); D.signApprove(a, '運輸主管'); };
+    const x1 = mk(), x2 = mk({ applicant: '財務部-鄭安琪' });
+    go(x1, { vehicle: 'V-B01', drivers: ['DR3', 'DR4'] }); go(x2, { vehicle: 'V-B03', drivers: ['DR5', 'DR6'] });
+    const s1 = mk({ applicant: '研發部-吳承恩', selfDrive: true, waitDriver: true, startTime: '10:00' });
+    const s2 = mk({ applicant: '總務部-林', selfDrive: true, waitDriver: false });
+    D.dispatch(s1, { vehicle: 'V-B04' }); D.dispatch(s2, { vehicle: 'V-B02' });
+    return { H, D, x1, x2, s1, s2 };
+  }
+  const now = new Date(2026, 9, 1, 8, 0);
+
+  test('只替補已生效、被迫自駕且願意等待駕駛媒合的單；沒有閒置駕駛時略過並說明', () => {
+    const { D, s1, s2 } = setup();
+    eq(s1.outcome, 'selfDrive', '駕駛全被佔用 → 被迫自駕');
+    eq(D.selfDriveBackfillTargets().length, 0, '派車結果待簽審者不列入');
+    D.signApprove(s1, '運輸主管'); D.signApprove(s2, '運輸主管');
+    eq(D.selfDriveBackfillTargets().map(a => a.id).join(), s1.id, '未勾願意等待者不替補（G84）');
+    const r = D.backfillSelfDrive('調度室', { now });
+    eq(r.filled.length, 0); ok(r.skipped[0].reason.includes('閒置'));
+  });
+
+  test('其他申請單撤銷（提前歸還未出車）使駕駛閒置 → 替補補派司機、立即生效並留紀錄', () => {
+    const { D, x2, s1, s2 } = setup();
+    D.signApprove(s1, '運輸主管'); D.signApprove(s2, '運輸主管');
+    ok(D.requestEarlyReturn(x2, { date: T, time: '09:00' }, x2.applicant).ok); ok(D.confirmEarlyReturn(x2, '調度室').ok);
+    const r = D.backfillSelfDrive('調度室-王', { now });
+    eq(r.filled.length, 1); eq(r.filled[0].app.id, s1.id);
+    eq(s1.outcome, 'withDriver'); ok(['DR5', 'DR6'].includes(s1.drivers[0]), '補派閒置駕駛');
+    eq(D.lastSeg(s1).kind, '補派司機'); eq(D.lastSeg(s1).from, D.span(s1).start, '尚未出車 → 自用車起始即補派');
+    eq(s2.drivers.length, 0, '未勾願意等待者維持自駕');
+    eq(D.backfillSelfDrive('調度室', { now }).filled.length, 0, '已替補者不重複');
+  });
+
+  test('用車中途才閒置：自現在時刻起補派；用車已結束者略過', () => {
+    const { D, x2, s1 } = setup();
+    D.signApprove(s1, '運輸主管');
+    D.requestEarlyReturn(x2, { date: T, time: '09:00' }, x2.applicant); D.confirmEarlyReturn(x2, '調度室');
+    const r = D.backfillSelfDrive('調度室', { now: new Date(2026, 9, 5, 13, 30) });
+    eq(r.filled[0].from, `${T} 13:30`); eq(D.lastSeg(s1).from, D.absMin(T, '13:30'));
+    const late = setup(); late.D.signApprove(late.s1, '運輸主管');
+    eq(late.D.backfillSelfDrive('調度室', { now: new Date(2026, 9, 6, 9, 0) }).skipped[0].reason, '用車時段已結束');
+  });
+});
+
+/* =================================================================
    單位主管審核：退回修編 → 申請人修改後重新送出（B／C／D）
    ================================================================= */
 group('單位主管審核（退回修編與重新送出）', () => {

@@ -232,7 +232,7 @@ RENDER.dashboard = function () {
       ${unitCard('🧑‍✈️ C｜司機任務單', '駕駛端：以駕駛為單位，今日整個行程要接誰、去哪裡。', 'c_driver', '駕駛')}
       ${unitCard('📝 D｜一般用車申請', '起訖時間（數小時～數個月）、人數、自駕／願意等待駕駛媒合、通行證與提示欄位、隨行貨物；例行用車類別限特定角色；派車後可提出提前歸還。', 'd_apply', '申請端')}
       ${unitCard('✅ D｜單位主管審核', '直屬單位主管審核首次申請（兩類別相同），通過才進調度；退回修編者由申請人修改後重新送出。', 'd_approve', '主管')}
-      ${unitCard('🚗 D｜派車調度', '通行證交集篩選、例行用車優先、雙駕駛、剩餘加班工時；派車後換車／換司機／補派／展延、確認提前歸還。', 'd_review', '審核端')}
+      ${unitCard('🚗 D｜派車調度', '通行證交集篩選、例行用車優先、雙駕駛、剩餘加班工時；派車後換車／換司機／補派／展延、確認提前歸還；駕駛閒置時一鍵替補自駕駕駛。', 'd_review', '審核端')}
       ${unitCard('🖋 D｜運輸主管簽審', '調度做出的派車結果送運輸主管覆核：同意才生效，不同意（意見必填）退回調度重新處理。', 'd_sign', '運輸主管')}
       ${unitCard('⛽ D｜車輛使用實登', '派車結果生效後，登打實際使用的車種類型、車號、駕駛人1／駕駛人2 與起訖里程；可修改並保留歷程。', 'd_usage', '審核端')}
       ${unitCard('🧑‍✈️ D｜司機任務單', '駕駛端：依指派區間列出任務（雙駕駛標示搭檔）、使用人、隨行貨物（含危險品提示）。', 'd_driver', '駕駛')}
@@ -3523,7 +3523,7 @@ function renderDReviewList(p) {
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">派車調度（業務單位）</div>
-    <div class="section-sub">單位主管審核通過的申請，由調度<b>人工確認</b>共用商務車輛／司機池是否可用（保修、請假、差旅共乘作業與其他用車佔用一併列出，先佔先贏），依<b>派車判斷矩陣</b>做出最終判斷，不進候補。<b>例行用車</b>類別在資源尚未分配前優先（排在清單最前），已生效的佔用不溯及。派車後的換車、換司機（含補派、雙駕駛）、展延由調度直接處理，提前歸還由使用者提出、調度確認後生效。</div>
+    <div class="section-sub">單位主管審核通過的申請，由調度<b>人工確認</b>共用商務車輛／司機池是否可用（保修、請假、差旅共乘作業與其他用車佔用一併列出，先佔先贏），依<b>派車判斷矩陣</b>做出最終判斷，不進候補。<b>例行用車</b>類別在資源尚未分配前優先（排在清單最前），已生效的佔用不溯及。派車後的換車、換司機（含補派、雙駕駛）、展延由調度直接處理，提前歸還由使用者提出、調度確認後生效。其他申請單撤銷使駕駛閒置時，可按<b>「替補自駕駕駛」</b>替被迫自駕（願意等待駕駛媒合）的已派車單補派司機。</div>
     <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="dr-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
@@ -3534,10 +3534,28 @@ function renderDReviewList(p) {
       ].join(''))}
     </div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>調度清單</span><span class="muted" id="drq-count"></span></div>
+      <div class="card-title" style="justify-content:space-between;"><span>調度清單</span>
+        <span><span class="muted" id="drq-count"></span>
+          <button class="btn btn-accent btn-sm" id="dr-backfill" style="margin-left:10px;" title="駕駛閒置時，替被迫自駕且願意等待駕駛媒合的已派車單補派司機（G116）">🔄 替補自駕駕駛${(() => { const n = ModuleD.selfDriveBackfillTargets().length; return n ? `（${n}）` : ''; })()}</button></span></div>
       <div id="drq-grid"></div>
     </div>`;
   $('#dr-goto-driver').onclick = () => goto('d_driver');
+  // 替補自駕駕駛（G116）：其他申請單撤銷使駕駛閒置 → 替被迫自駕（願意等待駕駛媒合）的已派車單補派司機
+  $('#dr-backfill').onclick = async () => {
+    const targets = ModuleD.selfDriveBackfillTargets();
+    if (!targets.length) { toast('目前沒有需要替補駕駛的自駕單（須已派車生效、被迫自駕且願意等待駕駛媒合）', 'err'); return; }
+    const ok = await confirmDialog({ title: '確認替補自駕駕駛？',
+      text: `將替 <b>${targets.length}</b> 筆被迫自駕的申請單（${targets.map(a => a.id).join('、')}）尋找剩餘用車時段內<b>閒置的駕駛</b>補派，立即生效並通知申請人（例行用車優先）。` });
+    if (!ok) return;
+    const r = ModuleD.backfillSelfDrive('調度室');
+    openModal('替補自駕駕駛結果', `
+      ${r.filled.length ? `<div class="result ok"><div class="r-head">✓ 已補派 ${r.filled.length} 筆</div>
+        ${r.filled.map(x => `<div>${x.app.id}｜${x.app.applicant}｜${x.from} 起由 <b>${x.driver.name}</b> 駕駛（車 ${x.app.vehicle}）</div>`).join('')}</div>` : ''}
+      ${r.skipped.length ? `<div class="result fail" style="margin-top:10px;"><div class="r-head">✗ 未補派 ${r.skipped.length} 筆</div>
+        ${r.skipped.map(x => `<div>${x.app.id}｜${x.app.applicant}｜${x.reason}</div>`).join('')}</div>` : ''}`);
+    toast(r.filled.length ? `已替補 ${r.filled.length} 筆自駕單的駕駛` : '沒有閒置駕駛可替補', r.filled.length ? 'ok' : 'err');
+    renderDReviewList(p); renderDaList();
+  };
   $('#drq-search').onclick = () => {
     dReview.query = { status: $('#drq-status').value, date: $('#drq-date').value };
     renderDReviewGrid(); toast('查詢完成', 'ok');
