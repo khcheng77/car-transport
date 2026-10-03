@@ -71,15 +71,15 @@ const ModuleB = {
     return `${bad.join('、')} 位於出發據點 ${home.name} 以北，現行「自出發據點南下折返」車次模型未涵蓋`;
   },
 
-  // site＝收貨據點（起）、destSite＝送貨據點（迄）；申請端只負責建立，狀態為「待審核」
+  // site＝收貨據點（起）、destSite＝送貨據點（迄）；申請端只負責建立：送出＝待二級審；opts.draft＝暫存（申請中）
   // 幹線貨物多筆項目，每筆填獨立尺寸與重量（品名/長寬高/類別/數量/單件重），比照模組 A（G13）
   // 整張表單為裝載最小單位（G34）；相容：若帶 volume 而無尺寸則以整批貨量計（demo/測試）
-  createOrder(data) {
+  createOrder(data, opts) {
     const err = this.routeError(data);
     if (err) throw new Error(err);
     const o = Object.assign({ id: 'LB' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
       approvedAt: null,
-      status: 'submitted',  // submitted → approved/rejected(退回修編) →（派車）loaded →（確認收到）delivered（B-2 無 accepted）
+      status: opts && opts.draft ? 'draft' : 'submitted',  // draft（申請中）→ submitted（待二級審）→ approved（待調度）/rejected（退回修編）/noCar（無車退回）→（媒合派車）loaded；顯示狀態由 Flow 推導
       createdAt: new Date(),
     });
     this.recompute(o);      // 由 items 加總 volume/weight/有效體積
@@ -88,7 +88,7 @@ const ModuleB = {
   },
   // 退回修編 → 申請人修改後重新送出：沿用原單號，回到待單位主管審核
   resubmit(o, data) {
-    if (o.status !== 'rejected') throw new Error('僅「退回修編」的申請可修改後重新送出');
+    if (!['rejected', 'draft'].includes(o.status)) throw new Error('僅「申請中」或「退回修編」的申請可修改後送出');
     const err = this.routeError(data);
     if (err) throw new Error(err);
     (o.revisions = o.revisions || []).push({ at: new Date(), returnNote: o.reviewNote || '' });
@@ -96,6 +96,14 @@ const ModuleB = {
     this.recompute(o);
     return o;
   },
+  /* 暫存（申請中）：修改後仍維持申請中 */
+  saveDraft(o, data) {
+    if (o.status !== 'draft') throw new Error('僅「申請中」的申請可暫存修改');
+    Object.assign(o, this._fields(data));
+    this.recompute(o);
+    return o;
+  },
+  canEdit(o) { return ['draft', 'rejected'].includes(o.status); },
   _fields(data) {
     const items = (data.items && data.items.length)
       ? data.items.map(x => ({ ...x, name: x.name || '貨物', qty: x.qty || 1, category: x.category || 'BOX', weight: +x.weight || 0 }))
@@ -170,12 +178,10 @@ const ModuleB = {
     return null;
   },
 
-  // 交貨確認（loaded → delivered）
-  // 簽審通過才生效：待運輸主管簽審的派車不可確認交貨
-  confirmDelivery(o, by) {
-    if (o.status !== 'loaded' || !Signoff.effective(o)) return false;
-    o.status = 'delivered'; o.deliveredAt = Date.now(); o.deliveredBy = by || '調度室';
-    return true;
+  /* 狀態推導（Flow）：已出車＝派車日＋收貨時間已到 */
+  departAt(o) {
+    const d = this.dispatchOf(o);
+    return d ? Flow.at(d.date, o.pickupTime || '00:00') : null;
   },
 
   /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
@@ -198,9 +204,15 @@ const ModuleB = {
   signReject(o, by, note) {
     const r = Signoff.decide(o, false, by, note);
     if (!r.ok) return r;
-    this._detach(o, '運輸主管退回', by);
-    o.status = 'approved';
+    // 退回調度：整張派車單回「調度中」（未送審），同單其他託運單的簽審一併撤回，由調度修改後重新送審
     o.signReturnNote = o.sign.note;
+    const d = this.dispatchOf(o);
+    if (d) {
+      d.submitted = false;
+      this._dlog(d, '調度主管退回', by, `${o.id}：${note}`);
+      this.dispatchOrders(d).filter(x => x !== o).forEach(x => Signoff.release(x, `同派車單 ${o.id} 被退回`, by));
+    }
+    o.sign = null;
     return r;
   },
 
@@ -763,7 +775,7 @@ const ModuleB = {
       return d;
     });
   },
-  started(d) { return this.dispatchOrders(d).some(o => o.status === 'delivered'); },
+  started(d) { return this.dispatchOrders(d).some(o => Flow.departed(o, this)); },   // 已出車即不可異動
   /* 資源檢核：車種與車號相符、容積／載重足夠（有效體積）、駕駛不同人、請假、當日其他派車單撞車撞人 */
   dispatchResourceError(d, f) {
     const list = this.dispatchOrders(d);
@@ -794,7 +806,7 @@ const ModuleB = {
      否 → 是＝送運輸主管簽審；是 → 否＝撤回簽審；已送審者異動車輛／駕駛重新送簽；已有單交貨者不可異動 */
   updateDispatch(d, f, by) {
     if (d.cancelled) return { ok: false, error: '派車單已取消' };
-    if (this.started(d)) return { ok: false, error: '已有託運單交貨，派車單不可再異動' };
+    if (this.started(d)) return { ok: false, error: '派車單已出車，不可再異動' };
     const v = DB.vehicles.find(x => x.id === f.vehicle);
     const next = { vehicleType: f.vehicleType || (v ? v.type : ''), vehicle: f.vehicle, driver1: f.driver1, driver2: f.driver2 || '',
       submitted: f.submitted == null ? d.submitted : !!f.submitted };
@@ -827,15 +839,22 @@ const ModuleB = {
     o.dispatchId = null;
     this.DISPATCH_FIELDS.forEach(k => { o[k] = null; });
   },
-  /* 調度退回申請單（G119）：已核准待派車、已派車未交貨者；原因必填 → 申請人「退回修編」，修改後重送單位主管審核 */
-  canReturn(o) { return ['approved', 'loaded'].includes(o.status); },
+  /* 無車退回（G122）：僅「待調度」的託運單；原因必填，結案不可再動 */
+  canReturn(o) { return o.status === 'approved'; },
   returnOrder(o, note, by) {
     note = (note || '').trim();
-    if (!this.canReturn(o)) return { ok: false, error: '僅已核准待派車或已派車未交貨的託運單可退回' };
-    if (!note) return { ok: false, error: '退回時「退回原因」為必填' };
-    Signoff.release(o, '派車調度退回申請人', by || '調度室');
-    this._detach(o, '退回申請人', by);
-    o.status = 'rejected'; o.approvedAt = null; o.reviewNote = note; o.returnedBy = 'dispatch';
+    if (!this.canReturn(o)) return { ok: false, error: '僅「待調度」的託運單可無車退回' };
+    if (!note) return { ok: false, error: '無車退回時「退回原因」為必填' };
+    o.status = 'noCar'; o.approvedAt = null; o.noCarNote = note; o.noCarBy = by || '調度室'; o.noCarAt = new Date();
+    return { ok: true };
+  },
+  /* 移出派車單（調度中、未送審）：回「待調度」 */
+  unassign(o, by) {
+    const d = this.dispatchOf(o);
+    if (!d || o.status !== 'loaded') return { ok: false, error: '此託運單不在派車單內' };
+    if (d.submitted) return { ok: false, error: '派車單已送審，請先將是否送審改為「否」' };
+    this._detach(o, '移出派車單', by);
+    o.status = 'approved';
     return { ok: true };
   },
   _dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet) {

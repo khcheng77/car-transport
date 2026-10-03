@@ -46,7 +46,7 @@ const ModuleA = {
       loadMin, unloadMin,            // 上貨/下貨時間（分）
       handleMin,                     // 站內佔用時間＝上貨＋下貨（G15）
       submitSeq: this.approveSeq++,  // 送出序（同站處理順序＝送出先後，取代原審核通過時間 G16）
-      status: 'submitted',           // submitted →（自動媒合）→ matched / unscheduled
+      status: 'submitted',           // draft（申請中）／submitted →（自動媒合）→ matched（待出車）／unscheduled（待調度）／noCar（無車退回）
       assignedShift: null,
       note: '',
       matchTrace: null,              // 自動媒合過程（供明細顯示）
@@ -60,6 +60,17 @@ const ModuleA = {
   // 成功 → status='matched'、assignedShift/arrival 填入；失敗 → status='unscheduled'、note 記原因
   submit(data) {
     const app = this.createApp(data);
+    return this.submitDraft(app);
+  },
+  /* 暫存（申請中）：建立但不送出、不媒合；之後可於明細「送出申請」 */
+  saveDraft(data) {
+    const app = this.createApp(data);
+    app.status = 'draft';
+    return app;
+  },
+  submitDraft(app) {
+    if (!['draft', 'submitted'].includes(app.status)) return { app, result: { ok: false, msg: '僅申請中的申請單可送出' } };
+    app.status = 'submitted';
     const r = this.match(app);
     app.matchTrace = r.trace;
     if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }   // 成功即排班生效（巡迴物品轉運不送運輸主管簽審）
@@ -76,12 +87,14 @@ const ModuleA = {
     return r;
   },
 
-  // 媒合成功即完成排班，不需接收人「確認接受」；交貨確認可由 matched 直接進入
-  // 交貨確認（matched → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
-  confirmDelivery(app, by) {
-    if (app.status !== 'matched') return false;
-    app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室';
-    return true;
+  // 媒合成功即完成排班（待出車）；到收貨時間即「已出車」、車輛使用實登登錄里程後「已回登」（Flow 推導）
+  /* 無車退回（G122）：調度可將「待調度」（未排入班次）的申請單退回，原因必填，結案不可再動 */
+  returnNoCar(app, note, by) {
+    note = (note || '').trim();
+    if (app.status !== 'unscheduled') return { ok: false, error: '僅「待調度」的申請單可無車退回' };
+    if (!note) return { ok: false, error: '無車退回時「退回原因」為必填' };
+    app.status = 'noCar'; app.noCarNote = note; app.noCarBy = by || '調度室'; app.noCarAt = new Date();
+    return { ok: true };
   },
 
   /* ---- 駕駛異常回報（G20）----
@@ -141,9 +154,16 @@ const ModuleA = {
     return app;
   },
 
+  /* ---- 狀態推導（Flow）：A 不經調度主管簽審；已出車＝收貨日期＋班次出發時間已到 ---- */
+  signed: false,
+  departAt(app) {
+    const sh = DB.regionalShifts.find(s => s.id === app.assignedShift);
+    return app.assignedShift ? Flow.at(app.serviceDate, sh ? sh.depart : app.arrival) : null;
+  },
+
   /* ---- 車輛使用實登（已排入班次即可登打實際車輛／駕駛／里程；巡迴物品轉運不經運輸主管簽審）---- */
   USAGE_POOL: 'LOGI',
-  isScheduled(app) { return ['matched', 'delivered'].includes(app.status) && !!app.assignedShift; },
+  isScheduled(app) { return app.status === 'matched' && !!app.assignedShift; },
   usagePlan(app) {
     if (!app.assignedShift) return { vehicle: null, drivers: [] };
     const plan = this.shiftPlan(app.serviceDate, app.assignedShift);
@@ -182,7 +202,7 @@ const ModuleA = {
      只累計「佔用區間涵蓋 s」的已排入單 → 卸貨後容量、重量、地板同步釋放（3.4/3.5） */
   netLoadAt(shiftId, s, date) {
     return this.applications
-      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status)
+      .filter(a => a.assignedShift === shiftId && a.status === 'matched'
         && (date == null || a.serviceDate === date)) // 僅同日期的單互相競用容量
       .reduce((acc, a) => {
         const seg = this.segmentOf(a);
@@ -197,7 +217,7 @@ const ModuleA = {
   /* 某班次（同日）已排各單的站內處理時間合計（上貨＋下貨＝handleMin 累加） */
   shiftHandleUsed(shiftId, date) {
     return this.applications
-      .filter(a => a.assignedShift === shiftId && ['matched', 'delivered'].includes(a.status)
+      .filter(a => a.assignedShift === shiftId && a.status === 'matched'
         && (date == null || a.serviceDate === date))
       .reduce((sum, a) => sum + (a.handleMin || 0), 0);
   },

@@ -9,17 +9,20 @@ const path = require('path');
 const vm = require('vm');
 
 const JS_DIR = path.join(__dirname, '..', 'js');
-const FILES = ['data.js', 'loadengine.js', 'signoff.js', 'usage.js', 'moduleA.js', 'moduleB.js', 'moduleC.js', 'moduleD.js', 'guide.js'];
+const FILES = ['data.js', 'loadengine.js', 'signoff.js', 'flow.js', 'usage.js', 'moduleA.js', 'moduleB.js', 'moduleC.js', 'moduleD.js', 'guide.js'];
 
 /* 回傳一個全新載入的 context（含 DB / 引擎 / 五模組單例）*/
 function fresh() {
   let src = FILES.map(f => fs.readFileSync(path.join(JS_DIR, f), 'utf8')).join('\n');
   // 匯出頂層 const（VM 中 const 不會掛到 global，串接後由尾段一次取出）
   src += '\n; ({ DB, WasteFactorProvider, checkLoad, effectiveLoad, itemEffective,'
-       + ' ModuleA, ModuleB, ModuleC, ModuleD, Guide, Signoff, Usage, fmtVol, minToHHMM, hhmmToMin });';
+       + ' ModuleA, ModuleB, ModuleC, ModuleD, Guide, Signoff, Usage, Flow, fmtVol, minToHHMM, hhmmToMin });';
   const ctx = { console, Date, Math, Set, Map, String, Number, Array, JSON, isNaN, parseInt, parseFloat };
   vm.createContext(ctx);
-  return vm.runInContext(src, ctx, { filename: 'bundle.js' });
+  const H = vm.runInContext(src, ctx, { filename: 'bundle.js' });
+  // 固定「系統時間」於所有範例日期之前，讓「已出車」只在測試明確設定 Flow._now 時發生（測試不受實際日期影響）
+  H.Flow._now = new Date(2026, 0, 1, 0, 0);
+  return H;
 }
 
 module.exports = { fresh };

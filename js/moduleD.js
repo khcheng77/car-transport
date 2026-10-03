@@ -86,11 +86,11 @@ const ModuleD = {
   },
 
   // 申請端只負責建立，狀態為「待主管簽核」（G74 先簽核、通過才進調度）
-  createApp(data) {
+  createApp(data, opts) {
     const errs = this.validate(data);
     if (errs.length) throw new Error(errs.join('；'));
     const app = Object.assign({ id: 'GU' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
-      status: 'submitted',   // submitted|approved|rejected|draft|dispatched|noVehicle|cancelled|completed|returned
+      status: opts && opts.draft ? 'draft' : 'submitted',   // draft（申請中）|submitted（待二級審）|approved（待調度）|rejected（退回修編）|noVehicle（無車退回）|dispatched；顯示狀態由 Flow 推導
       outcome: null,         // 派車判斷結果：withDriver|selfDrive|noVehicle（G76）
       segs: [],              // 指派區間歷史：{ from(絕對分), vehicle, drivers[], kind, reason, by, at }（G88）
       vehicle: null, driver: null, drivers: [],   // 目前（最新一段）指派，供畫面與相容用
@@ -133,7 +133,16 @@ const ModuleD = {
     app.status = 'draft'; app.approvedAt = null; app.reviewNote = '';
     return true;
   },
-  // 草稿（撤回修改）或「退回修編」（單位主管退回）可修改後重新送出，回到待單位主管審核
+  // 暫存（申請中）修改
+  saveDraft(app, data) {
+    if (app.status !== 'draft') throw new Error('僅「申請中」的申請可暫存修改');
+    const errs = this.validate(data);
+    if (errs.length) throw new Error(errs.join('；'));
+    Object.assign(app, this._fields(data));
+    this._log(app, '暫存修改', data.applicant, '');
+    return app;
+  },
+  // 申請中（暫存／撤回修改）或「退回修編」（單位主管退回）可修改後送出，進入待二級審
   canEdit(app) { return ['draft', 'rejected'].includes(app.status); },
   resubmit(app, data) {
     if (!this.canEdit(app)) throw new Error('僅草稿或「退回修編」的申請可修改後重新送出');
@@ -146,14 +155,6 @@ const ModuleD = {
     app.reviewNote = '';
     return app;
   },
-  canCancel(app) { return ['submitted', 'approved', 'draft', 'rejected'].includes(app.status) && !this.isConfirmed(app); },
-  cancel(app, by) {
-    if (!this.canCancel(app)) return false;
-    this._log(app, '整單撤回', by, '');
-    app.status = 'cancelled';
-    return true;
-  },
-
   /* ---- 指派區間（G88）：每次換車／換司機新增一段，不覆蓋；瞬間切換、不設重疊 ---- */
   segEnd(app, i) { const nx = app.segs[i + 1]; return nx ? nx.from : this.span(app).end; },
   liveSegs(app) {   // 實際生效（長度 > 0）的區間
@@ -170,7 +171,7 @@ const ModuleD = {
   /* ---- 共用資源池佔用判斷（G71/G72）----
      與差旅共乘：以「日」為單位，沿用模組 C 自己排班時的佔用口徑（matched/boarded/completed 的整趟日期）；
      一般用車彼此：依指派區間的實際時段重疊判斷（雙駕駛兩位都算）。保修（G60）與請假（G61）同樣適用。 */
-  C_HOLD: ['matched', 'boarded', 'completed'],
+  C_HOLD: ['matched'],
   _cApps() { return (typeof ModuleC !== 'undefined') ? ModuleC.applications : []; },
   _overlap(a, b) { return a.start < b.end && b.start < a.end; },
   _dHolder(kind, id, rng, exceptId) {
@@ -303,7 +304,12 @@ const ModuleD = {
     app.outcome = r.outcome;
     by = by || '調度室';
     if (r.outcome === 'noVehicle') {
-      app.status = 'noVehicle'; app.segs = [];
+      // 無車退回（G122）：結案不可再動，不送調度主管簽審，立即通知申請人
+      app.status = 'noVehicle'; app.segs = []; this._sync(app);
+      app.dispatchedAt = new Date(); app.dispatchedBy = by; app.dispatchNote = note || '';
+      app.noCarNote = note || '判定無車可派';
+      this.sendResultMail(app);
+      return { ok: true, outcome: r.outcome };
     } else {
       app.status = 'dispatched';
       app.segs = [{ from: this.span(app).start, vehicle: r.vehicle, drivers: r.drivers, kind: '原始指派', reason: '', by, at: new Date() }];
@@ -458,7 +464,7 @@ const ModuleD = {
     if (app.pendingReturn) return { ok: false, error: '已有待調度確認的提前歸還申請' };
     if (!o.date || !o.time) return { ok: false, error: '請填寫提前歸還的日期與時間' };
     const sp = this.span(app), ne = this.absMin(o.date, o.time);
-    if (ne < sp.start || ne >= sp.end) return { ok: false, error: `提前歸還時間須介於 ${this.fmtAbs(sp.start)} 與目前結束 ${this.fmtAbs(sp.end)} 之前` };
+    if (ne <= sp.start || ne >= sp.end) return { ok: false, error: `提前歸還時間須晚於用車起 ${this.fmtAbs(sp.start)}、早於目前結束 ${this.fmtAbs(sp.end)}` };
     app.pendingReturn = { date: o.date, time: o.time, reason: o.reason || '', by: by || app.applicant, at: new Date() };
     this._log(app, '提出提前歸還', by || app.applicant, `新結束 ${o.date} ${o.time}${o.reason ? '（' + o.reason + '）' : ''}，待調度確認`);
     return { ok: true };
@@ -472,9 +478,8 @@ const ModuleD = {
     app.segs = app.segs.filter((s, i) => i === 0 || s.from < ne);
     this._sync(app);
     app.pendingReturn = null; app.releasedAt = new Date();
-    const whole = ne === sp.start;
-    if (whole) app.status = 'returned';
-    const text = whole ? '整段歸還（未出車），資源全數釋放' : `結束時間 ${old} → ${pr.date} ${pr.time}，之後時段釋放`;
+    const whole = false;   // G122：刪除「已歸還（未出車）」狀態，提前歸還須晚於用車起
+    const text = `結束時間 ${old} → ${pr.date} ${pr.time}，之後時段釋放`;
     this._log(app, '確認提前歸還', by || '調度室', text + (note ? `｜${note}` : ''));
     this.sendMail(app, '提前歸還', text);
     return { ok: true, whole };
@@ -487,13 +492,9 @@ const ModuleD = {
     return { ok: true };
   },
 
-  /* 行程完成（dispatched → completed）：司機回報或調度確認；完成後即不再佔用資源 */
-  completeTrip(app, by) {
-    if (app.status !== 'dispatched' || !Signoff.effective(app)) return false;
-    app.status = 'completed'; app.completedAt = new Date(); app.completedBy = by || '調度室';
-    app.pendingReturn = null;
-    return true;
-  },
+  /* 狀態推導（Flow）：已出車＝用車起時間已到；已回登＝車輛使用實登 */
+  departAt(app) { return Flow.at(app.startDate, app.startTime); },
+
 
   /* ---- 加班系統介接（G87）：即時查詢司機剩餘可加班工時（雛形以 DB.overtimeRemaining 模擬）。
      僅供調度參考，系統不計算工時、不據以擋派車。 */
