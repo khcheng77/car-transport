@@ -1640,13 +1640,13 @@ function renderBApproveList(p) {
     <div class="section-h">單位主管審核（直屬主管）</div>
     <div class="section-sub">員工建立院區物品轉運申請單後由直屬單位主管審核。點「細節」進入單據檢視與審核；退回修編時申請人可修改後重新送出，未核准前不進派車池。（G63）</div>
     <div class="card">
-      <div class="card-title">查詢條件</div>
+      <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="bap-search">🔍 查詢</button></div>
       ${infoGrid('bap-q-fields', [
         fInput('申請人（模糊）', `<input type="text" id="bap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
         fInput('行程方向', `<select id="bap-q-leg">${legOpts}</select>`),
         fInput('狀態', `<select id="bap-q-status">${stOpts}</select>`),
       ].join(''))}
-      <button class="btn btn-primary btn-sm" id="bap-search">🔍 查詢</button>
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
@@ -2286,13 +2286,13 @@ function renderCApproveList(p) {
     <div class="section-h">單位主管審核（直屬主管）</div>
     <div class="section-sub">員工填單後由直屬單位主管審核差旅共乘申請。點「細節」進入單據檢視與審核；退回修編時申請人可修改後重新送出，未核准前不進排班池。（G63）</div>
     <div class="card">
-      <div class="card-title">查詢條件</div>
+      <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="cap-search">🔍 查詢</button></div>
       ${infoGrid('cap-q-fields', [
         fInput('申請人（模糊）', `<input type="text" id="cap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
         fInput('任務型態', `<select id="cap-q-type">${typeOpts}</select>`),
         fInput('狀態', `<select id="cap-q-status">${stOpts}</select>`),
       ].join(''))}
-      <button class="btn btn-primary btn-sm" id="cap-search">🔍 查詢</button>
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
