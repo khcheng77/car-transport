@@ -2479,8 +2479,9 @@ function renderCApproveDetail(p, id) {
 
 /* ============================================================
    模組 C · 派車調度（業務單位）— index（依出發日期）／明細（該日）
-   明細：待媒合申請單（可退回、手動指派）→ 批次媒合（本日）產生派車單（同車為一張）
-        → 派車單可異動車種類型／車號／駕駛人1／駕駛人2／是否送審；已派申請單可退回、確認完成（G112–G115）
+   查詢：出發日期（起）預設當日、（迄）預設當日＋14 天（G128）
+   明細：待調度申請單（批次媒合／手動指派：新派車單或併入未送審派車單／無車退回）
+        → 派車單 grid（「明細」開視窗：異動車種類型／車號／駕駛人1／駕駛人2／是否送審、移出申請單）（G112–G115／G128）
    ============================================================ */
 let cReview = { view: 'list', date: null, query: { from: '', to: '', status: '' }, batchResult: null };
 const C_LIVE = ['approved', 'matched'];
@@ -2513,6 +2514,8 @@ RENDER.c_review = function () {
   const p = $('#page-c_review');
   if (cReview.view === 'detail' && cReview.date) return renderCrDetail(p, cReview.date);
   const q = cReview.query;
+  if (!q.from) q.from = bDayStr(0);     // 預設：起＝系統當日、迄＝系統當日＋14 天（G128）
+  if (!q.to) q.to = bDayStr(14);
   const stOpts = [['', '全部'], ['pending', '有待調度'], ['draft', '有調度中（未送審）派車單'], ['signing', '有調度主管審']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
@@ -2534,6 +2537,7 @@ RENDER.c_review = function () {
     </div>`;
   $('#cr-goto-driver').onclick = () => goto('c_driver');
   $('#crq-search').onclick = () => {
+    if ($('#crq-from').value && $('#crq-to').value && $('#crq-to').value < $('#crq-from').value) { toast('出發日期（迄）不可早於出發日期（起）', 'err'); return; }
     cReview.query = { from: $('#crq-from').value, to: $('#crq-to').value, status: $('#crq-status').value };
     renderCrGrid(); toast('查詢完成', 'ok');
   };
@@ -2555,7 +2559,7 @@ function renderCrGrid() {
         <td>${n(r.draft, 'b-gray')}</td><td>${n(r.signing, 'b-amber')}</td><td>${n(r.effective, 'b-green')}</td>
         <td>${n(r.returned, 'b-red')}</td><td>${r.done}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="muted" style="margin-top:8px;">點擊左側「明細」進入該出發日期：批次媒合、派車單異動與送審、退回申請單。</div>`;
+    <div class="muted" style="margin-top:8px;">點擊左側「明細」進入該出發日期：批次媒合、手動指派、派車單異動與送審、無車退回。</div>`;
   $$('#crq-grid [data-crday]').forEach(b => b.onclick = () => {
     Object.assign(cReview, { view: 'detail', date: b.dataset.crday, batchResult: null }); RENDER.c_review();
   });
@@ -2569,66 +2573,165 @@ function cOrderBadge(o) {
   if (apps.length && apps.every(a => Signoff.effective(a))) return '<span class="badge b-green">已送審 · 已生效</span>';
   return '<span class="badge b-navy">已送審</span>';
 }
+// 派車調度明細（G128）：待調度申請單（批次媒合／手動指派／無車退回）＋派車單 grid（「明細」開視窗異動與送審）
+const cDrvOpts = (cur, blank) => bOpt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'BIZ').map(d => bOpt(d.id, `${d.name}（${d.id}｜歸屬 ${d.homeSite}）`, cur)).join('');
+const cPaxOf = apps => apps.reduce((s, a) => s + a.pax, 0);
+// 車號下拉（依車種類型）：座位不足者停用
+function cFillVehicles(typeSel, vehSel, cur, pax) {
+  const t = $(typeSel).value;
+  $(vehSel).innerHTML = bOpt('', t ? '請選擇' : '請先選車種類型', cur) + (t ? Usage.vehiclesOf('BIZ', t)
+    .map(v => bOpt(v.id, `${v.id}（${v.name}｜${v.seats} 座${v.seats < pax ? '・座位不足' : ''}）`, cur, v.seats < pax)).join('') : '');
+}
+// 派車單區塊（原明細頁的派車單卡片）：表單＋申請單 grid＋異動紀錄；於視窗內顯示
+function cOrderCardHtml(o) {
+  const oa = ModuleC.dispatchApps(o), pax = cPaxOf(oa), locked = ModuleC.started(o), k = 'cro-' + o.id;
+  return `
+    <div style="text-align:right;margin:-4px 0 8px;">${cOrderBadge(o)}</div>
+    ${infoGrid(k + '-f', [
+      fItem('派車單號', `<b style="color:var(--navy);">${o.id}</b>${o.manual ? ' <span class="badge b-gray">手動指派</span>' : ''}`),
+      fItem('派遣人', o.dispatcher),
+      fItem('派遣時間', fmtTime(o.dispatchedAt)),
+      fInput('車種類型', `<select id="${k}-type" ${locked ? 'disabled' : ''}>${Usage.types('BIZ').map(t => bOpt(t, t, o.vehicleType)).join('')}</select>`),
+      fInput(`車號 <span class="hint">共 ${pax} 人</span>`, `<select id="${k}-veh" ${locked ? 'disabled' : ''}></select>`),
+      fInput('駕駛人1', `<select id="${k}-d1" ${locked ? 'disabled' : ''}>${cDrvOpts(o.driver1, '請選擇')}</select>`),
+      fInput('駕駛人2', `<select id="${k}-d2" ${locked ? 'disabled' : ''}>${cDrvOpts(o.driver2, '（無）')}</select>`),
+      fInput('是否送審', `<select id="${k}-sub" ${locked ? 'disabled' : ''}>${bOpt('no', '否（未送審）', o.submitted ? 'yes' : 'no')}${bOpt('yes', '是（送運輸主管簽審）', o.submitted ? 'yes' : 'no')}</select>`),
+    ].join(''))}
+    <div style="margin:6px 0 12px;">${locked ? '<span class="hint">派車單已出車，不可再異動。</span>'
+      : `<button class="btn btn-primary btn-sm" data-crsave="${o.id}">💾 儲存派車單</button>
+         <span class="hint" style="margin-left:8px;">送審後才送運輸主管簽審，通過才生效；已送審者異動車輛／駕駛將重新送簽。</span>`}</div>
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>出發</th><th>人數</th><th>狀態</th><th>操作</th></tr></thead><tbody>
+      ${oa.map(a => `<tr><td><b style="color:var(--navy);">${a.id}</b>${a.overridden ? ' <span class="badge b-amber">覆寫</span>' : ''}</td><td>${a.applicant}</td>
+        <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRoute(a)}</td><td>${cTimeText(a)}</td><td>${a.pax}</td>
+        <td>${Flow.badge(a)}${signBadge(a)}</td>
+        <td>${!o.submitted && !locked ? `<button class="btn btn-ghost btn-sm" data-crout="${a.id}">移出派車單</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${o.log.length ? `<details style="margin-top:10px;"><summary class="muted" style="cursor:pointer;">派車單異動紀錄（${o.log.length}）</summary>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
+      ${o.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td style="text-align:left;">${l.note || '—'}</td></tr>`).join('')}
+      </tbody></table></div></details>` : ''}`;
+}
+// 派車單明細視窗：異動車輛／駕駛、是否送審、移出申請單
+function openCOrderModal(o, by, rerender) {
+  openModal(`派車單明細 · ${o.id}`, cOrderCardHtml(o), { wide: true });
+  const k = 'cro-' + o.id, pax = cPaxOf(ModuleC.dispatchApps(o));
+  cFillVehicles(`#${k}-type`, `#${k}-veh`, o.vehicle, pax);
+  $(`#${k}-type`).onchange = () => cFillVehicles(`#${k}-type`, `#${k}-veh`, '', pax);
+  const done = msg => { toast(msg, 'ok'); closeModal(); rerender(); };
+  const save = $('#modal-body [data-crsave]');
+  if (save) save.onclick = async () => {
+    const f = { vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value,
+      driver2: $(`#${k}-d2`).value, submitted: $(`#${k}-sub`).value === 'yes' };
+    const pre = ModuleC.dispatchResourceError(o, f);
+    if (pre) { toast(pre, 'err'); return; }
+    const text = !o.submitted && f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效。'
+      : o.submitted && !f.submitted ? '派車單將<b>撤回送審</b>，各申請單的待簽審紀錄一併撤回。'
+      : o.submitted ? '已送審的派車單異動車輛／駕駛後將<b>重新送運輸主管簽審</b>。' : '儲存派車單異動（尚未送審）。';
+    if (!(await confirmDialog({ title: `確認儲存派車單 ${o.id}？`, text }))) return;
+    const r = ModuleC.updateDispatch(o, f, by());
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    done(`派車單 ${o.id} 已儲存`);
+  };
+  $$('#modal-body [data-crout]').forEach(b => b.onclick = confirmThen({ title: '確認移出派車單？', text: '此申請單將移出派車單、回到「待調度」。' }, () => {
+    const r = ModuleC.unassign(ModuleC.applications.find(x => x.id === b.dataset.crout), by());
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    done('已移出派車單，回待調度');
+  }));
+}
+// 手動指派視窗：新派車單（指定車種類型／車號／駕駛人1／駕駛人2，產生未送審派車單）或併入未送審派車單
+function openCManualAssign(a, by, rerender) {
+  const targets = ModuleC.manualTargets(a.departDate);
+  const tgtText = o => { const oa = ModuleC.dispatchApps(o), v = DB.vehicles.find(x => x.id === o.vehicle);
+    return `${o.id}｜${o.vehicle}（${o.vehicleType}）｜${[o.driver1, o.driver2].filter(Boolean).map(drvName).join('＋') || '未指定駕駛'}｜${oa.length} 張｜${cPaxOf(oa)}／${v ? v.seats : '—'} 人｜${[...new Set(oa.map(cRoute))].join('、')}`; };
+  const veh0 = DB.vehicles.find(v => v.pool === 'BIZ' && v.seats >= a.pax);
+  openModal(`手動指派 · ${a.id}`, `
+    <div class="card-desc">${a.applicant}｜${cRoute(a)}｜${a.type === 'round' ? `來回（回 ${a.returnDate} ${a.earliestReturn}）` : '單程'}｜${a.pax} 人｜出發 <b>${a.departDate} ${a.earliestPickup}</b></div>
+    ${infoGrid('cma-mode', [fInput('指派方式', gPills('cma-mode', 'new', [['new', '新派車單（暫存未送審）'], ['merge', `併入既有派車單（${targets.length} 張可併）`]]), { full: true, stack: true })].join(''))}
+    <div id="cma-new">${infoGrid('cma-new-f', [
+      fInput('車種類型 <span style="color:#c0392b;">*</span>', `<select id="cma-type">${bOpt('', '請選擇', veh0 ? veh0.type : '')}${Usage.types('BIZ').map(t => bOpt(t, t, veh0 ? veh0.type : '')).join('')}</select>`),
+      fInput('車號 <span style="color:#c0392b;">*</span>', `<select id="cma-veh"></select>`),
+      fInput('駕駛人1 <span style="color:#c0392b;">*</span>', `<select id="cma-d1">${cDrvOpts('', '請選擇')}</select>`),
+      fInput('駕駛人2', `<select id="cma-d2">${cDrvOpts('', '（無）')}</select>`),
+    ].join(''))}</div>
+    <div id="cma-merge" style="display:none;">${targets.length ? infoGrid('cma-merge-f', [
+      fInput('併入派車單 <span style="color:#c0392b;">*</span>', `<select id="cma-target">${targets.map(o => bOpt(o.id, tgtText(o), '')).join('')}</select>`, { full: true }),
+    ].join('')) : '<div class="callout">本出發日期沒有尚未送審、未出車的派車單可併入。</div>'}</div>
+    <div class="hint" style="margin-top:8px;">指派時檢核座位、保修、請假、其他派車單與一般用車佔用；產生或併入的派車單為未送審，確認後於派車單明細送審。手動指派會留下人工覆寫紀錄，此單不再被批次媒合重排。</div>
+    <div style="text-align:center;margin-top:18px;">
+      <button class="btn btn-primary" id="cma-ok">✓ 確認指派</button>
+      <button class="btn btn-ghost" id="cma-cancel">取消</button>
+    </div>`);
+  cFillVehicles('#cma-type', '#cma-veh', veh0 ? veh0.id : '', a.pax);
+  $('#cma-type').onchange = () => cFillVehicles('#cma-type', '#cma-veh', '', a.pax);
+  const mode = () => ($('#modal-body input[name=cma-mode]:checked') || {}).value || 'new';
+  $$('#modal-body input[name=cma-mode]').forEach(r => r.onchange = () => {
+    $$('#cma-mode-wrap .radio-pill').forEach(l => l.classList.toggle('sel', l.querySelector('input').checked));
+    $('#cma-new').style.display = mode() === 'new' ? '' : 'none';
+    $('#cma-merge').style.display = mode() === 'merge' ? '' : 'none';
+  });
+  $('#cma-cancel').onclick = closeModal;
+  $('#cma-ok').onclick = async () => {
+    let pre, text, act;
+    if (mode() === 'new') {
+      const f = { vehicleType: $('#cma-type').value, vehicle: $('#cma-veh').value, driver1: $('#cma-d1').value, driver2: $('#cma-d2').value };
+      pre = ModuleC.dispatchResourceError({ apps: [a.id] }, f);
+      text = `${a.id} 指派 <b>${f.vehicle}</b>（${f.vehicleType}）｜駕駛 ${[f.driver1, f.driver2].filter(Boolean).map(drvName).join('＋')}，產生一張<b>未送審</b>派車單（出發日期 ${a.departDate}）。`;
+      act = () => ModuleC.manualAssign(a, f, by());
+    } else {
+      const o = targets.find(x => x.id === ($('#cma-target') || {}).value);
+      if (!o) { toast('請選擇要併入的派車單', 'err'); return; }
+      pre = ModuleC.dispatchResourceError({ apps: o.apps.concat(a.id) }, o);
+      text = `${a.id} 併入派車單 <b>${o.id}</b>（${o.vehicle}），派車單維持未送審。`;
+      act = () => ModuleC.manualMerge(a, o, by());
+    }
+    if (pre) { toast(pre, 'err'); return; }
+    if (!(await confirmDialog({ title: '確認手動指派？', text }))) return;
+    const r = act();
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    toast(`${a.id} 已${mode() === 'new' ? '指派，產生派車單 ' : '併入派車單 '}${r.dispatch.id}`, 'ok');
+    closeModal(); rerender();
+  };
+}
 function renderCrDetail(p, date) {
   const apps = ModuleC.applications.filter(a => a.departDate === date);
   const waiting = apps.filter(a => a.status === 'approved');
   const orders = ModuleC.liveDispatches().filter(o => o.date === date);
   const returned = apps.filter(a => a.status === 'noCar');
   const br = cReview.batchResult;
-  const opt = (v, t, cur, dis) => `<option value="${v}" ${v === cur ? 'selected' : ''}${dis ? ' disabled' : ''}>${t}</option>`;
-  const drvOpts = (cur, blank) => opt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'BIZ').map(d => opt(d.id, `${d.name}（${d.id}｜歸屬 ${d.homeSite}）`, cur)).join('');
-  const orderCard = o => {
-    const oa = ModuleC.dispatchApps(o), pax = oa.reduce((s, a) => s + a.pax, 0), locked = ModuleC.started(o);
-    const k = 'cro-' + o.id;
-    return `<div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>派車單 <b style="color:var(--navy);">${o.id}</b>${o.manual ? ' <span class="g-tag">手動指派</span>' : ''}</span>${cOrderBadge(o)}</div>
-      ${infoGrid(k + '-f', [
-        fItem('派車單號', `<b style="color:var(--navy);">${o.id}</b>`),
-        fItem('派遣人', o.dispatcher),
-        fItem('派遣時間', fmtTime(o.dispatchedAt)),
-        fInput('車種類型', `<select id="${k}-type" ${locked ? 'disabled' : ''}>${Usage.types('BIZ').map(t => opt(t, t, o.vehicleType)).join('')}</select>`),
-        fInput(`車號 <span class="hint">共 ${pax} 人</span>`, `<select id="${k}-veh" ${locked ? 'disabled' : ''}></select>`),
-        fInput('駕駛人1', `<select id="${k}-d1" ${locked ? 'disabled' : ''}>${drvOpts(o.driver1, '請選擇')}</select>`),
-        fInput('駕駛人2', `<select id="${k}-d2" ${locked ? 'disabled' : ''}>${drvOpts(o.driver2, '（無）')}</select>`),
-        fInput('是否送審', `<select id="${k}-sub" ${locked ? 'disabled' : ''}>${opt('no', '否（未送審）', o.submitted ? 'yes' : 'no')}${opt('yes', '是（送運輸主管簽審）', o.submitted ? 'yes' : 'no')}</select>`),
-      ].join(''))}
-      <div style="margin:6px 0 12px;">${locked ? '<span class="hint">派車單已出車，不可再異動。</span>'
-        : `<button class="btn btn-primary btn-sm" data-crsave="${o.id}">💾 儲存派車單</button>
-           <span class="hint" style="margin-left:8px;">送審後才送運輸主管簽審，通過才生效；已送審者異動車輛／駕駛將重新送簽。</span>`}</div>
-      <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>出發</th><th>人數</th><th>狀態</th><th>操作</th></tr></thead><tbody>
-        ${oa.map(a => `<tr><td><b style="color:var(--navy);">${a.id}</b>${a.overridden ? ' <span class="badge b-amber">覆寫</span>' : ''}</td><td>${a.applicant}</td>
-          <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRoute(a)}</td><td>${cTimeText(a)}</td><td>${a.pax}</td>
-          <td>${Flow.badge(a)}${signBadge(a)}</td>
-          <td>${!o.submitted && !locked ? `<button class="btn btn-ghost btn-sm" data-crout="${a.id}">移出派車單</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
-      </tbody></table></div>
-      ${o.log.length ? `<details style="margin-top:10px;"><summary class="muted" style="cursor:pointer;">派車單異動紀錄（${o.log.length}）</summary>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
-        ${o.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td style="text-align:left;">${l.note || '—'}</td></tr>`).join('')}
-        </tbody></table></div></details>` : ''}
-    </div>`;
-  };
+  const by = () => (($('#cr-by') || {}).value || '').trim() || '調度室';
   p.innerHTML = `
     <div class="section-h">派車調度明細 · 出發日期 ${date}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>待調度申請單（${waiting.length} 筆）</span>
         <span><input type="text" id="cr-by" value="調度室-值班人員" style="width:150px;margin-right:6px;" title="派遣人">
         <button class="btn btn-accent btn-sm" id="cr-run">▶ 批次媒合</button></span></div>
-      <div class="card-desc">對<b>本出發日期</b>已核准的申請單執行批次媒合（已成功單不重排）：媒合到<b>同一台車</b>的申請單產生一張<b>派車單</b>（派車單號、派遣人、派遣時間自動給予，併入派車單即為「調度中」）。媒合不成者仍為待調度並註明原因，可手動指派；確定無車可派者按<b>無車退回</b>（原因必填，結案）。</div>
+      <div class="card-desc">對<b>本出發日期</b>已核准的申請單執行批次媒合（已成功單不重排）：媒合到<b>同一台車</b>的申請單產生一張<b>派車單</b>（派車單號、派遣人、派遣時間自動給予，併入派車單即為「調度中」）。媒合不成者仍為待調度並註明原因，可按<b>手動指派</b>：指定車輛／駕駛產生暫存派車單，或併入本日尚未送審的派車單；確定無車可派者按<b>無車退回</b>（原因必填，結案）。</div>
       ${waiting.length === 0 ? '<div class="empty">本日沒有待調度的申請單。</div>' : `
       <div class="table-wrap"><table class="dt"><thead><tr>
         <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>出發</th><th>人數</th><th>狀態</th><th>操作</th></tr></thead><tbody>
         ${waiting.map(a => `<tr><td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
           <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRoute(a)}</td><td>${cTimeText(a)}</td><td>${a.pax}</td>
           <td>${Flow.badge(a)}${a.note ? `<br><span class="hint">${a.note}</span>` : ''}</td>
-          <td><button class="btn btn-ghost btn-sm" data-crassign="${a.id}">手動指派</button>
+          <td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" data-crassign="${a.id}">手動指派</button>
             <button class="btn btn-danger btn-sm" data-crret="${a.id}">無車退回</button></td></tr>`).join('')}
       </tbody></table></div>`}
       ${br ? `<div class="result ok" style="margin-top:14px;"><div class="r-head">✓ 批次 ${br.batch.id} 完成（派遣人 ${br.batch.triggeredBy}）</div>
         <div>處理 ${br.batch.processed} 筆｜成功 ${br.batch.matched} 筆｜未媒合（仍待調度）${br.batch.coordinate} 筆｜產生派車單 ${br.dispatches.length} 張</div></div>
         <div class="trace">${br.trace.join('\n')}</div>` : ''}
     </div>
-    ${orders.length ? orders.map(orderCard).join('') : '<div class="card"><div class="card-title">派車單</div><div class="empty">本日尚無派車單。按上方「批次媒合」產生。</div></div>'}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>派車單（${orders.length} 張）</span>
+        <span class="muted">點「明細」異動車輛／駕駛、送審或移出申請單</span></div>
+      ${orders.length === 0 ? '<div class="empty">本日尚無派車單。按上方「批次媒合」或「手動指派」產生。</div>' : `
+      <div class="table-wrap"><table class="dt"><thead><tr>
+        <th></th><th>派車單號</th><th>派遣人</th><th>派遣時間</th><th>車種類型</th><th>車號</th><th>駕駛人1</th><th>駕駛人2</th><th>申請單數</th><th>狀態</th></tr></thead><tbody>
+        ${orders.map(o => `<tr><td><button class="btn btn-ghost btn-sm" data-crorder="${o.id}">明細</button></td>
+          <td><b style="color:var(--navy);">${o.id}</b>${o.manual ? ' <span class="badge b-gray">手動</span>' : ''}</td><td>${o.dispatcher}</td><td>${fmtTime(o.dispatchedAt)}</td>
+          <td>${o.vehicleType || '—'}</td><td>${usageVehText(o.vehicle)}</td><td>${o.driver1 ? drvName(o.driver1) : '—'}</td><td>${o.driver2 ? drvName(o.driver2) : '—'}</td>
+          <td>${ModuleC.dispatchApps(o).length}</td><td>${cOrderBadge(o)}</td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>
     ${returned.length ? `<div class="card"><div class="card-title">無車退回</div>
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>路線</th><th>狀態</th><th>原因</th></tr></thead><tbody>
       ${returned.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${cRoute(a)}</td><td>${Flow.badge(a)}</td>
@@ -2654,88 +2757,15 @@ function renderCrDetail(p, date) {
   const rerender = () => { RENDER.c_review(); renderCaList(); };
   $('#cr-back').onclick = () => { Object.assign(cReview, { view: 'list', batchResult: null }); RENDER.c_review(); };
   $('#cr-run').onclick = confirmThen({ title: '確認執行批次媒合？', text: `將對出發日期 <b>${date}</b> 已核准的申請單執行批次媒合（已成功單不重排），媒合到同一台車者產生一張派車單（未送審）。` }, () => {
-    const by = $('#cr-by').value.trim() || '調度室';
-    cReview.batchResult = ModuleC.runBatch(date, by, { days: 0 });
+    cReview.batchResult = ModuleC.runBatch(date, by(), { days: 0 });
     toast(`批次 ${cReview.batchResult.batch.id} 完成，產生派車單 ${cReview.batchResult.dispatches.length} 張`, 'ok');
     rerender();
   });
-  // 派車單：車種類型 → 車號連動
-  orders.forEach(o => {
-    const k = 'cro-' + o.id, oa = ModuleC.dispatchApps(o), pax = oa.reduce((s, a) => s + a.pax, 0);
-    const fill = cur => { const t = $(`#${k}-type`).value;
-      $(`#${k}-veh`).innerHTML = opt('', '請選擇', cur) + Usage.vehiclesOf('BIZ', t)
-        .map(v => opt(v.id, `${v.id}（${v.name}｜${v.seats} 座${v.seats < pax ? '・座位不足' : ''}）`, cur, v.seats < pax)).join(''); };
-    fill(o.vehicle);
-    $(`#${k}-type`).onchange = () => fill('');
-  });
-  $$('#page-c_review [data-crsave]').forEach(b => b.onclick = async () => {
-    const o = ModuleC.liveDispatches().find(x => x.id === b.dataset.crsave), k = 'cro-' + o.id;
-    const f = { vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value,
-      driver2: $(`#${k}-d2`).value, submitted: $(`#${k}-sub`).value === 'yes' };
-    const pre = ModuleC.dispatchResourceError(o, f);
-    if (pre) { toast(pre, 'err'); return; }
-    const text = !o.submitted && f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效。'
-      : o.submitted && !f.submitted ? '派車單將<b>撤回送審</b>，各申請單的待簽審紀錄一併撤回。'
-      : o.submitted ? '已送審的派車單異動車輛／駕駛後將<b>重新送運輸主管簽審</b>。' : '儲存派車單異動（尚未送審）。';
-    if (!(await confirmDialog({ title: `確認儲存派車單 ${o.id}？`, text }))) return;
-    const r = ModuleC.updateDispatch(o, f, $('#cr-by').value.trim() || '調度室');
-    if (!r.ok) { toast(r.error, 'err'); return; }
-    toast(`派車單 ${o.id} 已儲存${!o.submitted ? '' : '（已送審）'}`, 'ok');
-    rerender();
-  });
+  $$('#page-c_review [data-crorder]').forEach(b => b.onclick = () => openCOrderModal(orders.find(x => x.id === b.dataset.crorder), by, rerender));
+  $$('#page-c_review [data-crassign]').forEach(b => b.onclick = () => openCManualAssign(ModuleC.applications.find(x => x.id === b.dataset.crassign), by, rerender));
   $$('#page-c_review [data-crret]').forEach(b => b.onclick = () => openNoCarDialog(ModuleC.applications.find(x => x.id === b.dataset.crret),
     (a, note, by) => ModuleC.returnApp(a, note, by), rerender));
-  $$('#page-c_review [data-crout]').forEach(b => b.onclick = confirmThen({ title: '確認移出派車單？', text: '此申請單將移出派車單、回到「待調度」。' }, () => {
-    const r = ModuleC.unassign(ModuleC.applications.find(x => x.id === b.dataset.crout), '調度室');
-    if (!r.ok) { toast(r.error, 'err'); return; } toast('已移出派車單，回待調度', 'ok'); rerender();
-  }));
-  $$('#page-c_review [data-crassign]').forEach(b => b.onclick = () => openOverrideDialog(b.dataset.crassign, rerender));
   initMasonry(p);
-}
-/* C-4 人工覆寫：調度室手動改派車輛/司機 */
-function openOverrideDialog(id, onDone) {
-  const a = ModuleC.applications.find(x => x.id === id);
-  if (!a) return;
-  // 共用資源池（G71/G72）：一般用車已派出的車輛/司機，於本趟日期內不可改派（先佔先贏）
-  const cDates = ModuleC.tripDates(a);
-  const occs = [['一般用車', ModuleD.dayOccupancy()]];
-  const heldBy = (kind, id) => { for (const [label, o] of occs) { const dt = cDates.find(x => o[kind].has(id + '|' + x)); if (dt) return `${label} ${o[kind].get(id + '|' + dt)}`; } return null; };
-  const vOpts = DB.vehicles.filter(v => v.pool === 'BIZ')
-    .map(v => { const h = a.vehicle === v.id ? null : heldBy('veh', v.id);
-      return `<option value="${v.id}" ${a.vehicle === v.id ? 'selected' : ''}${h ? ' disabled' : ''}>${v.id}（${v.name}｜${v.seats} 座｜歸屬 ${v.homeSite}）${h ? `｜⚠ ${h} 佔用` : ''}</option>`; }).join('');
-  const dOpts = DB.drivers.filter(d => d.pool === 'BIZ')
-    .map(d => { const h = a.driver === d.id ? null : heldBy('drv', d.id);
-      return `<option value="${d.id}" ${a.driver === d.id ? 'selected' : ''}${h ? ' disabled' : ''}>${d.id}（${d.name}｜歸屬 ${d.homeSite}）${h ? `｜⚠ ${h} 任務` : ''}</option>`; }).join('');
-  openModal(`調度室手動指派 · ${a.id}`, `
-    <div class="callout info" style="margin-bottom:12px;">
-      ${a.origin} → ${a.dest}｜${a.pax} 人｜${a.departDate} ${a.earliestPickup}<br>
-      調度室可直接指派，<b>不退回員工重新申請</b>；指派後建立一張派車單（未送審），留下人工覆寫紀錄，且此單不再被下一次批次重排。
-    </div>
-    ${infoGrid('ovr-fields', [
-      fInput('指派車輛', `<select id="ovr-veh">${vOpts}</select>`),
-      fInput('指派司機', `<select id="ovr-drv">${dOpts}</select>`),
-      fInput('調整人', `<input type="text" id="ovr-by" value="調度室-值班人員">`),
-      fInput('調整原因（選填）', `<input type="text" id="ovr-note" placeholder="例：原車輛臨時故障，改派備用車">`, { w2: true }),
-    ].join(''))}
-    <div style="text-align:center;margin-top:18px;">
-      <button class="btn btn-primary" id="ovr-ok">▶ 確認指派</button>
-      <button class="btn btn-ghost" id="ovr-cancel">取消</button>
-    </div>`);
-  $('#ovr-cancel').onclick = closeModal;
-  $('#ovr-ok').onclick = async () => {
-    const ok = await confirmDialog({ title: '確認手動指派？', text: '將建立派車單（未送審），並記錄為人工覆寫、不再被批次媒合重排。' });
-    if (!ok) return;
-    let rec;
-    try {
-      rec = ModuleC.overrideAssign(a,
-        { vehicle: $('#ovr-veh').value, driver: $('#ovr-drv').value, note: $('#ovr-note').value.trim() },
-        $('#ovr-by').value.trim() || '調度室');
-    } catch (e) { toast(e.message, 'err'); return; }
-    closeModal();
-    toast(`${a.id} 已手動指派並建立派車單（覆寫紀錄已留存）`, 'ok');
-    (onDone || RENDER.c_review)(); renderCaList();
-    return rec;
-  };
 }
 /* C-4 人工覆寫紀錄一覽（調整人、時間、調整前後內容）*/
 function renderC_overrideLog() {

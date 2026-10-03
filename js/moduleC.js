@@ -366,6 +366,41 @@ const ModuleC = {
     return app.overrides[app.overrides.length - 1];
   },
 
+  /* ---- 手動指派（G128）：調度於派車調度明細頁對「待調度」申請單手動派車 ----
+     · manualAssign：指定車種類型／車號／駕駛人1／駕駛人2，產生一張未送審（暫存）派車單；
+     · manualMerge：併入同一出發日期、尚未送審且未出車的派車單（沿用該派車單的車輛與駕駛，座位須足夠）。
+     皆做資源檢核（dispatchResourceError：座位、保修、請假、其他派車單與一般用車佔用），並留人工覆寫紀錄、不再被批次重排。 */
+  manualTargets(date) { return this.liveDispatches().filter(d => d.date === date && !d.submitted && !this.started(d)); },
+  _overrideLog(app, before, by, note) {
+    app.overridden = true;
+    (app.overrides = app.overrides || []).push({ by: by || '調度室', at: new Date(), before,
+      after: { vehicle: app.vehicle, driver: app.driver, status: app.status }, note: note || '' });
+  },
+  manualAssign(app, f, by) {
+    if (app.status !== 'approved') return { ok: false, error: '僅「待調度」的申請單可手動指派' };
+    const err = this.dispatchResourceError({ apps: [app.id] }, f);
+    if (err) return { ok: false, error: err };
+    const before = { vehicle: app.vehicle, driver: app.driver, status: app.status };
+    app.status = 'matched'; app.groupId = 'M' + app.id;
+    const order = this.createDispatch([app], f, by, { manual: true });
+    this._overrideLog(app, before, by, `手動指派產生派車單 ${order.id}`);
+    return { ok: true, dispatch: order };
+  },
+  manualMerge(app, order, by) {
+    if (app.status !== 'approved') return { ok: false, error: '僅「待調度」的申請單可手動指派' };
+    if (!order || !this.manualTargets(app.departDate).includes(order)) return { ok: false, error: '只能併入同一出發日期、尚未送審且未出車的派車單' };
+    const err = this.dispatchResourceError({ apps: order.apps.concat(app.id) }, order);
+    if (err) return { ok: false, error: err };
+    const before = { vehicle: app.vehicle, driver: app.driver, status: app.status };
+    const first = this.dispatchApps(order)[0];
+    order.apps.push(app.id);
+    app.status = 'matched'; app.groupId = first ? first.groupId : 'M' + app.id;
+    this._applyToApps(order);
+    this._dlog(order, '手動併入', by, app.id);
+    this._overrideLog(app, before, by, `手動併入派車單 ${order.id}`);
+    return { ok: true, dispatch: order };
+  },
+
   /* ================= 派車單（G112–G115）================= */
   dispatchOf(app) { return app.dispatchId ? this.dispatches.find(d => d.id === app.dispatchId && !d.cancelled) || null : null; },
   dispatchApps(order) { return order.apps.map(id => this.applications.find(a => a.id === id)).filter(Boolean); },

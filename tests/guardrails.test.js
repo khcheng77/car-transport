@@ -1302,6 +1302,27 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
    模組 C：派車調度 · 派車單（G112–G115）
    ================================================================= */
 group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／退回申請單）', () => {
+  test('G128 手動指派：指定車種類型／車號／駕駛產生未送審派車單；可併入未送審派車單；留覆寫紀錄', () => {
+    const H = fresh(), C = H.ModuleC;
+    const mk = o => { const a = C.createApp(Object.assign({ type: 'oneway', origin: '台北總部', dest: '桃園機場', departDate: '2026-12-20', earliestPickup: '09:00',
+      pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' }, o || {})); C.approve(a); return a; };
+    const a1 = mk(), a2 = mk({ pax: 3 }), a3 = mk({ pax: 6 });
+    ok(C.manualAssign(a1, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: '' }, '調度室').error.includes('駕駛人1'));
+    const r = C.manualAssign(a1, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR3', driver2: 'DR4' }, '調度室-王');
+    ok(r.ok); const o = r.dispatch;
+    ok(/^DP\d{3}$/.test(o.id) && !o.submitted && o.manual, '產生未送審（暫存）派車單');
+    eq(o.dispatcher, '調度室-王'); eq(a1.status, 'matched'); eq(a1.driver2, 'DR4'); eq(H.Flow.of(a1), 'dispatching', '調度中');
+    ok(a1.overridden && a1.overrides.length === 1, '留人工覆寫紀錄');
+    ok(C.manualAssign(a2, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR5' }, 'x').error.includes('已由差旅共乘'), '同車同日不可重複');
+    eq(C.manualTargets('2026-12-20').map(x => x.id).join(), o.id);
+    const seats = H.DB.vehicles.find(v => v.id === 'V-B01').seats;
+    if (2 + 6 > seats) ok(C.manualMerge(a3, o, 'x').error.includes('座位'), '併入超出座位不可');
+    ok(C.manualMerge(a2, o, '調度室').ok); eq(o.apps.join(), [a1.id, a2.id].join()); eq(a2.vehicle, 'V-B01'); eq(a2.driver, 'DR3');
+    C.submitDispatch(o);
+    ok(!C.manualTargets('2026-12-20').includes(o)); ok(C.manualMerge(a3, o, 'x').error.includes('尚未送審'), '已送審派車單不可併入');
+    ok(!C.manualMerge(mk({ departDate: '2026-12-21' }), o, 'x').ok, '不同出發日期不可併入');
+  });
+
   const D = '2026-08-27', D2 = '2026-08-28';
   const round = (H, over) => H.ModuleC.createApp(Object.assign({ type: 'round', origin: '台北總部', dest: '台中辦公室',
     departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2,
