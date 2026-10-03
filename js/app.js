@@ -3545,12 +3545,13 @@ function renderDReviewList(p) {
     const targets = ModuleD.selfDriveBackfillTargets();
     if (!targets.length) { toast('目前沒有需要替補駕駛的自駕單（須已派車生效、被迫自駕且願意等待駕駛媒合）', 'err'); return; }
     const ok = await confirmDialog({ title: '確認替補自駕駕駛？',
-      text: `將替 <b>${targets.length}</b> 筆被迫自駕的申請單（${targets.map(a => a.id).join('、')}）尋找剩餘用車時段內<b>閒置的駕駛</b>補派，立即生效並通知申請人（例行用車優先）。` });
+      text: `將替 <b>${targets.length}</b> 筆被迫自駕的申請單（${targets.map(a => a.id).join('、')}）尋找剩餘用車時段內<b>閒置的駕駛</b>補派（<b>優先與車輛同一據點</b>的駕駛），立即生效並通知申請人（例行用車優先）。` });
     if (!ok) return;
     const r = ModuleD.backfillSelfDrive('調度室');
     openModal('替補自駕駕駛結果', `
       ${r.filled.length ? `<div class="result ok"><div class="r-head">✓ 已補派 ${r.filled.length} 筆</div>
-        ${r.filled.map(x => `<div>${x.app.id}｜${x.app.applicant}｜${x.from} 起由 <b>${x.driver.name}</b> 駕駛（車 ${x.app.vehicle}）</div>`).join('')}</div>` : ''}
+        ${r.filled.map(x => `<div>${x.app.id}｜${x.app.applicant}｜${x.from} 起由 <b>${x.driver.name}</b> 駕駛（車 ${x.app.vehicle}）
+          ${x.sameSite ? `<span class="badge b-green">同據點 ${siteNm(x.site)}</span>` : `<span class="badge b-amber">跨據點：駕駛在 ${siteNm(x.driverSite)}、車在 ${siteNm(x.site)}</span>`}</div>`).join('')}</div>` : ''}
       ${r.skipped.length ? `<div class="result fail" style="margin-top:10px;"><div class="r-head">✗ 未補派 ${r.skipped.length} 筆</div>
         ${r.skipped.map(x => `<div>${x.app.id}｜${x.app.applicant}｜${x.reason}</div>`).join('')}</div>` : ''}`);
     toast(r.filled.length ? `已替補 ${r.filled.length} 筆自駕單的駕駛` : '沒有閒置駕駛可替補', r.filled.length ? 'ok' : 'err');

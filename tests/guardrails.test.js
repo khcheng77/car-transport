@@ -1753,10 +1753,20 @@ group('一般用車 · 替補自駕駕駛（G116）', () => {
     ok(D.requestEarlyReturn(x2, { date: T, time: '09:00' }, x2.applicant).ok); ok(D.confirmEarlyReturn(x2, '調度室').ok);
     const r = D.backfillSelfDrive('調度室-王', { now });
     eq(r.filled.length, 1); eq(r.filled[0].app.id, s1.id);
-    eq(s1.outcome, 'withDriver'); ok(['DR5', 'DR6'].includes(s1.drivers[0]), '補派閒置駕駛');
+    eq(s1.outcome, 'withDriver');
+    eq(s1.drivers[0], 'DR6', '閒置 DR5（D6）與 DR6（D10）→ 優先與車輛 V-B04（D10）同據點的 DR6'); eq(r.filled[0].sameSite, true);
     eq(D.lastSeg(s1).kind, '補派司機'); eq(D.lastSeg(s1).from, D.span(s1).start, '尚未出車 → 自用車起始即補派');
     eq(s2.drivers.length, 0, '未勾願意等待者維持自駕');
     eq(D.backfillSelfDrive('調度室', { now }).filled.length, 0, '已替補者不重複');
+  });
+
+  test('同據點沒有閒置駕駛時，改派其他據點的閒置駕駛並標示跨據點', () => {
+    const { H, D, x2, s1 } = setup();
+    D.signApprove(s1, '運輸主管');
+    H.DB.drivers.find(d => d.id === 'DR6').currentSite = 'D6';   // 閒置駕駛都不在車輛所在據點 D10
+    D.requestEarlyReturn(x2, { date: T, time: '09:00' }, x2.applicant); D.confirmEarlyReturn(x2, '調度室');
+    const r = D.backfillSelfDrive('調度室', { now });
+    eq(r.filled.length, 1); eq(r.filled[0].sameSite, false); eq(r.filled[0].site, 'D10'); eq(r.filled[0].driverSite, 'D6');
   });
 
   test('用車中途才閒置：自現在時刻起補派；用車已結束者略過', () => {

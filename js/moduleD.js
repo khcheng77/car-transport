@@ -397,7 +397,8 @@ const ModuleD = {
   /* 替補自駕駕駛（G116）：其他申請單撤銷等原因使駕駛閒置時，替「被迫自駕」的已派車單補派司機。
      對象：已派車且派車結果已生效、目前區間無司機（使用者自駕）且勾選「願意等待駕駛媒合」者（G84）；
      依調度順序（例行用車優先、再依用車起始）逐單找整段剩餘時間皆空閒的司機，以補派司機（reassign）立即生效。
-     生效時點＝max（目前自駕區間起點, 現在）；已結束者略過。opts.now 供測試指定現在時刻。 */
+     生效時點＝max（目前自駕區間起點, 現在）；已結束者略過。opts.now 供測試指定現在時刻。
+     駕駛挑選：優先與該車同一據點（駕駛當前位置＝車輛當前位置，G59），沒有才找其他據點的閒置駕駛。 */
   selfDriveBackfillTargets() {
     const rank = a => a.category === 'routine' ? 0 : 1;   // 例行用車優先（G82），再依用車起始
     return this.applications.filter(a => a.status === 'dispatched' && Signoff.effective(a)
@@ -414,11 +415,15 @@ const ModuleD = {
       const eff = Math.max(last.from, nowAbs);
       if (eff >= end) { skipped.push({ app, reason: '用車時段已結束' }); continue; }
       const rng = { start: eff, end };
-      const d = DB.drivers.find(x => x.pool === 'BIZ' && !this.driverBusyIn(x.id, rng, app.id));
+      const veh = DB.vehicles.find(v => v.id === last.vehicle);
+      const site = veh ? (veh.currentSite || veh.homeSite) : null;
+      const at = x => x.currentSite || x.homeSite;
+      const idle = DB.drivers.filter(x => x.pool === 'BIZ' && !this.driverBusyIn(x.id, rng, app.id));
+      const d = idle.find(x => site && at(x) === site) || idle[0];
       if (!d) { skipped.push({ app, reason: '剩餘用車時段內沒有閒置駕駛' }); continue; }
       const t = this.fromAbs(eff);
       const r = this.reassign(app, { date: t.date, time: t.time, drivers: [d.id], reason: '替補自駕駕駛（駕駛閒置）', by: by || '調度室' });
-      if (r.ok) filled.push({ app, driver: d, from: this.fmtAbs(eff) });
+      if (r.ok) filled.push({ app, driver: d, from: this.fmtAbs(eff), site, driverSite: at(d), sameSite: !!site && at(d) === site });
       else skipped.push({ app, reason: r.error });
     }
     return { filled, skipped };
