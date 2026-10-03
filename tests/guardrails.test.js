@@ -2054,6 +2054,30 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     eq(app.usage.distance, 42);
   });
 
+  test('G123 A 以車次實登：儲存起訖里程即完成，車次內各單已回登；異常回報三選一', () => {
+    const H = fresh(), A = H.ModuleA;
+    A.now = () => new Date(2026, 8, 2, 6, 0);
+    const mk = () => A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
+      items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15 }).app;
+    const a1 = mk(), a2 = mk();
+    eq(a1.assignedShift, a2.assignedShift, '兩單同車次');
+    const date = a1.serviceDate, sh = a1.assignedShift, plan = A.shiftPlan(date, sh);
+    eq(A.tripApps(date, sh).length, 2);
+    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 50, endKm: 10 }, '周雅婷').error.includes('結束里程'));
+    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: '', startKm: 1, endKm: 2 }, '周雅婷').error.includes('司機'));
+    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 1, endKm: 2 }, '周雅婷', { dryRun: true }).ok);
+    ok(!A.tripUsage(date, sh) && !a1.usage, 'dryRun 不寫入');
+    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 1000, endKm: 1036.5 }, '周雅婷').ok);
+    eq(A.tripUsage(date, sh).distance, 36.5); eq(A.tripUsage(date, sh).by, '周雅婷', '實登人員系統帶入');
+    eq(H.Flow.of(a1), 'logged'); eq(H.Flow.of(a2), 'logged', '車次內每張單皆已回登');
+    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 1000, endKm: 1040 }, '周雅婷').ok);
+    eq(A.tripUsageLog(date, sh).map(l => l.action).join('/'), '實登/修改實登');
+    eq(A.shiftPlan(date, sh).vehicle, plan.vehicle, '實登不改車次安排');
+    eq(A.INCIDENTS.map(o => o[1]).join('/'), '正常運送/不準時/沒出現');
+    ok(A.setIncident(a1, '使用者沒出現').ok); eq(a1.incident, '使用者沒出現');
+    ok(!A.setIncident(a1, '亂填').ok); ok(A.setIncident(a1, '').ok); eq(a1.incident, '', '可改回正常運送');
+  });
+
   test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／司機', () => {
     const H = fresh(), B = H.ModuleB, C = H.ModuleC;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });

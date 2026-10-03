@@ -171,6 +171,41 @@ const ModuleA = {
   },
   usageRecords() { return this.applications.filter(a => Usage.inScope(a, this.isScheduled(a))); },
   usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL, effective: this.isScheduled(app) }); },
+  /* ---- 車次實登（G123）：巡迴物品轉運以「車次（收貨日期＋班次）」為單位實登 ----
+     車輛／司機預設帶入車次的車輛／司機（可改為實際使用），輸入起始／結束里程儲存即完成實登；
+     實登人員由系統帶入。實登寫入車次（tripUsages）並同步到車次內每張申請單（rec.usage → 已回登）。
+     只記錄實際使用，不改車次的車輛／司機（車次異動仍在「車次追蹤／異動」）。 */
+  tripUsages: {}, // key `${date}|${shiftId}` -> { usage, log[] }
+  tripApps(date, shiftId) {
+    return this.applications.filter(a => this.isScheduled(a) && a.serviceDate === date && a.assignedShift === shiftId);
+  },
+  tripUsage(date, shiftId) { const t = this.tripUsages[date + '|' + shiftId]; return t ? t.usage : null; },
+  tripUsageLog(date, shiftId) { const t = this.tripUsages[date + '|' + shiftId]; return t ? t.log : []; },
+  // opts.dryRun：只驗證不寫入（供 UI 於確認視窗前先檢查）
+  tripUsageSave(date, shiftId, data, by, opts) {
+    const key = date + '|' + shiftId, apps = this.tripApps(date, shiftId), t = this.tripUsages[key];
+    if (!apps.length) return { ok: false, error: '此車次沒有申請單，不可實登' };
+    const v = DB.vehicles.find(x => x.id === data.vehicle);
+    if (!data.vehicle) return { ok: false, error: '請選擇「車輛」' };
+    if (!data.driver) return { ok: false, error: '請選擇「司機」' };
+    const holder = { usage: t ? t.usage : null, usageLog: t ? t.log.slice() : [] };
+    const res = Usage.save(holder, { vehicleType: v ? v.type : '', vehicle: data.vehicle, driver1: data.driver, driver2: '',
+      startKm: data.startKm, endKm: data.endKm }, by, { pool: this.USAGE_POOL, effective: true });
+    if (!res.ok || (opts && opts.dryRun)) return res;
+    this.tripUsages[key] = { usage: holder.usage, log: holder.usageLog };
+    const last = holder.usageLog[holder.usageLog.length - 1];
+    apps.forEach(a => { a.usage = Object.assign({}, holder.usage);
+      (a.usageLog = a.usageLog || []).push({ at: last.at, action: last.action, by: last.by, snapshot: Object.assign({}, last.snapshot) }); });
+    return { ok: true, usage: holder.usage, apps };
+  },
+  /* 異常回報（G123）：本車次申請單逐單回報，值為 正常運送／不準時／沒出現（存於 incident，同 G20） */
+  INCIDENTS: [['', '正常運送'], ['使用者不準時', '不準時'], ['使用者沒出現', '沒出現']],
+  setIncident(app, reason) {
+    if (!this.INCIDENTS.some(o => o[0] === (reason || ''))) return { ok: false, error: '異常回報須為：正常運送／不準時／沒出現' };
+    if (!this.isScheduled(app) && !app.usage) return { ok: false, error: '未排入車次的申請單不可回報' };
+    return { ok: true, incident: this.reportIncident(app, reason) };
+  },
+
   /* 貨品回報狀態（G121）：同院區物品轉運（G120），A 排入班次即生效 */
   ITEM_REPORTS: Usage.ITEM_REPORTS,
   itemReport(it) { return Usage.itemReport(it); },

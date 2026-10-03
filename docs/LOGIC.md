@@ -72,7 +72,7 @@ draft（申請中）──(送出 submitDraft)──▶ submitted ──(自動�
                                                     └──────────▶ unscheduled（待調度：rematch 重試／調度改派班次）
                                                                      └──(returnNoCar)──▶ noCar（無車退回，結案）
 ```
-- **無「主管核准」「業務媒合按鈕」「確認接受排班」「交貨確認」**；媒合成功即待出車，到班次出發時間即已出車，實登後已回登（G122）。
+- **無「主管核准」「業務媒合按鈕」「確認接受排班」「交貨確認」**；媒合成功即待出車，到班次出發時間即已出車，實登後已回登（G122）。實登以**車次**為單位（`ModuleA.tripUsageSave(date, shiftId, {vehicle, driver, startKm, endKm}, by)`），儲存後車次內每張申請單同步寫入 `usage` → 已回登；異常回報 `ModuleA.setIncident(app, '' | '使用者不準時' | '使用者沒出現')`（G123）。
 
 ### 申請單主要欄位（`createApp`）
 - `pickStation`(收貨站/起) + `pickupLoc`、`station`(送貨站/迄) + `building`、`recipient`(接收人：單位/姓名/電話/代理人)。
