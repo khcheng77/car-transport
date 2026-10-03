@@ -287,7 +287,7 @@
     <h1>院區物品轉運作業：跨據點車輛派遣邏輯</h1>
     <p class="hero-sub">
       本文件整理「院區物品轉運作業（跨據點物流）」議題的需求釐清過程與已確認決策，
-      並列出尚待業務單位確認的開放問題，供討論與核對。<br><span style="font-size:.9em;opacity:.8">模組名稱已於 2026-10-02 更名（原名：跨據點南北幹線物流）</span>
+      並列出尚待業務單位確認的開放問題，供討論與核對。<br><span style="font-size:.9em;opacity:.8">模組名稱已於 2026-10-02 更名（原名：跨據點南北幹線物流）；申請單狀態名稱已於 2026-10-03 對齊</span>
     </p>
     <p style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
       <b>前版修訂摘要（依實作回填）</b>：<br>
@@ -343,6 +343,15 @@
     </div>
   </div>
 </header>
+<div style="max-width:1100px;margin:0 auto;padding:0 24px;">
+<div style="border:2px solid #1f3a5f;border-radius:10px;padding:16px 20px;margin:20px 0;background:#f6f9fc;color:#1f2a37;">
+  <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
+  <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 10 種狀態（G122）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
+  <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，申請人修改後重送</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛使用實登登錄里程完畢</td></tr></table>
+  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中 → 待二級審（單位主管審核）→（退回修編）→ 待調度 →（無車退回）→ 調度中（媒合派車產生派車單）→ 調度主管審 → 待出車 → 已出車（派車日＋收貨時間）→ 已回登。調度主管退回時整張派車單回調度中。</div>
+  <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：待審核→待二級審｜已核准待排→待調度｜已派車（已派車待接受）→調度中／調度主管審／待出車｜已交貨（確認收到貨）→已刪除，改以「已出車／已回登」表達｜已駁回→已刪除（主管退回一律為退回修編）。</div>
+</div>
+</div>
 
 <div class="wrap">
 

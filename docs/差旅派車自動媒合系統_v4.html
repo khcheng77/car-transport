@@ -113,11 +113,20 @@
       <div><b>演算法</b>　貪婪規則引擎（依任務型態分兩條主流程）</div>
       <div><b>狀態</b>　核心邏輯、例外機制、資源檢核已全數收斂，待確認事項清零</div>
       <div><b>名稱</b>　模組名稱已於 2026-10-02 更名（原名：差旅派車自動媒合系統／差旅共乘）</div>
+      <div><b>狀態</b>　申請單狀態名稱已於 2026-10-03 對齊（見下方「申請單狀態」）</div>
     </div>
   </div>
 </header>
 
 <div class="wrap">
+<div style="border:2px solid #1f3a5f;border-radius:10px;padding:16px 20px;margin:20px 0;background:#f6f9fc;color:#1f2a37;">
+  <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
+  <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 10 種狀態（G122）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
+  <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，申請人修改後重送</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛使用實登登錄里程完畢</td></tr></table>
+  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中 → 待二級審 →（退回修編）→ 待調度 →（無車退回）→ 調度中（批次媒合產生派車單）→ 調度主管審 → 待出車 → 已出車（出發日期＋去程上車時間）→ 已回登。</div>
+  <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：已送出→待二級審｜已駁回→退回修編｜已核准→待調度｜已媒合→調度中（併入派車單）／待出車（調度主管同意後）｜已上車→已出車｜已完成→已回登｜待人工協調、已作廢（逾期作廢）→已刪除（媒合不成者仍為待調度並註明原因，可手動指派或無車退回）。</div>
+</div>
+
   <nav class="toc">
     <div class="toc-label">目錄</div>
     <ol>
@@ -153,7 +162,7 @@
       <ul>
         <li><b>05 節</b>：來回單合併條件由三項擴為<b>六項完全相同</b>，新增「起始日」「結束日」——原本隱含於「同一趟任務」，多天任務會踩到，故顯性化。</li>
         <li><b>08 節</b>：內建緩衝時間補上<b>數值基準（示意 15 分／趟，單一常數）</b>，實際值待業務確認。</li>
-        <li><b>11 節</b>：補上<b>完整申請單狀態機</b>（含執行階段的「已上車」「已完成」），原文件只有流程步驟沒有狀態定義。</li>
+        <li><b>11 節</b>：補上<b>完整申請單狀態機</b>（含執行階段的「已出車」「已回登」），原文件只有流程步驟沒有狀態定義。</li>
         <li><b>06 節</b>：手動併車候選清單顯示欄位補上<b>出發地</b>，改以「<b>出發地 → 目的地</b>」呈現——原僅列目的地，使用者難判斷候選車是否順路。</li>
       </ul>
     </div>
@@ -194,7 +203,7 @@
         <li>來回單：回程送達出發地時間不得晚於 20:30</li>
         <li>單程單：無論是否配對到回程，司機最後完成任務（含等待配對）的時間不得晚於 20:30；等待配對的時間計入司機工時佔用，非空閒時間</li>
       </ul>
-      <p style="margin-top:8px;">排班演算法新增檢查項：預估完成時間（含車程＋等待＋緩衝）是否超過 20:30。超過即判定該指派不可行，<b>標記「待人工協調」</b>，不強行派車讓司機超時。</p>
+      <p style="margin-top:8px;">排班演算法新增檢查項：預估完成時間（含車程＋等待＋緩衝）是否超過 20:30。超過即判定該指派不可行，<b>維持「待調度」並註明原因</b>（原「待人工協調」，2026-10-03 已刪除），不強行派車讓司機超時。</p>
     </div>
   </section>
 
@@ -263,7 +272,7 @@
       <div class="d-label">定案內容</div>
       <p>使用者自行從候選清單聯繫對象：</p>
       <ul class="plain" style="margin-top:8px;">
-        <li><b>對方同意</b> → 使用者按下「完成合併」，即視為已媒合成功，<b>不需調度室額外確認</b></li>
+        <li><b>對方同意</b> → 使用者按下「完成合併」，即併入對方的派車單（調度中；對方已送審者為調度主管審），<b>不需調度室額外確認</b></li>
         <li><b>對方拒絕</b> → 回到候選清單，可繼續嘗試聯繫其他候選對象</li>
       </ul>
     </div>
@@ -276,6 +285,7 @@
         <li>系統通知申請人：用車未能媒合成功、已自動作廢</li>
         <li>作廢紀錄<b>保留</b>（供後續統計媒合失敗率，作為檢討演算法或評估資源是否足夠的依據）</li>
         <li><b>不轉「待人工協調」</b>——作廢即為最終結局，後續由申請人自行決定（改搭其他交通方式或另行聯繫調度室）</li>
+        <li><b>2026-10-03 狀態對齊：逾期作廢已刪除</b>——未媒合的單維持「待調度」，由調度手動指派或「無車退回」（結案）</li>
       </ul>
     </div>
   </section>
@@ -353,7 +363,7 @@
     <h2 class="sec-title"><span class="num">10</span>例外情況：三種機制並存</h2>
     <table class="dtable">
       <tr><th>機制</th><th>觸發原因</th><th>處理方式</th></tr>
-      <tr><td>待人工協調</td><td>資源面問題：無可用車／司機／查無車程資料／預估超過工時上限</td><td>調度室手動指派或調整</td></tr>
+      <tr><td>待調度（註明原因）<br><span style="font-size:.85em;opacity:.75">原「待人工協調」已刪除</span></td><td>資源面問題：無可用車／司機／查無車程資料／預估超過工時上限</td><td>調度室手動指派（建立派車單）或無車退回</td></tr>
       <tr><td>手動併車模式</td><td>需求面問題：自動媒合找不到對象</td><td>使用者向已有車的申請單搭便車，逾期未成則自動作廢</td></tr>
       <tr><td>逾期自動作廢</td><td>手動併車模式到出發時間仍未成功</td><td>系統自動作廢並通知申請人，紀錄保留，不轉人工</td></tr>
     </table>
@@ -368,9 +378,9 @@
       <div class="flow-step"><div class="fs-num">STEP 4</div><div class="fs-role">調度室</div><div class="fs-action">確認結果／可直接手動調整</div></div>
     </div>
     <ul class="plain">
-      <li><b>主管駁回</b>：狀態改為「已駁回」，保留紀錄但不進入排班池</li>
+      <li><b>主管退回</b>：狀態改為「退回修編」，申請人修改後重新送出（重新待二級審）</li>
       <li><b>調度室發現排班有問題</b>：直接手動調整，不退回員工重新申請</li>
-      <li><b>通知</b>：確認後由調度室人工告知司機與員工，系統本期不做自動通知（惟手動併車模式逾期作廢時例外，系統會主動通知申請人）</li>
+      <li><b>通知</b>：確認後由調度室人工告知司機與員工，系統本期不做自動通知（逾期作廢已於 2026-10-03 刪除；無車退回時通知申請人）</li>
     </ul>
 
     <h3 class="sub">申請單狀態機（本版回填）</h3>
@@ -378,18 +388,20 @@
       <div class="d-label">定案內容</div>
       <p>原文件只描述流程步驟與三種例外機制，未定義申請單的完整狀態。補列如下：</p>
       <ul class="plain">
-        <li><b>已送出</b>　申請人填單送出，等待主管審核</li>
-        <li><b>已駁回</b>　主管不同意，保留紀錄，不進入排班池（終態）</li>
-        <li><b>已核准</b>　主管同意，進入排班池，等待下一次批次媒合觸發</li>
-        <li><b>已媒合</b>　批次媒合或手動併車成立，已綁定車輛與司機</li>
-        <li><b>待人工協調</b>　資源面問題無法自動排班，交調度室處理（見 10 節）</li>
-        <li><b>已作廢</b>　到出發時間仍未媒合成功，系統自動作廢並通知申請人，保留紀錄（終態，見 06 節）</li>
-        <li><b>已上車</b>　實際出車，司機於任務單上標記，作為當日執行紀錄與後續統計依據</li>
-        <li><b>已完成</b>　回程送達（來回單）或任務結束（單程單），本趟結案（終態）</li>
+        <li><b>申請中</b>　申請人暫存、尚未送出</li>
+        <li><b>待二級審</b>　申請人填單送出，等待單位主管審核</li>
+        <li><b>退回修編</b>　單位主管退回，申請人修改後重送</li>
+        <li><b>待調度</b>　單位主管同意，進入排班池，等待批次媒合；媒合不成者仍為待調度並註明原因</li>
+        <li><b>無車退回</b>　調度將待調度的單退回（原因必填），結案不可再動</li>
+        <li><b>調度中</b>　批次媒合、手動指派或手動併車成立，已併入派車單（未送審）</li>
+        <li><b>調度主管審</b>　派車單送審，等待調度主管（運輸主管簽審）同意；退回則整張派車單回調度中</li>
+        <li><b>待出車</b>　調度主管同意，已綁定車輛與司機</li>
+        <li><b>已出車</b>　系統時間到達出發日期＋去程上車時間</li>
+        <li><b>已回登</b>　車輛使用實登登錄里程，本趟結案；車輛／司機當前位置回復歸屬據點</li>
       </ul>
       <p style="margin-top:8px">
-        「已上車」與「已完成」為執行階段狀態，不參與媒合判斷，用途是讓調度室分辨「排好但還沒跑」與「已經跑完」，
-        並支撐 06 節所述的媒合失敗率統計——沒有結案狀態就無法區分作廢單與正常結束單。
+        2026-10-03 狀態名稱對齊：原「已送出／已駁回／已核准／已媒合／已上車／已完成」改為上列名稱；「待人工協調」「已作廢（逾期作廢）」已刪除。
+        「已出車」「已回登」為執行階段狀態，不參與媒合判斷，讓調度室分辨「排好但還沒跑」與「已經跑完」，並支撐媒合失敗率統計。
       </p>
     </div>
   </section>
@@ -424,10 +436,10 @@
     <div class="qa"><div class="q">Q10　車輛是否只能給該據點使用，還是可跨據點調度？</div><div class="a">車輛屬於某據點，但可能因出差到新地點，隔天從該地當出發地。</div></div>
     <div class="qa"><div class="q">Q11　車輛當前位置怎麼更新、在外地的車能否被下一需求使用？</div><div class="a">司機出發前已被告知單日或多天任務；不論天數，任務最後一天一定要回到所屬地。</div></div>
     <div class="qa"><div class="q">Q12　司機是否為獨立於出差人員的專職角色？</div><div class="a">司機是獨立資源，同意。</div></div>
-    <div class="qa"><div class="q">Q13　需求排不進去時系統要如何呈現、誰處理？</div><div class="a">標記「待人工協調」，顯示原因，提供人工手動指派工具。</div></div>
+    <div class="qa"><div class="q">Q13　需求排不進去時系統要如何呈現、誰處理？</div><div class="a">維持「待調度」並顯示原因（原標記「待人工協調」，2026-10-03 已刪除），提供人工手動指派工具或無車退回。</div></div>
     <div class="qa"><div class="q">Q14　申請流程是否需要主管簽核？</div><div class="a">員工申請時直屬主管審一次，調度室只是做確認。</div></div>
-    <div class="qa"><div class="q">Q15　主管駁回的申請如何處理？調度室發現排錯要退回還是手動改？</div><div class="a">保留紀錄但不進排班池；調度室直接手動調整，不退回員工。</div></div>
-    <div class="qa"><div class="q">Q16　系統要不要自動通知司機/員工排班結果？</div><div class="a">由調度室告知就可以了，系統不做自動通知（後於本輪新增：逾期作廢例外會系統通知）。</div></div>
+    <div class="qa"><div class="q">Q15　主管退回的申請如何處理？調度室發現排錯要退回還是手動改？</div><div class="a">狀態為「退回修編」，申請人修改後重送；調度室直接手動調整派車單，不退回員工（確定無車者為「無車退回」）。</div></div>
+    <div class="qa"><div class="q">Q16　系統要不要自動通知司機/員工排班結果？</div><div class="a">由調度室告知就可以了，系統不做自動通知（逾期作廢已於 2026-10-03 刪除）。</div></div>
     <div class="qa"><div class="q">Q17　表單時間欄位如何設計？</div><div class="a">使用者要填「預期出發時間」，加上「最晚抵達時間」「回程時間」（後於Q25/Q26整個改寫）。</div></div>
     <div class="qa superseded"><div class="q">Q18　預期出發時間效力（已作廢）</div><div class="a">因時間欄位模型重新定義，此題不再適用。</div></div>
     <div class="qa"><div class="q">Q19　多天任務最後一天的回程，是否完全不能合併？</div><div class="a">可以合併載其他人，只是回程目的地必須是同一個歸屬據點。</div></div>
@@ -443,18 +455,18 @@
     <div class="qa superseded"><div class="q">Q29　合併結果如何寫回系統（已由本輪定案取代）</div><div class="a">原列為待業務確認，本輪定案：使用者按下「完成合併」即成立，不需調度室確認。</div></div>
     <div class="qa superseded"><div class="q">Q30　候選清單時間範圍上限（已由Q40取代）</div><div class="a">原列為待業務確認，本輪定案：前後1天。</div></div>
     <div class="qa"><div class="q">Q31　搭便車對象拒絕後如何處理？</div><div class="a">回候選清單，可繼續嘗試聯繫其他候選對象。</div></div>
-    <div class="qa"><div class="q">Q32　手動併車模式有沒有時間期限／保底機制？</div><div class="a">等到出發時間仍未媒合成功則自動作廢，通知申請人並保留紀錄，不轉待人工協調。</div></div>
+    <div class="qa"><div class="q">Q32　手動併車模式有沒有時間期限／保底機制？</div><div class="a">等到出發時間仍未媒合成功則自動作廢，通知申請人並保留紀錄，不轉待人工協調。<br><b>2026-10-03 狀態對齊</b>：逾期作廢與待人工協調皆已刪除，未媒合者維持「待調度」由調度處理。</div></div>
     <div class="qa superseded"><div class="q">Q33　候選比對邏輯：兩兩比對vs群組比對（已作廢）</div><div class="a">因時間窗機制已取消（改為前後1天、不比對時間），此題不再適用。</div></div>
     <div class="qa"><div class="q">Q34　司機/車輛與出差人員的綁定關係為何？</div><div class="a">來回單：司機全程陪同同一批人，載出跟載回；單天當天回到出發地，多天全程陪同。</div></div>
     <div class="qa"><div class="q">Q35　單程單的等待與返程機制？</div><div class="a">送達交通轉運點後，預設可等待4小時，若有其他單程單從該轉運點回司機出發地，即可配對成立；單程單只能加單程單。</div></div>
     <div class="qa"><div class="q">Q36　配對是即時發生還是出發前決定？</div><div class="a">司機出發前就要知道今天的任務是否要等待，配對必須在出發前完成，非即時動態判斷。</div></div>
-    <div class="qa"><div class="q">Q37　司機工時上限如何套用在演算法判斷？</div><div class="a">12.5小時（08:00–20:30），適用來回單與單程單，等待時間計入工時，超時即判定不可行、轉待人工協調。</div></div>
+    <div class="qa"><div class="q">Q37　司機工時上限如何套用在演算法判斷？</div><div class="a">12.5小時（08:00–20:30），適用來回單與單程單，等待時間計入工時，超時即判定不可行、維持待調度並註明原因（原「轉待人工協調」）。</div></div>
     <div class="qa"><div class="q">Q38　是否還有第三種任務型態？</div><div class="a">目前沒有收到新的需求，只有來回單與單程單兩種。</div></div>
     <div class="qa"><div class="q">Q39　手動併車候選對象是「同樣沒車的人」還是「已有車的人」？</div><div class="a">修改為一定要搭上已確定有車的單。</div></div>
     <div class="qa"><div class="q">Q40　候選清單要不要篩選目的地？</div><div class="a">不篩選目的地，前後一日所有已確定有派車的單都列出來。</div></div>
     <div class="qa"><div class="q">Q41　候選清單要顯示哪些欄位？</div><div class="a">起訖（出發地 → 目的地）、出發時間/最晚抵達時間、申請人姓名與部門/分機、車輛已載人數/剩餘容量。（v4.1 回填：補上出發地，讓使用者依完整路線判斷是否順路。）</div></div>
-    <div class="qa"><div class="q">Q42　申請單逾期作廢後，系統要不要通知或保留紀錄？</div><div class="a">作廢時要通知申請人，也保留紀錄，不需要轉人工協調。</div></div>
-    <div class="qa"><div class="q">Q43　媒合觸發的範圍與規則？</div><div class="a">按下按鈕後7天內的單參與媒合；已媒合成功的單不會再異動；媒合失敗才進入手動二次媒合。</div></div>
+    <div class="qa"><div class="q">Q42　申請單逾期作廢後，系統要不要通知或保留紀錄？</div><div class="a">作廢時要通知申請人，也保留紀錄，不需要轉人工協調。<br><b>2026-10-03 狀態對齊</b>：逾期作廢已刪除；改由調度「無車退回」並通知申請人。</div></div>
+    <div class="qa"><div class="q">Q43　媒合觸發的範圍與規則？</div><div class="a">按下按鈕後7天內的單參與媒合；已媒合成功（調度中以後）的單不會再異動；媒合失敗才進入手動二次媒合。</div></div>
     <div class="qa"><div class="q">Q44　按鈕預期多久按一次？</div><div class="a">業務單位想到就來一次，非固定排程。</div></div>
     <div class="qa"><div class="q">Q45　若業務單位長時間未按導致單過期未被處理，系統要不要保底偵測？</div><div class="a">業務單位漏了就漏了，那是業務單位要負責的事，系統不做保底防範。</div></div>
     <div class="qa"><div class="q">Q46　車輛的「歸屬據點」與「當前位置」是否矛盾？</div><div class="a">不矛盾：歸屬據點是固定行政屬性，當前位置才是排班判斷依據，多數時候兩者相同，僅多天任務進行中會暫時不一致。</div></div>
@@ -475,7 +487,7 @@
       <div class="term"><div class="t-name">自動媒合</div><div class="t-def">出發地、目的地、最早上車/回程時間皆完全相同，人數未超容量，且不超工時上限時，系統自動合併為同一車次</div></div>
       <div class="term"><div class="t-name">手動併車模式</div><div class="t-def">自動媒合失敗後，系統列出前後1天已確定有車的候選單，由申請人自行聯繫搭便車</div></div>
       <div class="term"><div class="t-name">逾期自動作廢</div><div class="t-def">手動併車模式到出發時間仍未媒合成功，系統自動作廢申請單，通知申請人並保留紀錄</div></div>
-      <div class="term"><div class="t-name">待人工協調</div><div class="t-def">因資源面問題（無可用車/司機/車程資料/超工時）無法自動排班的狀態，交由調度室處理</div></div>
+      <div class="term"><div class="t-name">待人工協調（已刪除）</div><div class="t-def">2026-10-03 狀態對齊後刪除：因資源面問題無法自動排班者維持「待調度」並註明原因，交由調度室手動指派或無車退回</div></div>
       <div class="term"><div class="t-name">歸屬據點</div><div class="t-def">車輛/司機行政與資產管理上固定隸屬的據點，不因單次出差改變</div></div>
       <div class="term"><div class="t-name">當前位置</div><div class="t-def">車輛/司機實際所在地理位置，是排班演算法判斷可用性的依據，非歸屬據點</div></div>
       <div class="term"><div class="t-name">保修排程</div><div class="t-def">系統內建功能，業務單位登記車輛保修期間，排班時自動排除</div></div>

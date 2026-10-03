@@ -274,9 +274,18 @@
     <div class="meta">
       版本 v2　｜　討論日期 2026-10-01　｜　狀態：核心決策已定案，待進入實作規劃　｜　所屬專案：車輛派遣系統整合案（khcheng77/car-transport）<br>
       本文件取代 v1〈一般用車模組〉與獨立的〈例行用車模組〉文件 —— 例行用車已併入本模組，詳見第 1 節。<br>
-      模組名稱已於 2026-10-02 更名（原名：一般用車模組）
+      模組名稱已於 2026-10-02 更名（原名：一般用車模組）｜申請單狀態名稱已於 2026-10-03 對齊（見下方「申請單狀態」）
     </div>
   </header>
+
+<div style="border:2px solid #1f3a5f;border-radius:10px;padding:16px 20px;margin:20px 0;background:#f6f9fc;color:#1f2a37;">
+  <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
+  <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 10 種狀態（G122）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
+  <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，申請人修改後重送</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛使用實登登錄里程完畢</td></tr></table>
+  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中（暫存／撤回修改）→ 待二級審（單位主管審核）→（退回修編）→ 待調度 →（無車退回：原「無車可派」）→ 調度主管審（派車判斷即送審；本模組無派車單，無「調度中」）→ 待出車 → 已出車（用車起時間）→ 已回登。</div>
+  <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：草稿→申請中｜待主管簽核→待二級審｜已核准待調度→待調度｜無車可派→無車退回（結案，不送簽審，立即通知）｜已派車→調度主管審／待出車｜行程完成→已回登｜已撤回（整單撤回）、已歸還（未出車，整段提前歸還）→已刪除（提前歸還須晚於用車起時）。調度主管退回時回「待調度」。</div>
+</div>
+
 
   <div class="changelog">
     <h3>v2 相對 v1 的主要變更</h3>
@@ -470,17 +479,17 @@
         <tr>
           <td>有車沒司機</td>
           <td class="matrix-highlight-yes">派車（使用者自行駕駛）</td>
-          <td class="matrix-highlight-no">告知無車可派</td>
+          <td class="matrix-highlight-no">無車退回</td>
         </tr>
         <tr>
           <td>沒車</td>
-          <td class="matrix-highlight-no">告知無車可派</td>
-          <td class="matrix-highlight-no">告知無車可派</td>
+          <td class="matrix-highlight-no">無車退回</td>
+          <td class="matrix-highlight-no">無車退回</td>
         </tr>
       </tbody>
     </table>
     <div class="callout">
-      <strong>不進候補：</strong>判定為無車可派時，<strong>不會轉入候補機制</strong>，資源立即釋放，使用者可自行重新申請。
+      <strong>不進候補：</strong>判定為無車退回時，<strong>不會轉入候補機制</strong>，資源立即釋放；無車退回為結案狀態（不可修改重送），使用者需另開新單。
       此規則同時適用於「有車沒司機＋未勾自駕」以及「管制區證件交集為空」（第 9.3 節）的情境。
     </div>
   </section>
@@ -538,9 +547,9 @@
       車輛必須同時具備進出每一個管制區的資格才能完成整趟任務。若用聯集篩選，調度可能選到一台車只符合其中一項，
       導致任務執行到一半才發現車子進不了另一個管制區。
     </div>
-    <h3>9.3　交集結果為空＝無車可派</h3>
+    <h3>9.3　交集結果為空＝無車退回</h3>
     <p>
-      若沒有任何一台車同時持有使用者勾選的所有證件（交集結果為空集合），<strong>等同於第 6 節矩陣的「無車可派」</strong>，
+      若沒有任何一台車同時持有使用者勾選的所有證件（交集結果為空集合），<strong>等同於第 6 節矩陣的「無車退回」</strong>，
       套用同一套規則，不進候補。
     </p>
   </section>
@@ -675,7 +684,7 @@
   <section id="notify">
     <h2>12. 通知機制</h2>
     <p>
-      派車結果（有車有司機／有車需自駕／無車可派）透過<strong>既有 email 通知路由機制</strong>（沿用核准者關係表基礎設施）通知使用者。
+      派車結果（有車有司機／有車需自駕／無車退回）透過<strong>既有 email 通知路由機制</strong>（沿用核准者關係表基礎設施）通知使用者。
       第 11 節的四種生命週期操作發生時，同樣透過既有 email 機制通知使用者異動結果（例如換了哪台車、哪位司機，或展延後的新結束時間），
       不另外新增站內訊息或其他通知管道。
     </p>
@@ -694,14 +703,14 @@
         <tr><td>資源池</td><td>與差旅共乘作業共用；物流兩模組獨立</td><td><span class="badge provisional">暫定</span></td></tr>
         <tr><td>佔用判定</td><td>先佔先贏，不分模組優先權</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>例行用車優先權</td><td>資源未確定分配前優先；已生效佔用不溯及</td><td><span class="badge decided">已定案</span></td></tr>
-        <tr><td>有車沒司機＋不自駕</td><td>不進候補，直接告知無車可派</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>有車沒司機＋不自駕</td><td>不進候補，直接無車退回</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>車型指派</td><td>調度依人數＋貨物明細人工指派，不分類別</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>人貨欄位</td><td>人數必填（≥1）＋貨物選填，非互斥</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>危險品規則</td><td>僅提示，不寫死自動派車規則</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>自駕資格</td><td>不做系統檢核，使用者自行負責</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>雙駕駛</td><td>預設單司機，調度可自由加派，同一筆紀錄掛 1～2 位司機</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>補派司機</td><td>需使用者勾選「願意等待駕駛媒合」；歸類為換司機操作；系統不設時間點邏輯</td><td><span class="badge decided">已定案</span></td></tr>
-        <tr><td>管制區通行證</td><td>綁車輛、可多證、交集篩選，空集合＝無車可派</td><td><span class="badge decided">已定案</span></td></tr>
+        <tr><td>管制區通行證</td><td>綁車輛、可多證、交集篩選，空集合＝無車退回</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>台北市噸位</td><td>僅文字提示，不篩選車輛（特殊開放證件例外）</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>假日／夜間加班需求</td><td>僅提示欄位，不觸發自動規則</td><td><span class="badge decided">已定案</span></td></tr>
         <tr><td>司機剩餘加班工時</td><td>即時介接既有加班系統查詢，非定期快照</td><td><span class="badge decided">已定案</span></td></tr>
@@ -742,8 +751,8 @@
     </div>
 
     <div class="qa">
-      <div class="q">「有車沒司機、使用者不自駕」時，是直接告知無車可派，還是轉入候補？</div>
-      <div class="a">直接告知無車可派，不進候補。</div>
+      <div class="q">「有車沒司機、使用者不自駕」時，是直接無車退回，還是轉入候補？</div>
+      <div class="a">直接無車退回，不進候補。</div>
     </div>
 
     <div class="qa">
@@ -864,7 +873,7 @@
 
     <div class="qa">
       <div class="q">證件交集篩選後結果為空時怎麼處理？</div>
-      <div class="a">等同於無車可派，套用同一套規則，不進候補。</div>
+      <div class="a">等同於無車退回，套用同一套規則，不進候補。</div>
     </div>
 
     <div class="qa">
@@ -916,7 +925,7 @@
         </tr>
         <tr>
           <td>有車沒司機</td>
-          <td>調度確認車輛可用但無可派司機的狀態；使用者若已勾自駕則派車給他，未勾則告知無車可派（不進候補）。</td>
+          <td>調度確認車輛可用但無可派司機的狀態；使用者若已勾自駕則派車給他，未勾則無車退回（不進候補）。</td>
         </tr>
         <tr>
           <td>雙駕駛</td>
@@ -952,7 +961,7 @@
         </tr>
         <tr>
           <td>調度完成確認</td>
-          <td>調度做出任一種最終派車判斷（有車有司機／有車無司機自駕／無車可派）的當下，是撤回權限切換、以及第 11 節生命週期操作開始可用的判定點。</td>
+          <td>調度做出任一種最終派車判斷（有車有司機／有車無司機自駕／無車退回）的當下，是撤回權限切換、以及第 11 節生命週期操作開始可用的判定點。</td>
         </tr>
       </tbody>
     </table>
