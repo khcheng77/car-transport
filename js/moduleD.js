@@ -199,7 +199,7 @@ const ModuleD = {
     const lv = DB.driverLeaves.find(l => l.driver === dId
       && this._overlap(rng, { start: this.absMin(l.date, l.from), end: this.absMin(l.date, l.to) }));
     if (lv) return { type: 'leave', text: `請假 ${lv.date} ${lv.from}~${lv.to}` };
-    const c = this._cApps().find(x => this.C_HOLD.includes(x.status) && x.driver === dId
+    const c = this._cApps().find(x => this.C_HOLD.includes(x.status) && ModuleC.driversOf(x).includes(dId)
       && ModuleC.tripDates(x).some(dt => dates.includes(dt)));
     if (c) return { type: 'C', ref: c.id, text: `差旅共乘 ${c.id} 任務（${c.departDate}）` };
     const h = this._dHolder('driver', dId, rng, exceptId);

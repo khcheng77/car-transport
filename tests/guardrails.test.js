@@ -1208,6 +1208,8 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     eq(a.status, 'matched');
     const v = H.DB.vehicles.find(x => x.id === a.vehicle);
     v.currentSite = 'D1'; // 模擬外派中
+    ok(!H.ModuleC.confirmBoard(a), '派車單未送審時不可上車');
+    H.ModuleC.submitDispatch(H.ModuleC.dispatchOf(a));
     ok(!H.ModuleC.confirmBoard(a), '待運輸主管簽審時不可上車');
     H.ModuleC.signApprove(a, '運輸主管');
     H.ModuleC.confirmBoard(a); H.ModuleC.completeTrip(a, '調度室');
@@ -1289,6 +1291,94 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     const { batch } = H.ModuleC.runBatch(D, '調度室');
     eq(a.lastBatch, batch.id); eq(a.lastBatchResult, 'coordinate');
     eq(batch.coordinate, 1, '統計應計入待人工協調數');
+  });
+});
+
+/* =================================================================
+   模組 C：派車調度 · 派車單（G112–G115）
+   ================================================================= */
+group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／退回申請單）', () => {
+  const D = '2026-08-27', D2 = '2026-08-28';
+  const round = (H, over) => H.ModuleC.createApp(Object.assign({ type: 'round', origin: '台北總部', dest: '台中辦公室',
+    departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2,
+    applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' }, over));
+
+  test('G112 單一出發日期批次媒合：同車申請單合為一張派車單，單號／派遣人／派遣時間自動給予、預設未送審', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = round(H), b = round(H, { applicant: '財務部-鄭安琪' });
+    const c = round(H, { departDate: D2, returnDate: D2, earliestReturn: '17:00', applicant: '研發部-吳承恩' });
+    [a, b, c].forEach(x => C.approve(x));
+    const r = C.runBatch(D, '調度室-王', { days: 0 });
+    eq(c.status, 'approved', '只處理該出發日期');
+    eq(r.dispatches.length, 1); const o = r.dispatches[0];
+    eq(o.apps.join(), [a.id, b.id].join(), '同車兩張單同一派車單');
+    ok(/^DP\d{3}$/.test(o.id)); eq(o.dispatcher, '調度室-王'); ok(o.dispatchedAt); eq(o.submitted, false);
+    eq(o.vehicleType, H.DB.vehicles.find(v => v.id === o.vehicle).type, '車種類型帶入');
+    eq(a.dispatchId, o.id); ok(!a.sign, '未送審不送簽');
+  });
+
+  test('G113 派車單異動：車種／車號相符、座位足夠、駕駛不可重複且不可撞單；駕駛人2 套用至各申請單', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = round(H), b = round(H, { departDate: D, returnDate: D, earliestReturn: '18:00', applicant: '研發部-吳承恩', pax: 1 });
+    [a, b].forEach(x => C.approve(x));
+    C.runBatch(D, '調度室', { days: 0 });
+    const oa = C.dispatchOf(a), ob = C.dispatchOf(b);
+    ok(oa && ob && oa.id !== ob.id, '不同車各一張派車單');
+    const base = { vehicleType: oa.vehicleType, vehicle: oa.vehicle, driver1: oa.driver1, driver2: '' };
+    ok(C.updateDispatch(oa, Object.assign({}, base, { vehicleType: '商務轎車' })).error.includes('不符'));
+    ok(C.updateDispatch(oa, Object.assign({}, base, { driver2: oa.driver1 })).error.includes('同一人'));
+    ok(C.updateDispatch(oa, Object.assign({}, base, { driver2: ob.driver1 })).error.includes(b.id), '駕駛已有其他派車單任務');
+    ok(C.updateDispatch(oa, Object.assign({}, base, { vehicle: ob.vehicle, vehicleType: ob.vehicleType })).error, '車輛已被其他派車單使用');
+    const free = H.DB.drivers.find(d => d.pool === 'BIZ' && ![oa.driver1, ob.driver1].includes(d.id) && !H.DB.driverLeaves.some(l => l.driver === d.id));
+    ok(C.updateDispatch(oa, Object.assign({}, base, { driver2: free.id }), '調度室').ok);
+    eq(a.driver2, free.id, '駕駛人2 套用到申請單'); ok(H.ModuleD.driverBusy(free.id, H.ModuleD.createApp({ applicant: 'X', startDate: D, startTime: '10:00', endDate: D, endTime: '11:00', pax: 1, selfDrive: false, items: [] })), '一般用車視駕駛人2 為佔用');
+    ok(oa.log.some(l => l.action === '異動'));
+  });
+
+  test('G114 是否送審：否→是 送運輸主管簽審；送審後異動重新送簽；是→否 撤回簽審；已上車不可異動', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = round(H); C.approve(a); C.runBatch(D, '調度室', { days: 0 });
+    const o = C.dispatchOf(a);
+    const f = { vehicleType: o.vehicleType, vehicle: o.vehicle, driver1: o.driver1, driver2: '' };
+    ok(C.updateDispatch(o, Object.assign({}, f, { submitted: true })).ok); eq(a.sign.status, 'pending');
+    const other = H.DB.drivers.find(d => d.pool === 'BIZ' && d.id !== o.driver1 && !H.DB.driverLeaves.some(l => l.driver === d.id));
+    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id, submitted: true })).ok);
+    eq(a.sign.round, 2, '送審中異動重新送簽'); ok(a.sign.summary.includes(o.id), '簽審摘要含派車單號');
+    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id, submitted: false })).ok);
+    eq(a.sign, null, '撤回送審'); eq(Signoff_state(a), '撤回簽審');
+    C.submitDispatch(o); C.signApprove(a, '運輸主管'); C.confirmBoard(a);
+    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id })).error.includes('上車'), '已上車不可異動');
+    function Signoff_state(x) { return x.signLog[x.signLog.length - 1].action; }
+  });
+
+  test('待人工協調手動指派：建立派車單；車輛／駕駛與當日其他派車單衝突時不可指派', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = round(H);
+    const x = C.createApp({ type: 'oneway', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '08:00', pax: 1,
+      applicant: '總務部-林', dept: '總務部', ext: '1' });
+    [a, x].forEach(z => C.approve(z)); C.runBatch(D, '調度室', { days: 0 });
+    eq(x.status, 'coordinate');
+    const free = H.DB.vehicles.find(v => v.pool === 'BIZ' && v.id !== a.vehicle && !H.DB.maintenance.some(m => m.vehicle === v.id));
+    let err = ''; try { C.overrideAssign(x, { vehicle: free.id, driver: a.driver }, '調度室'); } catch (e) { err = e.message; }
+    ok(err.includes(a.id), '駕駛已有當日派車單任務不可指派'); eq(x.status, 'coordinate'); eq(x.vehicle, null);
+    const d = H.DB.drivers.find(z => z.pool === 'BIZ' && z.id !== a.driver && !H.DB.driverLeaves.some(l => l.driver === z.id));
+    C.overrideAssign(x, { vehicle: free.id, driver: d.id }, '調度室');
+    eq(x.status, 'matched'); ok(C.dispatchOf(x).manual, '建立手動派車單');
+  });
+
+  test('G115 調度退回申請單：原因必填、退回修編回申請人、移出派車單（空了即取消）；修改重送回單位主管審核', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = round(H), b = round(H, { applicant: '財務部-鄭安琪' }), p = round(H, { applicant: '總務部-林', departDate: D2, returnDate: D2 });
+    [a, b, p].forEach(x => C.approve(x));
+    C.runBatch(D, '調度室', { days: 0 });
+    const o = C.dispatchOf(a); C.submitDispatch(o);
+    ok(C.returnApp(a, '  ', '調度室').error.includes('必填'));
+    ok(C.returnApp(a, '人數有誤請確認', '調度室').ok);
+    eq(a.status, 'rejected'); eq(a.reviewNote, '人數有誤請確認'); eq(a.vehicle, null); eq(a.sign, null, '撤回簽審');
+    eq(o.apps.join(), b.id, '自派車單移出'); eq(o.cancelled, false);
+    ok(C.returnApp(b, '日期請改', '調度室').ok); eq(o.cancelled, true, '派車單無申請單即取消');
+    ok(C.returnApp(p, '待媒合單也可退回', '調度室').ok, '待媒合單可退回'); eq(p.status, 'rejected');
+    C.resubmit(a, Object.assign({}, a, { pax: 1 })); eq(a.status, 'submitted', '修改重送回單位主管審核');
   });
 });
 
@@ -1711,16 +1801,18 @@ group('運輸主管簽審（B/C/D 派車結果覆核；A 不經簽審）', () =>
     eq(o.status, 'loaded'); eq(o.sign.status, 'pending'); eq(o.sign.round, 2);
   });
 
-  test('C：批次媒合即送簽審；退回 → 清除車輛／司機回已核准，重新批次後再送簽', () => {
+  test('C：派車單送審才送簽；退回 → 移出派車單回已核准，重新批次產生新派車單後再送簽', () => {
     const H = fresh(), C = H.ModuleC;
     const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
       returnDate: '2026-08-28', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
     C.approve(a); C.runBatch('2026-08-26', 't1');
-    eq(a.status, 'matched'); eq(a.sign.status, 'pending');
+    eq(a.status, 'matched'); ok(!a.sign, '批次媒合只產生派車單，未送審不送簽');
+    const o1 = C.dispatchOf(a); ok(C.submitDispatch(o1).ok); eq(a.sign.status, 'pending');
     ok(C.signReject(a, '運輸主管', '改派 9 人座').ok);
-    eq(a.status, 'approved'); eq(a.vehicle, null); eq(a.driver, null);
+    eq(a.status, 'approved'); eq(a.vehicle, null); eq(a.driver, null); eq(o1.cancelled, true, '派車單無申請單即取消');
     C.runBatch('2026-08-26', 't2');
-    eq(a.status, 'matched'); eq(a.sign.round, 2);
+    eq(a.status, 'matched'); ok(C.dispatchOf(a).id !== o1.id, '產生新派車單');
+    C.submitDispatch(C.dispatchOf(a)); eq(a.sign.round, 2);
     const v = a.vehicle; C.signApprove(a, '運輸主管');
     C.overrideAssign(a, { vehicle: v === 'V-B03' ? 'V-B01' : 'V-B03', note: '調度改派' }, '調度室');
     eq(a.sign.status, 'pending', '人工改派須重新簽審');
@@ -1804,7 +1896,7 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     ok(B.usageSave(o, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR1', driver2: 'DR2', startKm: 5000, endKm: 5320 }).ok, '實際改用聯結車＋雙駕駛');
     const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
       returnDate: '2026-08-28', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
-    C.approve(a); C.runBatch('2026-08-26', 't1'); C.signApprove(a, '運輸主管');
+    C.approve(a); C.runBatch('2026-08-26', 't1'); C.submitDispatch(C.dispatchOf(a)); C.signApprove(a, '運輸主管');
     const pl = C.usagePlan(a); eq(pl.vehicle, a.vehicle); eq(pl.drivers[0], a.driver);
     const v = H.DB.vehicles.find(x => x.id === a.vehicle);
     ok(C.usageSave(a, { vehicleType: v.type, vehicle: v.id, driver1: a.driver, startKm: 0, endKm: 260 }).ok);
