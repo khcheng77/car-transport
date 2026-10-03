@@ -2124,6 +2124,33 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     eq(d.usageLog.map(l => l.action).join('/'), '實登/修改實登');
   });
 
+  test('G126 D 一單一派車單：派車即給單號；簽審通過才可實登；自駕可登使用者自駕；無車退回無派車單', () => {
+    const H = fresh(), D = H.ModuleD, Us = H.Usage;
+    const mk = o => D.createApp(Object.assign({ applicant: '業務部-周雅婷', startDate: '2026-10-01', startTime: '09:00',
+      endDate: '2026-10-01', endTime: '12:00', pax: 2, selfDrive: false, items: [] }, o || {}));
+    const a = mk(); D.approve(a); D.dispatch(a, { vehicle: 'V-B01', drivers: ['DR3', 'DR4'] }, '調度室-王');
+    ok(/^GD\d{3}$/.test(a.dispatchNo), '派車即給派車單號');
+    const d = D.dispatchOrderOf(a);
+    eq(d.vehicle, 'V-B01'); eq(d.driver1, 'DR3'); eq(d.driver2, 'DR4'); eq(d.dispatcher, '調度室-王'); eq(d.vehicleType, '商務廂車');
+    eq(H.Flow.of(a), 'signing', '一般用車仍無「調度中」');
+    ok(!D.usageDispatches().includes(d)); ok(D.dispatchUsageSave(d, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR3', startKm: 1, endKm: 2 }, '周雅婷').error.includes('簽審'));
+    D.signApprove(a, '運輸主管');
+    ok(D.usageDispatches().includes(d));
+    ok(D.dispatchUsageSave(d, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: Us.SELF, startKm: 1, endKm: 2 }, '周雅婷').error.includes('駕駛名單'), '非自駕單不可登使用者自駕');
+    ok(D.dispatchUsageSave(d, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR3', driver2: 'DR4', startKm: 30210, endKm: 30288 }, '周雅婷').ok);
+    eq(d.usage.distance, 78); eq(H.Flow.of(a), 'logged');
+    const b = mk({ selfDrive: true, startTime: '13:00', endTime: '15:00' }); D.approve(b);
+    ok(D.dispatch(b, { vehicle: 'V-B04', driver: 'DR5' }).ok); D.signApprove(b, '運輸主管');
+    const db = D.dispatchOrderOf(b); ok(db && db.id !== d.id, '每張申請單各一張派車單'); ok(db.selfDrive, '可自駕單');
+    ok(D.dispatchUsageSave(db, { vehicleType: '商務廂車', vehicle: 'V-B04', driver1: Us.SELF, startKm: 800, endKm: 845 }, '周雅婷').ok);
+    const c = mk({ startTime: '16:00', endTime: '17:00' }); D.approve(c); D.dispatch(c, { noVehicle: true });
+    ok(!c.dispatchNo && !D.dispatchOrderOf(c), '無車退回不產生派車單');
+    const e = mk({ startTime: '18:00', endTime: '19:00' }); D.approve(e); D.dispatch(e, { vehicle: 'V-B02', drivers: ['DR5'] });
+    const no = e.dispatchNo; D.signReject(e, '運輸主管', '換車');
+    ok(!D.dispatchOrderOf(e), '退回後派車單失效'); D.dispatch(e, { vehicle: 'V-B03', drivers: ['DR5'] });
+    eq(e.dispatchNo, no, '重新派車沿用同一派車單號'); eq(D.dispatchOrderOf(e).vehicle, 'V-B03');
+  });
+
   test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／司機', () => {
     const H = fresh(), B = H.ModuleB, C = H.ModuleC;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });

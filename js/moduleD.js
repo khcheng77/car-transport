@@ -316,6 +316,7 @@ const ModuleD = {
     }
     this._sync(app);
     app.dispatchedAt = new Date(); app.dispatchedBy = by; app.dispatchNote = note || '';
+    this._ensureDispatch(app);
     // 派車結果送運輸主管簽審；簽審通過才生效並寄送結果通知
     Signoff.mark(app, this.signSummary(app), by);
     return { ok: true, outcome: r.outcome };
@@ -327,6 +328,34 @@ const ModuleD = {
     const dn = id => (DB.drivers.find(d => d.id === id) || {}).name || id;
     return `${this.OUTCOME_TEXT[app.outcome]}｜車 ${app.vehicle}｜${app.drivers.length ? '司機 ' + app.drivers.map(dn).join('＋') : '使用者自駕'}`;
   },
+  /* ---- 派車單（G126）：一般用車一單一派車單。派車判斷（無車退回除外）時系統自動給派車單號（GD###），
+     派遣人／派遣時間＝調度人員／調度確認時間；車種類型、車號、駕駛人1／2 隨申請單目前指派（換車／換司機後同步）。
+     運輸主管退回後重新派車沿用同一派車單號。 ---- */
+  dispatches: [], dispatchSeq: 1,   // { id, apps:[appId], usage, usageLog }（其餘欄位由 _refreshDispatch 自申請單帶入）
+  _ensureDispatch(app) {
+    if (!app.dispatchNo) app.dispatchNo = 'GD' + String(this.dispatchSeq++).padStart(3, '0');
+    let d = this.dispatches.find(x => x.id === app.dispatchNo);
+    if (!d) { d = { id: app.dispatchNo, apps: [app.id], usage: null, usageLog: [] }; this.dispatches.push(d); }
+    return this._refreshDispatch(d);
+  },
+  _refreshDispatch(d) {
+    const a = this.applications.find(x => x.id === d.apps[0]);
+    if (!a) return d;
+    const v = DB.vehicles.find(x => x.id === a.vehicle), ds = a.drivers || [];
+    return Object.assign(d, { date: a.startDate, vehicleType: v ? v.type : '', vehicle: a.vehicle || '', driver1: ds[0] || '', driver2: ds[1] || '',
+      dispatcher: a.dispatchedBy, dispatchedAt: a.dispatchedAt, selfDrive: !!a.selfDrive, cancelled: a.status !== 'dispatched' && !d.usage });
+  },
+  dispatchOrderOf(app) { return app.dispatchNo && app.status === 'dispatched' ? this._refreshDispatch(this.dispatches.find(x => x.id === app.dispatchNo)) : null; },
+  dispatchApps(d) { return d.apps.map(id => this.applications.find(a => a.id === id)).filter(Boolean); },
+  dispatchEffective(d) { const a = this.dispatchApps(d)[0]; return !!a && a.status === 'dispatched' && Signoff.effective(a); },
+  usageDispatches() { return this.dispatches.map(d => this._refreshDispatch(d)).filter(d => d.usage || this.dispatchEffective(d)); },
+  // 派車單實登：自駕單駕駛人1 可登「使用者自駕」；儲存即完成，申請單轉「已回登」
+  dispatchUsageSave(d, data, by, opts) {
+    if (!d.usage && !this.dispatchEffective(d)) return { ok: false, error: '派車單尚未經運輸主管簽審通過，不可實登' };
+    const apps = this.dispatchApps(d);
+    return Usage.saveGroup(d, apps, data, by, Object.assign({ pool: this.USAGE_POOL, allowSelf: apps.some(a => a.selfDrive) }, opts));
+  },
+
   /* ---- 車輛使用實登（派車結果生效後登打；無車可派者不需實登；自駕者駕駛人1 可登「使用者自駕」）---- */
   USAGE_POOL: 'BIZ',
   usagePlan(app) { return { vehicle: app.vehicle || null, drivers: (app.drivers || []).slice() }; },

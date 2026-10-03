@@ -26,6 +26,7 @@
 - 調度主管退回：B／C 整張派車單回「調度中」（未送審）；D 回「待調度」。已出車後派車單不可再異動。
 - 已刪除（G122）：已派車、已交貨（交貨確認）、已駁回，以及 C 待人工協調／已上車／行程完成／逾期作廢，D 整單撤回／已歸還（整段提前歸還）／行程完成。
 - 下方各模組「狀態流轉」為內部 status 的實作說明。
+- 車輛使用實登單位（G123–G126）：A 以**車次**（`ModuleA.tripUsageSave`）、B／C／D 以**派車單**（`M.usageDispatches()`／`M.dispatchUsageSave(d, data, by)`）登打，經 `Usage.saveGroup` 同步寫入單內每張申請單 `usage` → 已回登。D 一單一派車單：`dispatch()` 非無車退回時給 `app.dispatchNo`（GD###，退回後重派沿用），派車單欄位由 `_refreshDispatch` 依申請單目前指派帶入（`dispatchOrderOf(app)`；刻意不命名 `dispatchOf`，避免 Flow 推導出 D 沒有的「調度中」）。
 
 ---
 
