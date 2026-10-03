@@ -21,6 +21,8 @@
 
 const ModuleB = {
   orders: [],  // 幹線申請單
+  dispatches: [],   // 派車單（G117）：{ id, date, vehicleType, vehicle, driver1, driver2, dispatcher, dispatchedAt, submitted, apps[], cancelled, log[] }
+  dispatchSeq: 1,
   seq: 1,
   approveSeq: 1,
   vehicleStatus: {}, // B-6：每台車最近一次派遣決策 { matrixRow, modeLabel, reason, endpoint, endpointBasis, at }
@@ -90,7 +92,7 @@ const ModuleB = {
     const err = this.routeError(data);
     if (err) throw new Error(err);
     (o.revisions = o.revisions || []).push({ at: new Date(), returnNote: o.reviewNote || '' });
-    Object.assign(o, this._fields(data), { status: 'submitted', approvedAt: null, reviewNote: '' });
+    Object.assign(o, this._fields(data), { status: 'submitted', approvedAt: null, reviewNote: '', returnedBy: null });
     this.recompute(o);
     return o;
   },
@@ -179,27 +181,35 @@ const ModuleB = {
   /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
   signSummary(o) {
     const nm = id => (this.siteById(id) || {}).name || id;
-    return `${o.dispatchVehicle}｜${o.dispatchMode || ''}｜${o.dispatchDir === 'north' ? '北返' : '南下'}｜${nm(o.pickSite)} → ${nm(o.dropSite)}`;
-  },
-  // 本次派車新裝載的單（尚未送簽或前次被退回者）送簽審
-  _signLoaded() {
-    this.orders.filter(o => o.status === 'loaded' && !Signoff.isPending(o) && !Signoff.isApproved(o))
-      .forEach(o => Signoff.mark(o, this.signSummary(o), '調度室'));
+    return `${o.dispatchId ? '派車單 ' + o.dispatchId + '｜' : ''}${o.dispatchVehicle}｜${o.dispatchMode || ''}｜${o.dispatchDir === 'north' ? '北返' : '南下'}｜${nm(o.pickSite)} → ${nm(o.dropSite)}`;
   },
   /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程；B 派車只指定車輛）---- */
   USAGE_POOL: 'LOGI',
-  usagePlan(o) { return { vehicle: o.dispatchVehicle || null, drivers: [] }; },
+  usagePlan(o) { return { vehicle: o.dispatchVehicle || null, drivers: this.driversOf(o) }; },
   usageRecords() { return this.orders.filter(o => Usage.inScope(o)); },
   usageSave(o, data, by) { return Usage.save(o, data, by, { pool: this.USAGE_POOL }); },
+  /* 貨品回報狀態（G120）：車輛使用實登的貨物清單逐項回報；預設「正常運送」 */
+  ITEM_REPORTS: ['正常運送', '不運送', '不接收'],
+  itemReport(it) { return it.report || '正常運送'; },
+  setItemReport(o, idx, status, by) {
+    if (!Usage.inScope(o)) return { ok: false, error: '派車結果尚未生效，不可回報貨品狀態' };
+    const it = (o.items || [])[idx];
+    if (!it) return { ok: false, error: '查無此貨品' };
+    if (!this.ITEM_REPORTS.includes(status)) return { ok: false, error: '回報狀態須為：' + this.ITEM_REPORTS.join('／') };
+    const before = this.itemReport(it);
+    if (before === status) return { ok: true, changed: false };
+    it.report = status;
+    (o.itemReportLog = o.itemReportLog || []).push({ at: new Date(), by: by || '調度室', item: it.name || `第 ${idx + 1} 項`, before, after: status });
+    return { ok: true, changed: true };
+  },
   signRecords() { return this.orders.filter(o => Signoff.inScope(o)); },
   signApprove(o, by, note) { return Signoff.decide(o, true, by, note); },
   // 退回：卸下派車結果、回到「已核准待派車」，由調度重新派車後再送簽審
   signReject(o, by, note) {
     const r = Signoff.decide(o, false, by, note);
     if (!r.ok) return r;
+    this._detach(o, '運輸主管退回', by);
     o.status = 'approved';
-    ['dispatchVehicle', 'dispatchMode', 'dispatchEndpoint', 'dispatchOrigin', 'dispatchDir', 'pickupTime', 'dispatchDay', 'dispatchDropTime']
-      .forEach(k => { o[k] = null; });
     o.signReturnNote = o.sign.note;
     return r;
   },
@@ -484,9 +494,9 @@ const ModuleB = {
 
   /* 派車：對某台車 + 一批待處理單跑貪婪 / 直達邏輯，回傳決策
      只處理已核准的南下貨；originId 可指定出發據點（2.22，預設主檔 homeSite） */
-  dispatch(vehicleId, mode, dispatchDate, originId) {
+  dispatch(vehicleId, mode, dispatchDate, originId, by) {
     const r = this._dispatch(vehicleId, mode, dispatchDate, originId);
-    this._signLoaded();
+    r.dispatches = this._toDispatches(dispatchDate, by);
     return r;
   },
   _dispatch(vehicleId, mode, dispatchDate, originId) {
@@ -661,10 +671,182 @@ const ModuleB = {
   },
 
   /* ---- 回程派車：全域直達鎖定 + 五列決策矩陣（G36/G40/G41/G42/G43）---- */
-  dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet) {
+  dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet, dispatchDate, by) {
     const r = this._dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet);
-    this._signLoaded();
+    r.dispatches = this._toDispatches(dispatchDate, by);
     return r;
+  },
+
+  /* ================= 派車調度：單一媒合按鈕（G117）=================
+     依序執行原四種派車：① 去程直達（逐一目的地）② 去程非直達（貪婪）③ 直達車回程（矩陣第 5 列，僅記錄狀態）
+     ④ 回程非直達（含全域直達鎖定檢查）；車型依 2.17 當日總貨量自動選。新裝載的單依「同一台車」併入派車單。 */
+  runMatch(dispatchDate, by) {
+    const steps = [], trace = [];
+    const pending = (leg, direct) => this.orders.filter(o => o.status === 'approved' && (direct == null || !!o.direct === direct)
+      && (leg === 'north' ? !this.isSouthbound(o) : this.isSouthbound(o)) && this.isServable(o)
+      && (leg === 'north' || !dispatchDate || this.meetsCutoff(o, dispatchDate)));
+    const run = (label, fn) => { const r = fn(); steps.push({ label, r }); trace.push(`<span class="hl">【${label}】</span>`, ...r.trace, ''); return r; };
+    const directVeh = new Set();
+    // 去程各趟不可同時用同一台車：當日已排去程（含先前媒合的派車單）的車輛改派另一台幹線車；無車可派即停止並註明
+    const southUsed = new Set(this.liveDispatches().filter(d => d.date === dispatchDate)
+      .filter(d => this.dispatchOrders(d).some(o => o.dispatchDir === 'south')).map(d => d.vehicle));
+    const pickSouth = (mode, label) => {
+      const dec = this.decideSizeClass(mode, dispatchDate, null, 'south');
+      if (!southUsed.has(dec.vehicle)) return dec;
+      const alt = DB.vehicles.filter(v => v.pool === 'LOGI' && v.sizeClass && !southUsed.has(v.id))
+        .sort((a, b) => (a.sizeClass === dec.sizeClass ? 0 : 1) - (b.sizeClass === dec.sizeClass ? 0 : 1))[0];
+      if (!alt) { trace.push(`<span class="no">✗ ${label}：當日幹線車皆已排去程，其餘待派託運單留待其他派車日</span>`, ''); return null; }
+      return Object.assign({}, dec, { vehicle: alt.id, sizeClass: alt.sizeClass, reason: `${dec.reason}；${dec.vehicle} 已排去程 → 改派 ${alt.id}` });
+    };
+    for (let i = 0; i < 10 && pending('south', true).length; i++) {
+      const dec = pickSouth('direct', '去程直達'); if (!dec) break;
+      const r = run('去程直達', () => this._dispatch(dec.vehicle, 'direct', dispatchDate));
+      r.sizeDecision = dec;
+      if (!(r.carried || []).length) break;
+      directVeh.add(dec.vehicle); southUsed.add(dec.vehicle);
+    }
+    for (let i = 0; i < 10 && pending('south', false).length; i++) {
+      const dec = pickSouth('greedy', '去程非直達'); if (!dec) break;
+      const r = run('去程非直達（貪婪）', () => this._dispatch(dec.vehicle, 'greedy', dispatchDate));
+      r.sizeDecision = dec;
+      if (!(r.carried || []).length) break;
+      southUsed.add(dec.vehicle);
+    }
+    directVeh.forEach(v => run('直達車回程', () => this._dispatchReturn(v, DB.homeSite, true, 0)));
+    for (let i = 0; i < 10 && pending('north').length; i++) {
+      const rets = pending('north');
+      const turnaround = rets.reduce((min, o) => this.siteById(o.pickSite).order < this.siteById(min).order ? o.pickSite : min, rets[0].pickSite);
+      let dec = this.decideSizeClass('greedy', null, null, 'north');
+      if (directVeh.has(dec.vehicle)) {   // 直達車回程不停靠（矩陣第 5 列），回程收送改用其他幹線車
+        const alt = DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass && !directVeh.has(v.id));
+        if (!alt) { trace.push('<span class="no">✗ 回程非直達：幹線車皆為直達車（回程不停靠），北上託運單留待其他派車日</span>', ''); break; }
+        dec = Object.assign({}, dec, { vehicle: alt.id, sizeClass: alt.sizeClass, reason: `${dec.reason}；${dec.vehicle} 為直達車回程不停靠 → 改派 ${alt.id}` });
+      }
+      const r = run('回程非直達', () => this._dispatchReturn(dec.vehicle, turnaround, false, 0));
+      r.sizeDecision = dec;
+      if (!(r.carried || []).length) break;
+    }
+    const dispatches = this._toDispatches(dispatchDate, by);
+    const carried = steps.flatMap(x => x.r.carried || []);
+    trace.push(`媒合完成：派車 ${carried.length} 張｜產生／併入派車單 ${dispatches.map(d => d.id).join('、') || '（無）'}（未送審；調度確認後送出運輸主管簽審）`);
+    return { steps, trace, carried, dispatches, last: steps.length ? steps[steps.length - 1].r : null };
+  },
+
+  /* ================= 派車單（G117–G119）================= */
+  dispatchOf(o) { return o.dispatchId ? this.dispatches.find(d => d.id === o.dispatchId && !d.cancelled) || null : null; },
+  dispatchOrders(d) { return d.apps.map(id => this.orders.find(o => o.id === id)).filter(Boolean); },
+  liveDispatches() { return this.dispatches.filter(d => !d.cancelled); },
+  driversOf(o) { return [o.dispatchDriver, o.dispatchDriver2].filter(Boolean); },
+  _dlog(d, action, by, note) { d.log.push({ at: new Date(), action, by: by || '調度室', note: note || '' }); },
+  _todayStr() { const t = new Date(); return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`; },
+  _applyToOrders(d) {
+    this.dispatchOrders(d).forEach(o => { o.dispatchVehicle = d.vehicle; o.dispatchDriver = d.driver1 || null; o.dispatchDriver2 = d.driver2 || null; o.dispatchId = d.id; });
+  },
+  // 預設駕駛人1：當日尚未被其他派車單使用的物流池駕駛
+  _freeLogiDriver(date, exceptId) {
+    const used = new Set(this.liveDispatches().filter(d => d.date === date && d.id !== exceptId).flatMap(d => [d.driver1, d.driver2]));
+    const lv = id => DB.driverLeaves.some(l => l.driver === id && l.date === date);
+    const d = DB.drivers.find(x => x.pool === 'LOGI' && !used.has(x.id) && !lv(x.id));
+    return d ? d.id : '';
+  },
+  // 新裝載（尚無派車單）的單依車輛併入當日派車單；同車已有派車單（未出車）則併入，已送審者新單一併送簽
+  _toDispatches(date, by) {
+    date = date || this._todayStr();
+    const groups = {};
+    this.orders.filter(o => o.status === 'loaded' && !o.dispatchId && o.dispatchVehicle)
+      .forEach(o => (groups[o.dispatchVehicle] = groups[o.dispatchVehicle] || []).push(o));
+    return Object.entries(groups).map(([vid, list]) => {
+      let d = this.liveDispatches().find(x => x.date === date && x.vehicle === vid && !this.started(x));
+      if (d) {
+        list.forEach(o => d.apps.push(o.id));
+        this._dlog(d, '媒合併入', by, list.map(o => o.id).join('、'));
+      } else {
+        const v = DB.vehicles.find(x => x.id === vid);
+        d = { id: 'TD' + String(this.dispatchSeq++).padStart(3, '0'), date, vehicleType: v ? v.type : '', vehicle: vid,
+          driver1: this._freeLogiDriver(date), driver2: '', dispatcher: by || '調度室', dispatchedAt: new Date(),
+          submitted: false, apps: list.map(o => o.id), cancelled: false, log: [] };
+        this.dispatches.push(d);
+        this._dlog(d, '媒合產生', by, list.map(o => o.id).join('、'));
+      }
+      this._applyToOrders(d);
+      if (d.submitted) list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室'));
+      return d;
+    });
+  },
+  started(d) { return this.dispatchOrders(d).some(o => o.status === 'delivered'); },
+  /* 資源檢核：車種與車號相符、容積／載重足夠（有效體積）、駕駛不同人、請假、當日其他派車單撞車撞人 */
+  dispatchResourceError(d, f) {
+    const list = this.dispatchOrders(d);
+    const v = DB.vehicles.find(x => x.id === f.vehicle && x.pool === 'LOGI');
+    if (!f.vehicleType) return '請選擇「車種類型」';
+    if (!v) return '請選擇物流池的「車號」';
+    if (v.type !== f.vehicleType) return '車號與車種類型不符';
+    const vol = list.reduce((s, o) => s + this.effVolume(o), 0), wt = list.reduce((s, o) => s + (+o.weight || 0), 0);
+    if (vol > v.volume) return `${v.id} 容積 ${Math.round(v.volume)}L 不足本派車單有效體積 ${Math.round(vol)}L`;
+    if (wt > v.weight) return `${v.id} 載重 ${v.weight}kg 不足本派車單 ${wt}kg`;
+    if (!f.driver1) return '請選擇「駕駛人1」';
+    if (f.driver2 && f.driver2 === f.driver1) return '駕駛人1 與駕駛人2 不可為同一人';
+    const ds = [f.driver1, f.driver2].filter(Boolean);
+    for (const id of ds) if (!DB.drivers.some(x => x.id === id && x.pool === 'LOGI')) return `駕駛 ${id} 不在物流池`;
+    const others = this.liveDispatches().filter(x => x.id !== d.id && x.date === d.date);
+    const vHit = others.find(x => x.vehicle === v.id);
+    if (vHit) return `${v.id} 已由派車單 ${vHit.id}（${d.date}）使用`;
+    const nm = id => (DB.drivers.find(x => x.id === id) || {}).name || id;
+    for (const id of ds) {
+      const dHit = others.find(x => [x.driver1, x.driver2].includes(id));
+      if (dHit) return `${nm(id)} 已有派車單 ${dHit.id}（${d.date}）任務`;
+      const lv = DB.driverLeaves.find(l => l.driver === id && l.date === d.date);
+      if (lv) return `${nm(id)} 請假 ${lv.date} ${lv.from}~${lv.to}`;
+    }
+    return null;
+  },
+  /* 調度異動派車單：f = { vehicleType, vehicle, driver1, driver2, submitted }（G118）
+     否 → 是＝送運輸主管簽審；是 → 否＝撤回簽審；已送審者異動車輛／駕駛重新送簽；已有單交貨者不可異動 */
+  updateDispatch(d, f, by) {
+    if (d.cancelled) return { ok: false, error: '派車單已取消' };
+    if (this.started(d)) return { ok: false, error: '已有託運單交貨，派車單不可再異動' };
+    const v = DB.vehicles.find(x => x.id === f.vehicle);
+    const next = { vehicleType: f.vehicleType || (v ? v.type : ''), vehicle: f.vehicle, driver1: f.driver1, driver2: f.driver2 || '',
+      submitted: f.submitted == null ? d.submitted : !!f.submitted };
+    const err = this.dispatchResourceError(d, next);
+    if (err) return { ok: false, error: err };
+    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2'].filter(k => (d[k] || '') !== (next[k] || ''));
+    const wasSub = d.submitted;
+    if (!changed.length && wasSub === next.submitted) return { ok: true, changed: [] };
+    const before = `${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋') || '—'}`;
+    Object.assign(d, next);
+    this._applyToOrders(d);
+    const list = this.dispatchOrders(d);
+    if (changed.length) this._dlog(d, '異動', by, `${before} → ${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋')}`);
+    if (!wasSub && next.submitted) { list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室')); this._dlog(d, '送審', by, '送出運輸主管簽審'); }
+    else if (wasSub && !next.submitted) { list.forEach(o => Signoff.release(o, `派車單 ${d.id} 撤回送審`, by || '調度室')); this._dlog(d, '撤回送審', by, ''); }
+    else if (wasSub && changed.length) list.forEach(o => Signoff.mark(o, this.signSummary(o) + '（派車單異動）', by || '調度室'));
+    return { ok: true, changed };
+  },
+  submitDispatch(d, by) {
+    return this.updateDispatch(d, { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2, submitted: true }, by);
+  },
+  DISPATCH_FIELDS: ['dispatchVehicle', 'dispatchMode', 'dispatchEndpoint', 'dispatchOrigin', 'dispatchDir', 'pickupTime', 'dispatchDay', 'dispatchDropTime', 'dispatchDriver', 'dispatchDriver2'],
+  _detach(o, reason, by) {
+    const d = this.dispatchOf(o);
+    if (d) {
+      d.apps = d.apps.filter(id => id !== o.id);
+      this._dlog(d, '移出託運單', by, `${o.id}${reason ? '：' + reason : ''}`);
+      if (!d.apps.length) { d.cancelled = true; this._dlog(d, '取消', by, '派車單已無託運單'); }
+    }
+    o.dispatchId = null;
+    this.DISPATCH_FIELDS.forEach(k => { o[k] = null; });
+  },
+  /* 調度退回申請單（G119）：已核准待派車、已派車未交貨者；原因必填 → 申請人「退回修編」，修改後重送單位主管審核 */
+  canReturn(o) { return ['approved', 'loaded'].includes(o.status); },
+  returnOrder(o, note, by) {
+    note = (note || '').trim();
+    if (!this.canReturn(o)) return { ok: false, error: '僅已核准待派車或已派車未交貨的託運單可退回' };
+    if (!note) return { ok: false, error: '退回時「退回原因」為必填' };
+    Signoff.release(o, '派車調度退回申請人', by || '調度室');
+    this._detach(o, '退回申請人', by);
+    o.status = 'rejected'; o.approvedAt = null; o.reviewNote = note; o.returnedBy = 'dispatch';
+    return { ok: true };
   },
   _dispatchReturn(vehicleId, turnaroundId, originallyDirect, startNet) {
     const veh = DB.vehicles.find(v => v.id === vehicleId);

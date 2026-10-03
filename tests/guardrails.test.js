@@ -794,6 +794,8 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     const o = mkOrder(H, { site: 'D9', destSite: 'D3' });
     H.ModuleB.approve(o); H.ModuleB.dispatch('V-T02', 'greedy');
     eq(o.status, 'loaded', '派車後為 loaded');
+    ok(!H.ModuleB.confirmDelivery(o, '調度室'), '派車單未送審時不可交貨');
+    H.ModuleB.submitDispatch(H.ModuleB.dispatchOf(o));
     ok(!H.ModuleB.confirmDelivery(o, '調度室'), '待運輸主管簽審時不可交貨');
     ok(H.ModuleB.signApprove(o, '運輸主管').ok);
     H.ModuleB.confirmDelivery(o, '調度室');
@@ -1719,6 +1721,84 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
 });
 
 /* =================================================================
+   模組 B：派車調度 · 派車單（G117–G120）
+   ================================================================= */
+group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送審／退回／貨品回報）', () => {
+  const DD = '2026-12-31';
+  const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false,
+    volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }, o)); H.ModuleB.approve(x); return x; };
+
+  test('G117 單一媒合按鈕：依序完成去程直達、去程非直達、回程，並依同一台車產生派車單（未送審、號碼／派遣人／時間自動）', () => {
+    const H = fresh(), B = H.ModuleB;
+    const dr = mk(H, { direct: true, destSite: 'D3', applicant: '急件' });
+    const g1 = mk(H, { destSite: 'D5', applicant: 'A' }), g2 = mk(H, { destSite: 'D4', applicant: 'B' });
+    const nb = mk(H, { site: 'D3', destSite: 'D6', applicant: '北上' });
+    const r = B.runMatch(DD, '調度室-王');
+    ok(r.steps.some(x => x.label === '去程直達') && r.steps.some(x => x.label.startsWith('去程非直達')) && r.steps.some(x => x.label === '回程非直達'), '四種派車整合執行');
+    [dr, g1, g2, nb].forEach(o => eq(o.status, 'loaded', o.id + ' 已派車'));
+    const ds = B.liveDispatches();
+    ok(ds.length >= 1); ds.forEach(d => { ok(/^TD\d{3}$/.test(d.id)); eq(d.dispatcher, '調度室-王'); ok(d.dispatchedAt); eq(d.submitted, false); eq(d.date, DD); });
+    ds.forEach(d => { const vs = new Set(B.dispatchOrders(d).map(o => o.dispatchVehicle)); eq(vs.size, 1, '一張派車單一台車'); });
+    eq(new Set(ds.map(d => d.vehicle)).size, ds.length, '同一台車只有一張派車單');
+    ok(dr.dispatchVehicle !== g1.dispatchVehicle, '去程直達與去程非直達不可同時用同一台車');
+    ok(nb.dispatchVehicle !== dr.dispatchVehicle, '直達車回程不停靠，回程收送改用其他車');
+    ok(new Set(ds.map(d => d.driver1)).size === ds.length, '各派車單預設不同駕駛');
+    ok([dr, g1, g2, nb].every(o => !o.sign), '未送審不送簽');
+    ok(B.dispatchOf(g1).driver1, '預設帶入駕駛人1');
+  });
+
+  test('G118 派車單異動：車種／車號相符、容量足夠、駕駛不可重複與撞單；送審／撤回送審／送審後異動重新送簽', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = mk(H, { volume: 3000, weight: 300 });
+    B.runMatch(DD, '調度室');
+    const d = B.dispatchOf(o), f = { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: '' };
+    ok(B.updateDispatch(d, Object.assign({}, f, { vehicleType: '物流貨車' })).error.includes('不符'));
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver2: d.driver1 })).error.includes('同一人'));
+    const other = H.DB.drivers.find(x => x.pool === 'LOGI' && x.id !== d.driver1);
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver2: other.id })).ok); eq(o.dispatchDriver2, other.id, '駕駛人2 套用至託運單');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver2: other.id, submitted: true })).ok); eq(o.sign.status, 'pending');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: other.id, driver2: d.driver1, submitted: true })).ok); eq(o.sign.round, 2, '送審後異動重新送簽');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: other.id, driver2: '', submitted: false })).ok); eq(o.sign, null, '撤回送審');
+    // 容量：大單改小車不足
+    const big = mk(H, { volume: 30000, weight: 2000, applicant: '大單' });
+    B.runMatch('2027-01-02', '調度室'); const db = B.dispatchOf(big);
+    if (db && db.vehicle === 'V-T01') ok(B.updateDispatch(db, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: db.driver1 }).error.includes('不足'), '容量不足不可改小車');
+    B.submitDispatch(d); B.signApprove(o, '運輸主管'); B.confirmDelivery(o, '調度室');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: d.driver1 === other.id ? f.driver1 : other.id })).error.includes('交貨'), '已交貨不可異動');
+  });
+
+  test('G119 調度退回託運單：原因必填 → 退回修編、移出派車單（空了即取消）、撤回簽審；修改重送回單位主管審核', () => {
+    const H = fresh(), B = H.ModuleB;
+    const a = mk(H, { destSite: 'D5' }), b = mk(H, { destSite: 'D4', applicant: 'B' }), w = mk(H, { applicant: '待派' });
+    B.runMatch(DD, '調度室');
+    const d = B.dispatchOf(a); B.submitDispatch(d);
+    ok(B.returnOrder(a, ' ', '調度室').error.includes('必填'));
+    ok(B.returnOrder(a, '尺寸不符', '調度室').ok);
+    eq(a.status, 'rejected'); eq(a.returnedBy, 'dispatch'); eq(a.dispatchVehicle, null); eq(a.sign, null);
+    ok(!d.apps.includes(a.id));
+    B.dispatchOrders(d).forEach(x => B.returnOrder(x, '一併退回', '調度室')); eq(d.cancelled, true);
+    const w2 = mk(H, { applicant: '待派2' });
+    ok(B.returnOrder(w2, '待派車單也可退回', '調度室').ok, '已核准待派車可退回');
+    B.resubmit(a, { applicant: 'X', site: 'D9', destSite: 'D5', direct: false, volume: 800, category: 'BOX', weight: 80, handleMin: 20 });
+    eq(a.status, 'submitted'); eq(a.returnedBy, null);
+  });
+
+  test('G120 車輛使用實登貨品回報：預設正常運送，可改為不運送／不接收並留紀錄；未生效不可回報', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
+      items: [{ name: '紙箱', l: 50, w: 40, h: 30, qty: 2, weight: 5, category: 'BOX' }, { name: '儀器', l: 80, w: 60, h: 60, qty: 1, weight: 30, category: 'FRAGILE' }] });
+    B.approve(o); B.runMatch(DD, '調度室');
+    eq(B.itemReport(o.items[0]), '正常運送');
+    ok(B.setItemReport(o, 0, '不運送').error.includes('生效'), '派車未生效不可回報');
+    B.submitDispatch(B.dispatchOf(o)); B.signApprove(o, '運輸主管');
+    ok(B.setItemReport(o, 1, '遺失').error, '僅限三種狀態');
+    ok(B.setItemReport(o, 1, '不接收', '調度室-王').ok);
+    eq(o.items[1].report, '不接收'); eq(B.itemReport(o.items[0]), '正常運送');
+    eq(o.itemReportLog[0].before, '正常運送'); eq(o.itemReportLog[0].after, '不接收'); eq(o.itemReportLog[0].by, '調度室-王');
+  });
+});
+
+/* =================================================================
    模組 D：派車調度 · 替補自駕駕駛（G116）
    ================================================================= */
 group('一般用車 · 替補自駕駕駛（G116）', () => {
@@ -1852,15 +1932,17 @@ group('運輸主管簽審（B/C/D 派車結果覆核；A 不經簽審）', () =>
     ok(A.confirmDelivery(app, '接收人'), '排班即生效、可交貨');
   });
 
-  test('B：派車即送簽審；退回 → 卸下派車回已核准，可重新派車再送簽', () => {
+  test('B：派車單送審才送簽；退回 → 移出派車單回已核准，可重新媒合產生新派車單再送簽', () => {
     const H = fresh(), B = H.ModuleB;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });
     B.approve(o); B.dispatch('V-T02', 'greedy');
-    eq(o.status, 'loaded'); eq(o.sign.status, 'pending'); ok(o.sign.summary.includes('V-T02'));
+    eq(o.status, 'loaded'); ok(!o.sign, '未送審不送簽');
+    const d1 = B.dispatchOf(o); ok(B.submitDispatch(d1).ok);
+    eq(o.sign.status, 'pending'); ok(o.sign.summary.includes('V-T02') && o.sign.summary.includes(d1.id));
     ok(B.signReject(o, '運輸主管', '改派大車').ok);
-    eq(o.status, 'approved'); eq(o.dispatchVehicle, null, '退回後卸下派車結果');
+    eq(o.status, 'approved'); eq(o.dispatchVehicle, null, '退回後卸下派車結果'); eq(d1.cancelled, true);
     B.dispatch('V-T01', 'greedy');
-    eq(o.status, 'loaded'); eq(o.sign.status, 'pending'); eq(o.sign.round, 2);
+    eq(o.status, 'loaded'); ok(B.dispatchOf(o).id !== d1.id); B.submitDispatch(B.dispatchOf(o)); eq(o.sign.round, 2);
   });
 
   test('C：派車單送審才送簽；退回 → 移出派車單回已核准，重新批次產生新派車單後再送簽', () => {
@@ -1949,11 +2031,11 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     eq(app.usage.distance, 42);
   });
 
-  test('B：派車只指定車輛，實登須補駕駛人1；C：沿用派車車輛／司機', () => {
+  test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／司機', () => {
     const H = fresh(), B = H.ModuleB, C = H.ModuleC;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });
-    B.approve(o); B.dispatch('V-T02', 'greedy'); B.signApprove(o, '運輸主管');
-    eq(B.usagePlan(o).vehicle, 'V-T02'); eq(B.usagePlan(o).drivers.length, 0);
+    B.approve(o); B.dispatch('V-T02', 'greedy'); B.submitDispatch(B.dispatchOf(o)); B.signApprove(o, '運輸主管');
+    eq(B.usagePlan(o).vehicle, 'V-T02'); eq(B.usagePlan(o).drivers.join(), B.dispatchOf(o).driver1, '帶入派車單駕駛人1');
     ok(B.usageSave(o, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: '', startKm: 1, endKm: 2 }).error.includes('駕駛人1'));
     ok(B.usageSave(o, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR1', driver2: 'DR2', startKm: 5000, endKm: 5320 }).ok, '實際改用聯結車＋雙駕駛');
     const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
