@@ -1,7 +1,7 @@
 /* ============================================================
    usage.js — 共用：車輛使用實登
    四模組（A 巡迴物品轉運／B 院區物品轉運／C 差旅共乘／D 一般用車申請）共用。
-   派車結果經運輸主管簽審通過（生效）後，由業務登打車輛實際使用狀況：
+   派車結果生效後（B/C/D 經運輸主管簽審通過；A 不經簽審，排入班次即生效），由業務登打車輛實際使用狀況：
      · 實際使用的「車種類型、車號、駕駛人1、駕駛人2（選填）」；
      · 起始里程、結束里程（結束 ≥ 起始，行駛里程＝結束－起始）。
    實登可修改，每次儲存都留歷程（rec.usageLog），不覆蓋前一次紀錄。
@@ -22,15 +22,16 @@ const Usage = {
   driversOf(pool) { return DB.drivers.filter(d => d.pool === pool); },
 
   // 派車結果已生效才可實登；已實登者即使之後派車結果異動仍保留紀錄
-  eligible(rec) { return Signoff.effective(rec); },
-  inScope(rec) { return this.eligible(rec) || !!rec.usage; },
+  // eff：模組自行判定的「已生效」（巡迴物品轉運不經簽審，排入班次即生效）；未給則以運輸主管簽審通過為準
+  eligible(rec, eff) { return eff != null ? !!eff : Signoff.effective(rec); },
+  inScope(rec, eff) { return this.eligible(rec, eff) || !!rec.usage; },
   stateOf(rec) { return rec.usage ? 'done' : 'todo'; },
 
   /* 儲存實登：data = { vehicleType, vehicle, driver1, driver2, startKm, endKm }
      opts.pool＝資源池；opts.allowSelf＝駕駛人可選「使用者自駕」 */
   save(rec, data, by, opts) {
     opts = opts || {};
-    if (!rec.usage && !this.eligible(rec)) return { ok: false, error: '派車結果尚未生效（待運輸主管簽審），不可實登' };
+    if (!rec.usage && !this.eligible(rec, opts.effective)) return { ok: false, error: '派車結果尚未生效，不可實登' };
     const d = Object.assign({}, data);
     if (!d.vehicleType) return { ok: false, error: '請選擇「車種類型」' };
     if (!d.vehicle) return { ok: false, error: '請選擇「車號」' };

@@ -62,8 +62,7 @@ const ModuleA = {
     const app = this.createApp(data);
     const r = this.match(app);
     app.matchTrace = r.trace;
-    if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }
-    else Signoff.mark(app, this.signSummary(app), '系統自動排班');   // 派車結果送運輸主管簽審（通過才生效）
+    if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }   // 成功即排班生效（巡迴物品轉運不送運輸主管簽審）
     return { app, result: r };
   },
 
@@ -74,15 +73,13 @@ const ModuleA = {
     app.matchTrace = r.trace;
     app.status = r.ok ? 'matched' : 'unscheduled';
     app.note = r.ok ? '' : r.msg;
-    if (r.ok) Signoff.mark(app, this.signSummary(app), '系統自動排班');
     return r;
   },
 
   // 媒合成功即完成排班，不需接收人「確認接受」；交貨確認可由 matched 直接進入
   // 交貨確認（matched → delivered）；可由接收人確認收到、或調度/駕駛回報已送達
-  // 簽審通過才生效：待運輸主管簽審的排班不可交貨確認
   confirmDelivery(app, by) {
-    if (app.status !== 'matched' || !Signoff.effective(app)) return false;
+    if (app.status !== 'matched') return false;
     app.status = 'delivered'; app.deliveredAt = Date.now(); app.deliveredBy = by || '調度室';
     return true;
   },
@@ -125,9 +122,6 @@ const ModuleA = {
   },
   setShiftPlan(date, shiftId, plan) {
     this.shiftPlans[date + '|' + shiftId] = { vehicle: plan.vehicle, driver: plan.driver };
-    // 車次車輛／司機異動＝派車結果改變：該車次的單重新送運輸主管簽審
-    this.applications.filter(a => a.status === 'matched' && a.assignedShift === shiftId && a.serviceDate === date)
-      .forEach(a => Signoff.mark(a, this.signSummary(a), '調度室'));
     return this.shiftPlans[date + '|' + shiftId];
   },
   // 改派班次（同日）：更新 assignedShift 並依新班次重算到站時間；狀態回 matched
@@ -138,44 +132,25 @@ const ModuleA = {
     app.status = 'matched';
     const st = DB.stations.find(s => s.id === app.station);
     app.arrival = st ? minToHHMM(this.shiftArrivalAtStation(sh, st.order)) : null;
-    Signoff.mark(app, this.signSummary(app), '調度室');
     return app;
   },
   // 移出班次：回未排入、清空班次與到站，待業務重新指定
   removeFromShift(app) {
     app.assignedShift = null; app.arrival = null; app.status = 'unscheduled';
     app.note = '已由「已排定車次異動」移出班次，待重新指定。';
-    Signoff.release(app, '移出班次');
     return app;
   },
 
-  /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程）---- */
+  /* ---- 車輛使用實登（已排入班次即可登打實際車輛／駕駛／里程；巡迴物品轉運不經運輸主管簽審）---- */
   USAGE_POOL: 'LOGI',
+  isScheduled(app) { return ['matched', 'delivered'].includes(app.status) && !!app.assignedShift; },
   usagePlan(app) {
     if (!app.assignedShift) return { vehicle: null, drivers: [] };
     const plan = this.shiftPlan(app.serviceDate, app.assignedShift);
     return { vehicle: plan.vehicle, drivers: plan.driver ? [plan.driver] : [] };
   },
-  usageRecords() { return this.applications.filter(a => Usage.inScope(a)); },
-  usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL }); },
-
-  /* ---- 運輸主管簽審（派車結果覆核，簽審通過才生效）---- */
-  signSummary(app) {
-    const sh = DB.regionalShifts.find(s => s.id === app.assignedShift);
-    const plan = this.shiftPlan(app.serviceDate, app.assignedShift);
-    const drv = DB.drivers.find(d => d.id === plan.driver);
-    return `${app.serviceDate} ${sh ? sh.label : app.assignedShift}｜車 ${plan.vehicle || '—'}／司機 ${drv ? drv.name : '—'}｜到站 ${app.arrival || '—'}`;
-  },
-  signRecords() { return this.applications.filter(a => Signoff.inScope(a)); },
-  signApprove(app, by, note) { return Signoff.decide(app, true, by, note); },
-  // 退回：移出班次回「未排入」，由調度（車次追蹤／異動）重新安排後再送簽審
-  signReject(app, by, note) {
-    const r = Signoff.decide(app, false, by, note);
-    if (!r.ok) return r;
-    app.assignedShift = null; app.arrival = null; app.status = 'unscheduled';
-    app.note = `運輸主管退回：${app.sign.note}；待調度重新安排班次。`;
-    return r;
-  },
+  usageRecords() { return this.applications.filter(a => Usage.inScope(a, this.isScheduled(a))); },
+  usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL, effective: this.isScheduled(app) }); },
 
   /* 站間行駛時間（分／站）：據點為在地路線、站點相鄰，行駛短。
      全程 9 站＝9×INTER_STATION_MIN，須明顯小於班距 60 分，確保整條路線在同一時段內走完。 */

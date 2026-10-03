@@ -148,9 +148,8 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const { app } = submit(H);
     eq(app.status, 'matched', '媒合成功即已排班');
     ok(typeof H.ModuleA.acceptSchedule === 'undefined', '不應再有確認接受排班步驟');
-    ok(!H.ModuleA.confirmDelivery(app, '接收人'), '待運輸主管簽審時不可交貨');
-    ok(H.ModuleA.signApprove(app, '運輸主管').ok);
-    H.ModuleA.confirmDelivery(app, '接收人');
+    ok(!app.sign, '巡迴物品轉運不送運輸主管簽審（排班即生效）');
+    ok(H.ModuleA.confirmDelivery(app, '接收人'));
     eq(app.status, 'delivered', 'matched 應可直接進入已交貨');
   });
 
@@ -1670,7 +1669,7 @@ group('單位主管審核（退回修編與重新送出）', () => {
 /* =================================================================
    共用：運輸主管簽審（派車結果覆核，簽審通過才生效；退回調度重新處理）
    ================================================================= */
-group('運輸主管簽審（A/B/C/D 派車結果覆核）', () => {
+group('運輸主管簽審（B/C/D 派車結果覆核；A 不經簽審）', () => {
   function aSubmit(H) {
     H.ModuleA.now = () => new Date(2026, 8, 2, 6, 0);
     return H.ModuleA.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
@@ -1689,24 +1688,16 @@ group('運輸主管簽審（A/B/C/D 派車結果覆核）', () => {
     eq(rec.signLog.map(l => l.action).join('/'), '送簽審/主管同意/送簽審');
   });
 
-  test('A：自動排班即送簽審；退回 → 移出班次回未排入；調度改派後第 2 輪送簽', () => {
+  test('A 巡迴物品轉運不經運輸主管簽審：排班、改派班次、車次異動皆不送簽，排班即可交貨', () => {
     const H = fresh(), A = H.ModuleA;
     const app = aSubmit(H);
-    eq(app.status, 'matched'); eq(app.sign.status, 'pending'); ok(app.sign.summary.includes('司機'), '摘要含車輛／司機');
-    ok(!A.signReject(app, '運輸主管', '').ok, '退回須填意見');
-    ok(A.signReject(app, '運輸主管', '改走下午班次').ok);
-    eq(app.status, 'unscheduled'); eq(app.assignedShift, null); ok(app.note.includes('改走下午班次'));
-    const shift = H.DB.regionalShifts.find(s => s.branch === app.branch && s.label.includes('3'));
-    A.reassignShift(app, (shift || H.DB.regionalShifts.find(s => s.branch === app.branch)).id);
-    eq(app.sign.status, 'pending'); eq(app.sign.round, 2);
-    ok(A.signApprove(app, '運輸主管').ok); ok(A.confirmDelivery(app, '接收人'));
-  });
-
-  test('A：車次改派車輛／司機 → 該車次已同意的單重新送簽審', () => {
-    const H = fresh(), A = H.ModuleA;
-    const app = aSubmit(H); A.signApprove(app, '運輸主管');
+    eq(app.status, 'matched'); eq(app.sign, undefined, '自動排班不送簽');
+    eq(typeof A.signRecords, 'undefined', '無 A 簽審清單');
     A.setShiftPlan(app.serviceDate, app.assignedShift, { vehicle: 'V-L02', driver: 'DR2' });
-    eq(app.sign.status, 'pending', '派車結果改變須重新簽審'); ok(app.sign.summary.includes('V-L02'));
+    const sh = H.DB.regionalShifts.filter(s => s.branch === app.branch).find(s => s.id !== app.assignedShift);
+    A.reassignShift(app, sh.id);
+    eq(app.sign, undefined, '車次異動、改派班次皆不送簽');
+    ok(A.confirmDelivery(app, '接收人'), '排班即生效、可交貨');
   });
 
   test('B：派車即送簽審；退回 → 卸下派車回已核准，可重新派車再送簽', () => {
@@ -1786,13 +1777,16 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     ok(Us.inScope(rec), '已實登者派車異動後仍列在清單'); eq(Us.diffs(rec, { vehicle: 'V-L01', drivers: ['DR1'] }).join('/'), '車號/駕駛人');
   });
 
-  test('A：排班簽審通過後帶出班次車輛／司機，可實登', () => {
+  test('A：排入班次即可實登（不經簽審），帶出班次車輛／司機；移出班次後不列入', () => {
     const H = fresh(), A = H.ModuleA;
     A.now = () => new Date(2026, 8, 2, 6, 0);
     const app = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
       items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15 }).app;
-    eq(A.usageRecords().length, 0, '待簽審不列入');
-    A.signApprove(app, '運輸主管');
+    const other = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
+      items: [item({ l: 60, w: 60, h: 60 })], recvMode: 'asap', handleMin: 15 }).app;
+    A.removeFromShift(other);
+    ok(!A.usageRecords().includes(other), '未排入班次不列入');
+    ok(!A.usageSave(other, { vehicleType: '物流貨車', vehicle: 'V-L01', driver1: 'DR1', startKm: 1, endKm: 2 }).ok, '未排入班次不可實登');
     const pl = A.usagePlan(app);
     ok(pl.vehicle && pl.drivers.length === 1, '派車規劃含班次車輛與司機');
     eq(A.usageRecords().map(a => a.id).join(), app.id);
