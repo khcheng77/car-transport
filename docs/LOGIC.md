@@ -234,6 +234,7 @@ draft ──▶ submitted ──(approve)──▶ approved（待調度；媒合
 matched ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 待出車 ──(出發時間到)──▶ 已出車 ──(實登)──▶ 已回登
 G122 已刪除：coordinate（待人工協調）、boarded／completed（已上車／行程完成）、void（逾期作廢）
 ```
+> 派車單鎖定（G130）：`ModuleC.updateDispatch` 對已送審派車單一律拒絕（含撤回送審與 `overrideAssign` 改派），`unassign` 亦不可；運輸主管退回 `signReject` 後派車單回未送審才可再改。
 > 手動指派（G128）：`ModuleC.manualAssign(app, {vehicleType, vehicle, driver1, driver2}, by)` 產生未送審派車單（`manual: true`）；`ModuleC.manualMerge(app, order, by)` 併入 `manualTargets(date)`（同出發日期、未送審、未出車）。皆經 `dispatchResourceError` 檢核並寫入 `app.overrides`（人工覆寫紀錄，`overridden` 不再被批次重排）；`unassign` 移出回待調度。
 > 實登以**派車單**為單位（G125）：`ModuleC.usageDispatches()` 列出簽審通過的派車單；`ModuleC.dispatchUsageSave(d, data, by)` 經 `Usage.saveGroup` 寫入派車單並同步到單內每張申請單 `usage` → 已回登，再對各單 `_returnResourcesHome`（當前位置回復歸屬據點）。
 

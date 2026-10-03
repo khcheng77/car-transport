@@ -840,9 +840,7 @@ const ModuleB = {
     this._applyToOrders(d);
     const list = this.dispatchOrders(d);
     if (changed.length) this._dlog(d, '異動', by, `${before} → ${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋')}`);
-    if (!wasSub && next.submitted) { list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室')); this._dlog(d, '送審', by, '送出運輸主管簽審'); }
-    else if (wasSub && !next.submitted) { list.forEach(o => Signoff.release(o, `派車單 ${d.id} 撤回送審`, by || '調度室')); this._dlog(d, '撤回送審', by, ''); }
-    else if (wasSub && changed.length) list.forEach(o => Signoff.mark(o, this.signSummary(o) + '（派車單異動）', by || '調度室'));
+    if (!wasSub && next.submitted) { list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室')); this._dlog(d, '送審', by, '送出運輸主管簽審'); }   // 送審後即鎖定（G129）
     return { ok: true, changed };
   },
   submitDispatch(d, by) {
@@ -908,7 +906,7 @@ const ModuleB = {
   unassign(o, by) {
     const d = this.dispatchOf(o);
     if (!d || o.status !== 'loaded') return { ok: false, error: '此託運單不在派車單內' };
-    if (d.submitted) return { ok: false, error: '派車單已送審，請先將是否送審改為「否」' };
+    if (d.submitted) return { ok: false, error: '派車單已送審，不可刪除申請單（送審後即不可再異動）' };
     this._detach(o, '移出派車單', by);
     o.status = 'approved';
     return { ok: true };

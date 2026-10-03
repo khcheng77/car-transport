@@ -340,7 +340,7 @@ const ModuleC = {
     const before = { vehicle: app.vehicle, driver: app.driver, status: app.status };
     const order = this.dispatchOf(app);
     if (order) {
-      // 已在派車單：改派即異動整張派車單（同車群組一起改），送審中者重新送簽（G103）
+      // 已在派車單：改派即異動整張派車單（同車群組一起改）；派車單已送審者不可改派（G130）
       const r = this.updateDispatch(order, { vehicle: next.vehicle || order.vehicle,
         driver1: next.driver || order.driver1, driver2: order.driver2 }, by, next.note);
       if (!r.ok) throw new Error(r.error);
@@ -461,12 +461,14 @@ const ModuleC = {
     return null;
   },
   /* 調度異動派車單：f = { vehicleType, vehicle, driver1, driver2, submitted }
-     · 已有乘客上車／完成者不可再異動；
-     · 是否送審：否 → 是＝送出運輸主管簽審（各申請單送簽）；是 → 否＝撤回簽審；
-     · 已送審者異動車輛／駕駛 → 重新送簽（G103）。 */
+     · 已出車者不可再異動；
+     · 送審前可異動車種類型／車號／駕駛人1／駕駛人2，是否送審 否 → 是＝送出運輸主管簽審（各申請單送簽）；
+     · 送審後即不可再異動（G130 取代原「撤回送審／送審後異動重新送簽 G103」），運輸主管退回後回未送審才可再改。 */
   updateDispatch(order, f, by, note) {
     if (order.cancelled) return { ok: false, error: '派車單已取消' };
     if (this.started(order)) return { ok: false, error: '派車單已出車，不可再異動' };
+    // G130：送審後即不可再異動（含撤回送審）；運輸主管退回後派車單回未送審，才可再修改
+    if (order.submitted) return { ok: false, error: '派車單已送審，不可再異動' };
     const v = DB.vehicles.find(x => x.id === f.vehicle);
     const next = { vehicleType: f.vehicleType || (v ? v.type : ''), vehicle: f.vehicle, driver1: f.driver1, driver2: f.driver2 || '',
       submitted: f.submitted == null ? order.submitted : !!f.submitted };
@@ -480,14 +482,9 @@ const ModuleC = {
     this._applyToApps(order);
     const apps = this.dispatchApps(order);
     if (changed.length) this._dlog(order, '異動', by, `${before} → ${order.vehicle}／${[order.driver1, order.driver2].filter(Boolean).join('＋')}${note ? '（' + note + '）' : ''}`);
-    if (!wasSub && next.submitted) {
+    if (!wasSub && next.submitted) {   // 送審（送審後即鎖定，G130）
       apps.forEach(a => Signoff.mark(a, this.signSummary(a), by || '調度室'));
       this._dlog(order, '送審', by, '送出運輸主管簽審');
-    } else if (wasSub && !next.submitted) {
-      apps.forEach(a => Signoff.release(a, `派車單 ${order.id} 撤回送審`, by || '調度室'));
-      this._dlog(order, '撤回送審', by, '');
-    } else if (wasSub && changed.length) {
-      apps.forEach(a => Signoff.mark(a, this.signSummary(a) + '（派車單異動）', by || '調度室'));
     }
     return { ok: true, changed };
   },
@@ -520,7 +517,7 @@ const ModuleC = {
   unassign(app, by) {
     const order = this.dispatchOf(app);
     if (!order || app.status !== 'matched') return { ok: false, error: '此申請單不在派車單內' };
-    if (order.submitted) return { ok: false, error: '派車單已送審，請先將是否送審改為「否」' };
+    if (order.submitted) return { ok: false, error: '派車單已送審，不可刪除申請單（送審後即不可再異動）' };
     this._detach(app, '移出派車單', by);
     app.status = 'approved'; app.overridden = false;
     return { ok: true };

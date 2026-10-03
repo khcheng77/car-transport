@@ -1360,17 +1360,19 @@ group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／
     ok(oa.log.some(l => l.action === '異動'));
   });
 
-  test('G114 是否送審：否→是 送運輸主管簽審；送審後異動重新送簽；是→否 撤回簽審；已出車不可異動', () => {
+  test('G114／G130 是否送審：否→是 送運輸主管簽審；送審後不可再異動（含撤回）；主管退回後可再改；已出車不可異動', () => {
     const H = fresh(), C = H.ModuleC;
     const a = round(H); C.approve(a); C.runBatch(D, '調度室', { days: 0 });
     const o = C.dispatchOf(a);
     const f = { vehicleType: o.vehicleType, vehicle: o.vehicle, driver1: o.driver1, driver2: '' };
     ok(C.updateDispatch(o, Object.assign({}, f, { submitted: true })).ok); eq(a.sign.status, 'pending');
     const other = H.DB.drivers.find(d => d.pool === 'BIZ' && d.id !== o.driver1 && !H.DB.driverLeaves.some(l => l.driver === d.id));
-    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id, submitted: true })).ok);
-    eq(a.sign.round, 2, '送審中異動重新送簽'); ok(a.sign.summary.includes(o.id), '簽審摘要含派車單號');
-    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id, submitted: false })).ok);
-    eq(a.sign, null, '撤回送審'); eq(Signoff_state(a), '撤回簽審');
+    ok(a.sign.summary.includes(o.id), '簽審摘要含派車單號');
+    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id, submitted: true })).error.includes('已送審'), '送審後不可異動車輛／駕駛');
+    ok(C.updateDispatch(o, Object.assign({}, f, { submitted: false })).error.includes('已送審'), '送審後不可撤回送審');
+    eq(a.sign.status, 'pending'); eq(Signoff_state(a), '送簽審');
+    C.signReject(a, '運輸主管', '請換司機'); ok(!o.submitted, '主管退回後回未送審');
+    ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id })).ok, '退回後可再異動');
     C.submitDispatch(o); C.signApprove(a, '運輸主管');
     H.Flow._now = new Date(2026, 7, 27, 9, 30);   // 到出發時間＝已出車
     ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id })).error.includes('出車'), '已出車不可異動');
@@ -1402,8 +1404,8 @@ group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／
     ok(C.returnApp(p, '  ', '調度室').error.includes('必填'));
     ok(C.returnApp(p, '當日無車', '調度室').ok); eq(p.status, 'noCar'); eq(H.Flow.of(p), 'noCar');
     let err = ''; try { C.resubmit(p, p); } catch (e) { err = e.message; } ok(err, '無車退回不可修改重送');
-    C.submitDispatch(o); ok(C.unassign(a, '調度室').error.includes('送審'), '已送審需先撤回送審');
-    C.updateDispatch(o, { vehicleType: o.vehicleType, vehicle: o.vehicle, driver1: o.driver1, driver2: '', submitted: false });
+    C.submitDispatch(o); ok(C.unassign(a, '調度室').error.includes('送審'), '已送審不可移出');
+    C.signReject(a, '運輸主管', '退回調度');   // 送審後不可撤回（G130），主管退回後派車單回未送審
     ok(C.unassign(a, '調度室').ok); eq(a.status, 'approved'); eq(H.Flow.of(a), 'todo'); eq(o.apps.join(), b.id);
     ok(C.unassign(b, '調度室').ok); eq(o.cancelled, true, '派車單無申請單即取消');
   });
@@ -2036,8 +2038,8 @@ group('運輸主管簽審（B/C/D 派車結果覆核；A 不經簽審）', () =>
     eq(a.status, 'matched'); eq(o1.submitted, false); eq(H.Flow.of(a), 'dispatching', '退回＝調度中');
     C.submitDispatch(o1); eq(a.sign.round, 2);
     const v = a.vehicle; C.signApprove(a, '運輸主管');
-    C.overrideAssign(a, { vehicle: v === 'V-B03' ? 'V-B01' : 'V-B03', note: '調度改派' }, '調度室');
-    eq(a.sign.status, 'pending', '人工改派須重新簽審');
+    let err = ''; try { C.overrideAssign(a, { vehicle: v === 'V-B03' ? 'V-B01' : 'V-B03', note: '調度改派' }, '調度室'); } catch (e) { err = e.message; }
+    ok(err.includes('已送審'), '派車單送審後不可再改派（G130）'); eq(a.vehicle, v);
   });
 
   test('D：派車判斷即送簽審（資源先保留）；退回 → 回已核准待調度並釋放資源', () => {

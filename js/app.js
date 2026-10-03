@@ -2605,8 +2605,9 @@ function cFillVehicles(typeSel, vehSel, cur, pax) {
     .map(v => bOpt(v.id, `${v.id}（${v.name}｜${v.seats} 座${v.seats < pax ? '・座位不足' : ''}）`, cur, v.seats < pax)).join('') : '');
 }
 // 派車單區塊（原明細頁的派車單卡片）：表單＋申請單 grid＋異動紀錄；於視窗內顯示
+// 送審前可異動車種類型／車號／駕駛人1／駕駛人2／是否送審與刪除申請單；送審後（或已出車）即鎖定（G130）
 function cOrderCardHtml(o) {
-  const oa = ModuleC.dispatchApps(o), pax = cPaxOf(oa), locked = ModuleC.started(o), k = 'cro-' + o.id;
+  const oa = ModuleC.dispatchApps(o), pax = cPaxOf(oa), started = ModuleC.started(o), locked = started || o.submitted, k = 'cro-' + o.id;
   return `
     <div style="text-align:right;margin:-4px 0 8px;">${cOrderBadge(o)}</div>
     ${infoGrid(k + '-f', [
@@ -2619,47 +2620,59 @@ function cOrderCardHtml(o) {
       fInput('駕駛人2', `<select id="${k}-d2" ${locked ? 'disabled' : ''}>${cDrvOpts(o.driver2, '（無）')}</select>`),
       fInput('是否送審', `<select id="${k}-sub" ${locked ? 'disabled' : ''}>${bOpt('no', '否（未送審）', o.submitted ? 'yes' : 'no')}${bOpt('yes', '是（送運輸主管簽審）', o.submitted ? 'yes' : 'no')}</select>`),
     ].join(''))}
-    <div style="margin:6px 0 12px;">${locked ? '<span class="hint">派車單已出車，不可再異動。</span>'
-      : `<button class="btn btn-primary btn-sm" data-crsave="${o.id}">💾 儲存派車單</button>
-         <span class="hint" style="margin-left:8px;">送審後才送運輸主管簽審，通過才生效；已送審者異動車輛／駕駛將重新送簽。</span>`}</div>
+    <div style="margin:6px 0 12px;">${started ? '<span class="hint">派車單已出車，不可再異動。</span>'
+      : o.submitted ? '<span class="hint">派車單已送審，不可再異動（運輸主管退回後才可再修改）。</span>'
+      : '<span class="hint">送審前可異動車種類型、車號、駕駛人、是否送審與刪除申請單；是否送審改為「是」並儲存即送運輸主管簽審，<b>送審後即不可再異動</b>。</span>'}</div>
     <div class="table-wrap"><table class="dt"><thead><tr>
       <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>出發</th><th>人數</th><th>狀態</th><th>操作</th></tr></thead><tbody>
       ${oa.map(a => `<tr><td><b style="color:var(--navy);">${a.id}</b>${a.overridden ? ' <span class="badge b-amber">覆寫</span>' : ''}</td><td>${a.applicant}</td>
         <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRoute(a)}</td><td>${cTimeText(a)}</td><td>${a.pax}</td>
         <td>${Flow.badge(a)}${signBadge(a)}</td>
-        <td>${!o.submitted && !locked ? `<button class="btn btn-ghost btn-sm" data-crout="${a.id}">移出派車單</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
+        <td>${!locked ? `<button class="btn btn-danger btn-sm" data-crout="${a.id}">刪除</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
     </tbody></table></div>
     ${o.log.length ? `<details style="margin-top:10px;"><summary class="muted" style="cursor:pointer;">派車單異動紀錄（${o.log.length}）</summary>
       <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
       ${o.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td style="text-align:left;">${l.note || '—'}</td></tr>`).join('')}
-      </tbody></table></div></details>` : ''}`;
+      </tbody></table></div></details>` : ''}
+    ${locked ? '' : `<div style="text-align:center;margin-top:16px;"><button class="btn btn-primary" data-crsave="${o.id}">💾 儲存</button>
+      <button class="btn btn-ghost" id="cro-close">取消</button></div>`}`;
 }
-// 派車單明細視窗：異動車輛／駕駛、是否送審、移出申請單
-function openCOrderModal(o, by, rerender) {
+// 派車單明細視窗：送審前異動車輛／駕駛、是否送審、刪除申請單（回待調度）；送審後唯讀（G130）
+// keep：重開視窗時保留尚未儲存的欄位值（刪除申請單後）
+function openCOrderModal(o, by, rerender, keep) {
   openModal(`派車單明細 · ${o.id}`, cOrderCardHtml(o), { wide: true });
   const k = 'cro-' + o.id, pax = cPaxOf(ModuleC.dispatchApps(o));
-  cFillVehicles(`#${k}-type`, `#${k}-veh`, o.vehicle, pax);
+  if (keep) $(`#${k}-type`).value = keep.vehicleType;
+  cFillVehicles(`#${k}-type`, `#${k}-veh`, keep ? keep.vehicle : o.vehicle, pax);
   $(`#${k}-type`).onchange = () => cFillVehicles(`#${k}-type`, `#${k}-veh`, '', pax);
+  if (keep) { $(`#${k}-d1`).value = keep.driver1; $(`#${k}-d2`).value = keep.driver2; $(`#${k}-sub`).value = keep.submitted ? 'yes' : 'no'; }
+  const cl = $('#cro-close'); if (cl) cl.onclick = closeModal;
+  const formVal = () => ({ vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value,
+    driver2: $(`#${k}-d2`).value, submitted: $(`#${k}-sub`).value === 'yes' });
   const done = msg => { toast(msg, 'ok'); closeModal(); rerender(); };
   const save = $('#modal-body [data-crsave]');
   if (save) save.onclick = async () => {
-    const f = { vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value,
-      driver2: $(`#${k}-d2`).value, submitted: $(`#${k}-sub`).value === 'yes' };
+    const f = formVal();
     const pre = ModuleC.dispatchResourceError(o, f);
     if (pre) { toast(pre, 'err'); return; }
-    const text = !o.submitted && f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效。'
-      : o.submitted && !f.submitted ? '派車單將<b>撤回送審</b>，各申請單的待簽審紀錄一併撤回。'
-      : o.submitted ? '已送審的派車單異動車輛／駕駛後將<b>重新送運輸主管簽審</b>。' : '儲存派車單異動（尚未送審）。';
+    const text = f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效；<b>送審後即不可再異動</b>。' : '儲存派車單異動（尚未送審）。';
     if (!(await confirmDialog({ title: `確認儲存派車單 ${o.id}？`, text }))) return;
     const r = ModuleC.updateDispatch(o, f, by());
     if (!r.ok) { toast(r.error, 'err'); return; }
-    done(`派車單 ${o.id} 已儲存`);
+    done(`派車單 ${o.id} 已${f.submitted ? '儲存並送審' : '儲存'}`);
   };
-  $$('#modal-body [data-crout]').forEach(b => b.onclick = confirmThen({ title: '確認移出派車單？', text: '此申請單將移出派車單、回到「待調度」。' }, () => {
-    const r = ModuleC.unassign(ModuleC.applications.find(x => x.id === b.dataset.crout), by());
+  // 刪除：申請單移出派車單、回到「待調度申請單」；派車單仍有申請單則重開視窗（保留未儲存的欄位）
+  $$('#modal-body [data-crout]').forEach(b => b.onclick = async () => {
+    const a = ModuleC.applications.find(x => x.id === b.dataset.crout);
+    if (!(await confirmDialog({ title: '確認刪除？', text: `${a.id} 將自派車單 ${o.id} 刪除，回到「待調度申請單」。` }))) return;
+    const keepVal = formVal();
+    const r = ModuleC.unassign(a, by());
     if (!r.ok) { toast(r.error, 'err'); return; }
-    done('已移出派車單，回待調度');
-  }));
+    toast(`${a.id} 已刪除，回到待調度申請單`, 'ok');
+    rerender();
+    if (o.cancelled) { closeModal(); toast(`派車單 ${o.id} 已無申請單，自動取消`, 'ok'); }
+    else openCOrderModal(o, by, rerender, keepVal);
+  });
 }
 // 手動指派視窗：新派車單（指定車種類型／車號／駕駛人1／駕駛人2，產生未送審派車單）或併入未送審派車單
 function openCManualAssign(a, by, rerender) {
