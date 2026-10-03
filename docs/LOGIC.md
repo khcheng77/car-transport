@@ -17,7 +17,7 @@
 | 退回修編 | 單位主管退回 | — | `rejected` | `rejected` | `rejected` |
 | 待調度 | 主管同意（A：未排入） | `unscheduled` | `approved` | `approved`（媒合不成註明原因） | `approved` |
 | 無車退回 | 調度退回待調度單（結案） | `noCar` | `noCar` | `noCar` | `noVehicle` |
-| 調度中 | 併入派車單、未送審 | — | `loaded`＋派車單未送審 | `matched`＋派車單未送審 | —（無派車單） |
+| 調度中 | 併入派車單、未送審 | — | `loaded`＋派車單未送審 | `matched`＋派車單未送審 | —（一單一派車單，派車判斷即送審） |
 | 調度主管審 | 派車單送審（運輸主管簽審待審） | — | 簽審 pending | 簽審 pending | `dispatched`＋簽審 pending |
 | 待出車 | 調度主管同意（A：排入班次） | `matched` | 簽審通過 | 簽審通過 | 簽審通過 |
 | 已出車 | 系統時間 ≥ 出車時間 | 收貨日期＋班次出發 | 派車日＋收貨時間 | 出發日期＋去程上車 | 用車起時 |

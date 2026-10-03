@@ -3087,7 +3087,7 @@ RENDER.d_apply = function () {
 /* ---------- 查詢畫面 ---------- */
 function renderDApplyList(p) {
   const q = dApply.query;
-  const stOpts = flowOpts(q.status, ['draft', 'review', 'revise', 'todo', 'noCar', 'signing', 'ready', 'departed', 'logged']);   // D 無派車單（無調度中）
+  const stOpts = flowOpts(q.status, ['draft', 'review', 'revise', 'todo', 'noCar', 'signing', 'ready', 'departed', 'logged']);   // D 一單一派車單、派車判斷即送審（無調度中）
   p.innerHTML = `
     <div class="section-h">一般用車申請（使用者）</div>
     <div class="section-sub">彈性時長用車（數小時～數個月，不分類別）。送出後先經<b>單位主管審核</b>，再由<b>調度人工確認</b>共用商務車輛／司機資源並派車，結果以 Email 通知。申請單另有「例行用車」類別，僅總經理／部長秘書等特定角色可選（G81）。車型由調度依人數與貨物指派，不需自選（G77）。</div>

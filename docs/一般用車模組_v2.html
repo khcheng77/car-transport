@@ -282,7 +282,7 @@
   <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
   <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 10 種狀態（G122）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
   <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，申請人修改後重送</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛使用實登登錄里程完畢</td></tr></table>
-  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中（暫存／撤回修改）→ 待二級審（單位主管審核）→（退回修編）→ 待調度 →（無車退回：原「無車可派」）→ 調度主管審（派車判斷即送審；本模組無派車單，無「調度中」）→ 待出車 → 已出車（用車起時間）→ 已回登。</div>
+  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中（暫存／撤回修改）→ 待二級審（單位主管審核）→（退回修編）→ 待調度 →（無車退回：原「無車可派」）→ 調度主管審（派車判斷即產生派車單並送審；一單一派車單，無「調度中」）→ 待出車 → 已出車（用車起時間）→ 已回登（以派車單登打車輛使用實登，見 12A）。</div>
   <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：草稿→申請中｜待主管簽核→待二級審｜已核准待調度→待調度｜無車可派→無車退回（結案，不送簽審，立即通知）｜已派車→調度主管審／待出車｜行程完成→已回登｜已撤回（整單撤回）、已歸還（未出車，整段提前歸還）→已刪除（提前歸還須晚於用車起時）。調度主管退回時回「待調度」。</div>
 </div>
 
@@ -414,13 +414,19 @@
       <span class="arrow">→</span>
       <div class="step">③ 調度確認資源</div>
       <span class="arrow">→</span>
-      <div class="step">④ 派車結果</div>
+      <div class="step">④ 派車結果（產生派車單）</div>
       <span class="arrow">→</span>
       <div class="step">⑤ Email 通知</div>
+      <span class="arrow">→</span>
+      <div class="step">⑥ 車輛使用實登（以派車單）</div>
     </div>
     <p>
       <strong>簽核在調度判斷之前</strong>：申請送出後先走簽核（沿用既有核准者關係表機制），
       簽核通過才會進入調度人工判斷資源池可用性的階段。此流程對「一般用車」「例行用車」兩種類別皆相同，不因類別拉高或省略簽核層級。
+    </p>
+    <p>
+      調度做出派車判斷（有車有司機／有車需自駕）時，系統自動為這張申請單產生<strong>一張派車單</strong>（無車退回不產生），派車單送運輸主管簽審，通過後生效並寄送通知；
+      用車結束後，業務以派車單為單位登打車輛使用實登（實際車輛、駕駛與起訖里程），申請單即轉「已回登」。詳見第 12A 節。
     </p>
     <div class="callout">
       <strong>首次申請之後的異動不再走這套流程：</strong>調度確認派車之後的任何異動（換車、換司機、展延、提前歸還），
@@ -673,6 +679,10 @@
     <p>
       換車／換司機在資料層面採<strong>同一時間點瞬間切換</strong>——舊車輛／司機的區間在切換時間點結束，新車輛／司機的區間同一時間點開始，
       不設計「舊車新車同時顯示佔用」的重疊區間。交車緩衝是調度人員時間安排上的事，系統不需要為此建模重疊佔用這種邊緣狀態。
+    </p>
+    <p>
+      換車／換司機（含補派司機）<strong>不另開新派車單</strong>：同一張派車單的車號、駕駛人欄位隨目前指派同步更新，完整的區間歷史仍保留在申請單的指派區間紀錄（11.1）。
+      車輛使用實登時預設帶入派車單目前的車輛與駕駛，實際使用不同可再修改。
     </p>
     <h3>11.3　展延：延長預計結束時間，不需簽核</h3>
     <p>
