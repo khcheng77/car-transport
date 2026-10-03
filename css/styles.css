@@ -251,6 +251,7 @@ table.dt tr:hover td { background: var(--blue-bg); }
 .modal-mask.show { display: flex; }
 .modal { background: #fff; border-radius: 12px; max-width: 560px; width: 100%; max-height: 88vh; overflow-y: auto;
   padding: 24px 26px; }
+.modal.wide { max-width: 1100px; }   /* 寬版視窗：含 grid 的區塊（如派車單明細） */
 .modal h3 { margin: 0 0 4px; color: var(--navy); }
 .modal .close-x { float: right; cursor: pointer; font-size: 20px; color: var(--ink-soft); border: none; background: none; }
 

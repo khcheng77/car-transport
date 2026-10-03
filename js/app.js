@@ -18,7 +18,9 @@ function toast(msg, type = '') {
   wrap.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
 }
-function openModal(title, bodyHtml) {
+// opts.wide：寬版視窗（放含 grid 的區塊，如派車單明細）
+function openModal(title, bodyHtml, opts) {
+  $('#modal-mask .modal').classList.toggle('wide', !!(opts && opts.wide));
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = bodyHtml;
   $('#modal-mask').classList.add('show');
@@ -1763,7 +1765,9 @@ function renderBApproveDetail(p, id) {
         → 依同一台車產生派車單，可異動車種類型／車號／駕駛人1／駕駛人2／是否送審（G117–G119）
    ============================================================ */
 let bReview = { view: 'list', date: null, query: { from: '', to: '', status: '' }, matchResult: null };
-const bDefaultDate = () => { const d = new Date(); d.setDate(d.getDate() + DB.matchCutoffDaysBefore + 1); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+// 派車日查詢預設：起＝系統當日、迄＝系統當日＋14 天（G127）
+const bDayStr = offset => { const d = Flow.now(); d.setDate(d.getDate() + (offset || 0)); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const B_QUERY_MAX_DAYS = 62;
 function bDaySummary(date) {
   const ds = ModuleB.liveDispatches().filter(d => d.date === date);
   const os = ds.flatMap(d => ModuleB.dispatchOrders(d));
@@ -1777,11 +1781,13 @@ RENDER.b_review = function () {
   const p = $('#page-b_review');
   if (bReview.view === 'detail' && bReview.date) return renderBrDetail(p, bReview.date);
   const q = bReview.query, pend = ModuleB.orders.filter(o => o.status === 'approved').length;
+  if (!q.from) q.from = bDayStr(0);
+  if (!q.to) q.to = bDayStr(14);
   const stOpts = [['', '全部'], ['draft', '有調度中（未送審）派車單'], ['signing', '有調度主管審']]
     .map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">派車調度（業務單位）</div>
-    <div class="section-sub">依<b>派車日</b>查詢派車作業；點「明細」（或指定派車日按「前往派車」）進入該日：按<b>媒合派車</b>一次完成去程直達、去程非直達（貪婪）、直達車回程與回程非直達（全域直達鎖定），媒合到<b>同一台車</b>的託運單產生一張<b>派車單</b>；調度確認車種類型／車號／駕駛人後<b>送審</b>（運輸主管簽審通過才生效）。不適合派車的託運單可<b>退回申請人</b>修編。</div>
+    <div class="section-sub">依<b>派車日</b>查詢派車作業（預設系統當日起 14 天，每天一列）；點「明細」進入該派車日：按<b>媒合派車</b>一次完成去程直達、去程非直達（貪婪）、直達車回程與回程非直達（全域直達鎖定），媒合到<b>同一台車</b>的託運單產生一張<b>派車單</b>；調度確認車種類型／車號／駕駛人後<b>送審</b>（運輸主管簽審通過才生效）。不適合派車的託運單可<b>退回申請人</b>修編。</div>
     <div style="margin:-4px 0 14px;"><button class="btn btn-ghost btn-sm" id="br-goto-driver">🧑‍✈️ 查看司機任務單</button></div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
@@ -1794,19 +1800,17 @@ RENDER.b_review = function () {
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>派車作業（依派車日）</span>
-        <span>${pend ? `<span class="badge b-amber">待調度 ${pend} 筆</span> ` : ''}<span class="muted" id="brq-count"></span>
-          <input type="date" id="brq-new-date" value="${bDefaultDate()}" style="width:150px;margin-left:10px;" title="派車日">
-          <button class="btn btn-accent btn-sm" id="brq-new">▶ 前往派車</button></span></div>
+        <span>${pend ? `<span class="badge b-amber">待調度 ${pend} 筆</span> ` : ''}<span class="muted" id="brq-count"></span></span></div>
       <div id="brq-grid"></div>
     </div>`;
   $('#br-goto-driver').onclick = () => goto('b_driver');
   $('#brq-search').onclick = () => {
-    bReview.query = { from: $('#brq-from').value, to: $('#brq-to').value, status: $('#brq-status').value };
+    const from = $('#brq-from').value, to = $('#brq-to').value;
+    if (!from || !to) { toast('請輸入派車日（起）與派車日（迄）', 'err'); return; }
+    if (to < from) { toast('派車日（迄）不可早於派車日（起）', 'err'); return; }
+    if (bDayList(from, to).length > B_QUERY_MAX_DAYS) { toast(`派車日區間最多 ${B_QUERY_MAX_DAYS} 天`, 'err'); return; }
+    bReview.query = { from, to, status: $('#brq-status').value };
     renderBrGrid(); toast('查詢完成', 'ok');
-  };
-  $('#brq-new').onclick = () => {
-    const d = $('#brq-new-date').value; if (!d) { toast('請選擇派車日', 'err'); return; }
-    Object.assign(bReview, { view: 'detail', date: d, matchResult: null }); RENDER.b_review();
   };
   renderBrGrid();
   initMasonry(p);
@@ -1814,20 +1818,26 @@ RENDER.b_review = function () {
 function renderBrGrid() {
   const box = $('#brq-grid'); if (!box) return;
   const q = bReview.query;
-  const rows = [...new Set(ModuleB.liveDispatches().map(d => d.date))].sort()
-    .filter(d => (!q.from || d >= q.from) && (!q.to || d <= q.to)).map(bDaySummary)
+  // 派車起訖日區間內每一天各一列（尚無派車單者數量為 0，可點「明細」進入該日媒合派車）
+  const rows = bDayList(q.from, q.to).map(bDaySummary)
     .filter(r => !q.status || (q.status === 'draft' && r.draft) || (q.status === 'signing' && r.signing));
   $('#brq-count').textContent = `${rows.length} 筆`;
   const n = (v, cls) => v ? `<span class="badge ${cls}">${v}</span>` : '<span class="muted">0</span>';
-  box.innerHTML = rows.length === 0 ? `<div class="empty">查無派車作業。指定派車日按「前往派車」，於明細頁按「媒合派車」產生派車單。</div>` : `
+  box.innerHTML = rows.length === 0 ? `<div class="empty">查無符合條件的派車日。</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
       <th></th><th>派車日</th><th>派車單</th><th>託運單</th><th>調度中</th><th>調度主管審</th><th>待出車以後</th><th>已出車／已回登</th></tr></thead><tbody>
       ${rows.map(r => `<tr><td><button class="btn btn-ghost btn-sm" data-brday="${r.date}">明細</button></td>
         <td><b style="color:var(--navy);">${r.date}</b></td><td>${r.orders}</td><td>${r.total}</td>
         <td>${n(r.draft, 'b-gray')}</td><td>${n(r.signing, 'b-amber')}</td><td>${n(r.effective, 'b-green')}</td><td>${r.delivered}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="muted" style="margin-top:8px;">點擊左側「明細」進入該派車日：媒合派車、派車單異動與送審、退回託運單。</div>`;
+    <div class="muted" style="margin-top:8px;">點擊左側「明細」進入該派車日：媒合派車、手動指派、派車單異動與送審、無車退回。</div>`;
   $$('#brq-grid [data-brday]').forEach(b => b.onclick = () => { Object.assign(bReview, { view: 'detail', date: b.dataset.brday, matchResult: null }); RENDER.b_review(); });
+}
+function bDayList(from, to) {
+  const out = []; if (!from || !to || to < from) return out;
+  const d = new Date(from + 'T00:00:00'), end = new Date(to + 'T00:00:00');
+  for (let i = 0; d <= end && i <= 366; i++) { out.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`); d.setDate(d.getDate() + 1); }
+  return out;
 }
 const bRoute = o => `${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}`;
 const bDirBadge = o => ModuleB.isIntraSite(o) ? '<span class="badge b-amber">院區內</span>' : ModuleB.isSouthbound(o) ? '<span class="badge b-navy">南下</span>' : '<span class="badge b-gray">北上</span>';
@@ -1838,107 +1848,182 @@ function bOrderBadge(d) {
   if (os.length && os.every(o => Signoff.effective(o))) return '<span class="badge b-green">已送審 · 已生效</span>';
   return '<span class="badge b-navy">已送審</span>';
 }
+// 派車調度明細（G127）：待調度申請單（媒合派車／手動指派／無車退回）＋派車單 grid（「明細」開視窗異動與送審）
+const bOpt = (v, t, cur, dis) => `<option value="${v}" ${v === cur ? 'selected' : ''}${dis ? ' disabled' : ''}>${t}</option>`;
+const bDrvOpts = (cur, blank) => bOpt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'LOGI').map(d => bOpt(d.id, `${d.name}（${d.id}）`, cur)).join('');
+const bLoadOf = os => ({ vol: os.reduce((s, o) => s + ModuleB.effVolume(o), 0), wt: os.reduce((s, o) => s + (+o.weight || 0), 0) });
+// 車號下拉（依車種類型）：容積／載重不足者停用
+function bFillVehicles(typeSel, vehSel, cur, load) {
+  const t = $(typeSel).value;
+  $(vehSel).innerHTML = bOpt('', t ? '請選擇' : '請先選車種類型', cur) + (t ? Usage.vehiclesOf('LOGI', t).map(v => {
+    const short = v.volume < load.vol || v.weight < load.wt;
+    return bOpt(v.id, `${v.id}（${v.name}｜${Math.round(v.volume)}L／${v.weight}kg${short ? '・容量不足' : ''}）`, cur, short); }).join('') : '');
+}
+// 派車單區塊（原明細頁的派車單卡片）：表單＋申請單 grid＋異動紀錄；於視窗內顯示
+function bOrderCardHtml(d) {
+  const os = ModuleB.dispatchOrders(d), locked = ModuleB.started(d), k = 'bro-' + d.id, ld = bLoadOf(os);
+  return `
+    <div style="text-align:right;margin:-4px 0 8px;">${bOrderBadge(d)}</div>
+    ${infoGrid(k + '-f', [
+      fItem('派車單號', `<b style="color:var(--navy);">${d.id}</b>${d.manual ? ' <span class="badge b-gray">手動指派</span>' : ''}`),
+      fItem('派遣人', d.dispatcher),
+      fItem('派遣時間', fmtTime(d.dispatchedAt)),
+      fInput('車種類型', `<select id="${k}-type" ${locked ? 'disabled' : ''}>${Usage.types('LOGI').map(t => bOpt(t, t, d.vehicleType)).join('')}</select>`),
+      fInput(`車號 <span class="hint">有效體積 ${Math.round(ld.vol)}L／${ld.wt}kg</span>`, `<select id="${k}-veh" ${locked ? 'disabled' : ''}></select>`),
+      fInput('駕駛人1', `<select id="${k}-d1" ${locked ? 'disabled' : ''}>${bDrvOpts(d.driver1, '請選擇')}</select>`),
+      fInput('駕駛人2', `<select id="${k}-d2" ${locked ? 'disabled' : ''}>${bDrvOpts(d.driver2, '（無）')}</select>`),
+      fInput('是否送審', `<select id="${k}-sub" ${locked ? 'disabled' : ''}>${bOpt('no', '否（未送審）', d.submitted ? 'yes' : 'no')}${bOpt('yes', '是（送運輸主管簽審）', d.submitted ? 'yes' : 'no')}</select>`),
+    ].join(''))}
+    <div style="margin:6px 0 12px;">${locked ? '<span class="hint">已有申請單出車，派車單不可再異動。</span>'
+      : `<button class="btn btn-primary btn-sm" data-brsave="${d.id}">💾 儲存派車單</button>
+         <span class="hint" style="margin-left:8px;">送審後才送運輸主管簽審，通過才生效；已送審者異動車輛／駕駛將重新送簽。改車號不重算路線時間，請自行確認。</span>`}</div>
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>派遣模式</th><th>貨量</th><th>收貨</th><th>送達</th><th>狀態</th><th>操作</th></tr></thead><tbody>
+      ${os.map(o => `<tr><td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td><td>${bDirBadge(o)}</td><td>${bRoute(o)}</td>
+        <td>${o.dispatchMode === '直達' ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
+        <td>${o.volume}L</td><td>${o.pickupTime || '—'}</td><td>${o.dispatchDropTime || '—'}</td>
+        <td>${Flow.badge(o)}${signBadge(o)}</td>
+        <td>${!d.submitted && !locked ? `<button class="btn btn-ghost btn-sm" data-brout="${o.id}">移出派車單</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${d.log.length ? `<details style="margin-top:10px;"><summary class="muted" style="cursor:pointer;">派車單異動紀錄（${d.log.length}）</summary>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
+      ${d.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td style="text-align:left;">${l.note || '—'}</td></tr>`).join('')}
+      </tbody></table></div></details>` : ''}`;
+}
+// 派車單明細視窗：異動車輛／駕駛、是否送審、移出申請單
+function openBOrderModal(d, by, rerender) {
+  openModal(`派車單明細 · ${d.id}`, bOrderCardHtml(d), { wide: true });
+  const k = 'bro-' + d.id, ld = bLoadOf(ModuleB.dispatchOrders(d));
+  bFillVehicles(`#${k}-type`, `#${k}-veh`, d.vehicle, ld);
+  $(`#${k}-type`).onchange = () => bFillVehicles(`#${k}-type`, `#${k}-veh`, '', ld);
+  const done = msg => { toast(msg, 'ok'); closeModal(); rerender(); };
+  const save = $(`#modal-body [data-brsave]`);
+  if (save) save.onclick = async () => {
+    const f = { vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value,
+      driver2: $(`#${k}-d2`).value, submitted: $(`#${k}-sub`).value === 'yes' };
+    const pre = ModuleB.dispatchResourceError(d, f);
+    if (pre) { toast(pre, 'err'); return; }
+    const text = !d.submitted && f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效。'
+      : d.submitted && !f.submitted ? '派車單將<b>撤回送審</b>，各申請單的待簽審紀錄一併撤回。'
+      : d.submitted ? '已送審的派車單異動車輛／駕駛後將<b>重新送運輸主管簽審</b>。' : '儲存派車單異動（尚未送審）。';
+    if (!(await confirmDialog({ title: `確認儲存派車單 ${d.id}？`, text }))) return;
+    const r = ModuleB.updateDispatch(d, f, by());
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    done(`派車單 ${d.id} 已儲存`);
+  };
+  $$('#modal-body [data-brout]').forEach(b => b.onclick = confirmThen({ title: '確認移出派車單？', text: '此申請單將移出派車單、回到「待調度」（已排定的路線時間不重算）。' }, () => {
+    const r = ModuleB.unassign(ModuleB.orders.find(x => x.id === b.dataset.brout), by());
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    done('已移出派車單，回待調度');
+  }));
+}
+// 手動指派視窗：新派車單（指定車種類型／車號／駕駛人1／駕駛人2，產生未送審派車單）或併入未送審派車單
+function openBManualAssign(o, date, by, rerender) {
+  const targets = ModuleB.manualTargets(date), ld = bLoadOf([o]);
+  const tgtText = d => { const os = ModuleB.dispatchOrders(d), l = bLoadOf(os), v = DB.vehicles.find(x => x.id === d.vehicle);
+    return `${d.id}｜${d.vehicle}（${d.vehicleType}）｜${[d.driver1, d.driver2].filter(Boolean).map(drvName).join('＋') || '未指定駕駛'}｜${os.length} 張｜剩餘 ${v ? Math.round(v.volume - l.vol) : '—'}L／${v ? v.weight - l.wt : '—'}kg`; };
+  const veh0 = DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass && v.volume >= ld.vol && v.weight >= ld.wt);
+  openModal(`手動指派 · ${o.id}`, `
+    <div class="card-desc">${o.applicant}｜${bRoute(o)}｜${o.direct ? '直達' : '非直達'}｜申報 ${o.volume}L（有效 ${Math.round(ld.vol)}L）／${o.weight || 0}kg｜希望收貨 ${o.wantReceiveTime || '—'}｜派車日 <b>${date}</b></div>
+    ${infoGrid('bma-mode', [fInput('指派方式', gPills('bma-mode', 'new', [['new', '新派車單（暫存未送審）'], ['merge', `併入既有派車單（${targets.length} 張可併）`]]), { full: true, stack: true })].join(''))}
+    <div id="bma-new">${infoGrid('bma-new-f', [
+      fInput('車種類型 <span style="color:#c0392b;">*</span>', `<select id="bma-type">${bOpt('', '請選擇', veh0 ? veh0.type : '')}${Usage.types('LOGI').map(t => bOpt(t, t, veh0 ? veh0.type : '')).join('')}</select>`),
+      fInput('車號 <span style="color:#c0392b;">*</span>', `<select id="bma-veh"></select>`),
+      fInput('駕駛人1 <span style="color:#c0392b;">*</span>', `<select id="bma-d1">${bDrvOpts(ModuleB._freeLogiDriver(date), '請選擇')}</select>`),
+      fInput('駕駛人2', `<select id="bma-d2">${bDrvOpts('', '（無）')}</select>`),
+    ].join(''))}</div>
+    <div id="bma-merge" style="display:none;">${targets.length ? infoGrid('bma-merge-f', [
+      fInput('併入派車單 <span style="color:#c0392b;">*</span>', `<select id="bma-target">${targets.map(d => bOpt(d.id, tgtText(d), '')).join('')}</select>`, { full: true }),
+    ].join('')) : '<div class="callout">本派車日沒有尚未送審、未出車的派車單可併入。</div>'}</div>
+    <div class="hint" style="margin-top:8px;">手動指派不重算路線時間（收貨時間暫取希望收貨時間）；產生或併入的派車單為未送審，確認後於派車單明細送審。</div>
+    <div style="text-align:center;margin-top:18px;">
+      <button class="btn btn-primary" id="bma-ok">✓ 確認指派</button>
+      <button class="btn btn-ghost" id="bma-cancel">取消</button>
+    </div>`);
+  bFillVehicles('#bma-type', '#bma-veh', veh0 ? veh0.id : '', ld);
+  $('#bma-type').onchange = () => bFillVehicles('#bma-type', '#bma-veh', '', ld);
+  const mode = () => ($('#modal-body input[name=bma-mode]:checked') || {}).value || 'new';
+  $$('#modal-body input[name=bma-mode]').forEach(r => r.onchange = () => {
+    $$('#bma-mode-wrap .radio-pill').forEach(l => l.classList.toggle('sel', l.querySelector('input').checked));
+    $('#bma-new').style.display = mode() === 'new' ? '' : 'none';
+    $('#bma-merge').style.display = mode() === 'merge' ? '' : 'none';
+  });
+  $('#bma-cancel').onclick = closeModal;
+  $('#bma-ok').onclick = async () => {
+    let pre, text, act;
+    if (mode() === 'new') {
+      const f = { vehicleType: $('#bma-type').value, vehicle: $('#bma-veh').value, driver1: $('#bma-d1').value, driver2: $('#bma-d2').value };
+      pre = ModuleB.dispatchResourceError({ id: '(new)', date, apps: [o.id] }, f);
+      text = `${o.id} 指派 <b>${f.vehicle}</b>（${f.vehicleType}）｜駕駛 ${[f.driver1, f.driver2].filter(Boolean).map(drvName).join('＋')}，產生一張<b>未送審</b>派車單（派車日 ${date}）。`;
+      act = () => ModuleB.manualAssign(o, date, f, by());
+    } else {
+      const d = targets.find(x => x.id === ($('#bma-target') || {}).value);
+      if (!d) { toast('請選擇要併入的派車單', 'err'); return; }
+      pre = ModuleB.dispatchResourceError(Object.assign({}, d, { apps: d.apps.concat(o.id) }), d);
+      text = `${o.id} 併入派車單 <b>${d.id}</b>（${d.vehicle}），派車單維持未送審。`;
+      act = () => ModuleB.manualMerge(o, d, by());
+    }
+    if (pre) { toast(pre, 'err'); return; }
+    if (!(await confirmDialog({ title: '確認手動指派？', text }))) return;
+    const r = act();
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    toast(`${o.id} 已${mode() === 'new' ? '指派，產生派車單 ' : '併入派車單 '}${r.dispatch.id}`, 'ok');
+    closeModal(); rerender();
+  };
+}
 function renderBrDetail(p, date) {
   const waiting = ModuleB.orders.filter(o => o.status === 'approved').sort((a, b) => a.approvedAt - b.approvedAt);
   const dsp = ModuleB.liveDispatches().filter(d => d.date === date);
   const mr = bReview.matchResult;
-  const opt = (v, t, cur, dis) => `<option value="${v}" ${v === cur ? 'selected' : ''}${dis ? ' disabled' : ''}>${t}</option>`;
-  const drvOpts = (cur, blank) => opt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'LOGI').map(d => opt(d.id, `${d.name}（${d.id}）`, cur)).join('');
-  const card = d => {
-    const os = ModuleB.dispatchOrders(d), locked = ModuleB.started(d), k = 'bro-' + d.id;
-    const vol = Math.round(os.reduce((s, o) => s + ModuleB.effVolume(o), 0)), wt = os.reduce((s, o) => s + (+o.weight || 0), 0);
-    return `<div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>派車單 <b style="color:var(--navy);">${d.id}</b></span>${bOrderBadge(d)}</div>
-      ${infoGrid(k + '-f', [
-        fItem('派車單號', `<b style="color:var(--navy);">${d.id}</b>`),
-        fItem('派遣人', d.dispatcher),
-        fItem('派遣時間', fmtTime(d.dispatchedAt)),
-        fInput('車種類型', `<select id="${k}-type" ${locked ? 'disabled' : ''}>${Usage.types('LOGI').map(t => opt(t, t, d.vehicleType)).join('')}</select>`),
-        fInput(`車號 <span class="hint">有效體積 ${vol}L／${wt}kg</span>`, `<select id="${k}-veh" ${locked ? 'disabled' : ''}></select>`),
-        fInput('駕駛人1', `<select id="${k}-d1" ${locked ? 'disabled' : ''}>${drvOpts(d.driver1, '請選擇')}</select>`),
-        fInput('駕駛人2', `<select id="${k}-d2" ${locked ? 'disabled' : ''}>${drvOpts(d.driver2, '（無）')}</select>`),
-        fInput('是否送審', `<select id="${k}-sub" ${locked ? 'disabled' : ''}>${opt('no', '否（未送審）', d.submitted ? 'yes' : 'no')}${opt('yes', '是（送運輸主管簽審）', d.submitted ? 'yes' : 'no')}</select>`),
-      ].join(''))}
-      <div style="margin:6px 0 12px;">${locked ? '<span class="hint">已有託運單交貨，派車單不可再異動。</span>'
-        : `<button class="btn btn-primary btn-sm" data-brsave="${d.id}">💾 儲存派車單</button>
-           <span class="hint" style="margin-left:8px;">送審後才送運輸主管簽審，通過才生效；已送審者異動車輛／駕駛將重新送簽。改車號不重算路線時間，請自行確認。</span>`}</div>
-      <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>派遣模式</th><th>貨量</th><th>收貨</th><th>送達</th><th>狀態</th><th>操作</th></tr></thead><tbody>
-        ${os.map(o => `<tr><td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td><td>${bDirBadge(o)}</td><td>${bRoute(o)}</td>
-          <td>${o.dispatchMode === '直達' ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
-          <td>${o.volume}L</td><td>${o.pickupTime || '—'}</td><td>${o.dispatchDropTime || '—'}</td>
-          <td>${Flow.badge(o)}${signBadge(o)}</td>
-          <td>${!d.submitted && !locked ? `<button class="btn btn-ghost btn-sm" data-brout="${o.id}">移出派車單</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}
-      </tbody></table></div>
-      ${d.log.length ? `<details style="margin-top:10px;"><summary class="muted" style="cursor:pointer;">派車單異動紀錄（${d.log.length}）</summary>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
-        ${d.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td style="text-align:left;">${l.note || '—'}</td></tr>`).join('')}
-        </tbody></table></div></details>` : ''}
-    </div>`;
-  };
+  const by = () => (($('#br-by') || {}).value || '').trim() || '調度室';
   p.innerHTML = `
     <div class="section-h">派車調度明細 · 派車日 ${date}</div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>待調度託運單（${waiting.length} 筆）</span>
+      <div class="card-title" style="justify-content:space-between;"><span>待調度申請單（${waiting.length} 筆）</span>
         <span><input type="text" id="br-by" value="調度室-值班人員" style="width:150px;margin-right:6px;" title="派遣人">
         <button class="btn btn-accent btn-sm" id="br-match">▶ 媒合派車</button></span></div>
-      <div class="card-desc">依核准時間排序。按<b>媒合派車</b>一次執行：① 去程直達（G38）② 去程非直達（貪婪 G32）③ 直達車回程（矩陣第 5 列）④ 回程非直達（全域直達鎖定 G40）；車型依當日總貨量自動選（2.17），媒合截止（2.14／2.15）以本派車日計。媒合到同一台車的託運單產生一張派車單（未送審）。</div>
-      ${waiting.length === 0 ? '<div class="empty">沒有待調度的託運單。</div>' : `
+      <div class="card-desc">依核准時間排序。按<b>媒合派車</b>一次執行：① 去程直達（G38）② 去程非直達（貪婪 G32）③ 直達車回程（矩陣第 5 列）④ 回程非直達（全域直達鎖定 G40）；車型依當日總貨量自動選（2.17），媒合截止（2.14／2.15）以本派車日計。媒合到同一台車的申請單產生一張派車單（未送審）。個別申請單可按<b>手動指派</b>：指定車輛／駕駛產生暫存派車單，或併入本日尚未送審的派車單。</div>
+      ${waiting.length === 0 ? '<div class="empty">沒有待調度的申請單。</div>' : `
       <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>申請人</th><th>方向</th><th>路線</th><th>型態</th><th>貨量</th><th>希望收貨</th><th>媒合截止</th><th>操作</th></tr></thead><tbody>
         ${waiting.map(o => `<tr><td><b style="color:var(--navy);">${o.id}</b>${ModuleB.isServable(o) ? '' : ' <span class="badge b-red" title="' + ModuleB.unservableReason(o) + '">基地以北・待確認</span>'}</td>
           <td>${o.applicant}</td><td>${bDirBadge(o)}</td><td>${bRoute(o)}</td>
           <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
           <td>${o.volume}L</td><td>${o.wantReceiveTime || '—'}</td>
           <td>${!ModuleB.isSouthbound(o) || ModuleB.meetsCutoff(o, date) ? '<span class="badge b-green">趕得上</span>' : '<span class="badge b-amber">逾截止・順延</span>'}</td>
-          <td><button class="btn btn-danger btn-sm" data-brret="${o.id}">無車退回</button></td></tr>`).join('')}
+          <td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" data-brmanual="${o.id}">手動指派</button>
+            <button class="btn btn-danger btn-sm" data-brret="${o.id}">無車退回</button></td></tr>`).join('')}
       </tbody></table></div>`}
       ${mr ? `<div class="result ${mr.carried.length ? 'ok' : 'warn'}" style="margin-top:14px;"><div class="r-head">${mr.carried.length ? '✓' : '—'} 媒合派車完成（派遣人 ${mr.by}）</div>
-        <div>執行 ${mr.steps.map(x => `${x.label}${x.r.carried && x.r.carried.length ? `（${x.r.carried.length} 張）` : ''}`).join('、') || '（無可派託運單）'}｜派車 ${mr.carried.length} 張｜派車單 ${mr.dispatches.map(d => d.id).join('、') || '—'}</div></div>
+        <div>執行 ${mr.steps.map(x => `${x.label}${x.r.carried && x.r.carried.length ? `（${x.r.carried.length} 張）` : ''}`).join('、') || '（無可派申請單）'}｜派車 ${mr.carried.length} 張｜派車單 ${mr.dispatches.map(d => d.id).join('、') || '—'}</div></div>
         <div class="trace">${mr.trace.join('\n')}</div>` : ''}
     </div>
-    ${dsp.length ? dsp.map(card).join('') : '<div class="card"><div class="card-title">派車單</div><div class="empty">本派車日尚無派車單。按上方「媒合派車」產生。</div></div>'}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>派車單（${dsp.length} 張）</span>
+        <span class="muted">點「明細」異動車輛／駕駛、送審或移出申請單</span></div>
+      ${dsp.length === 0 ? '<div class="empty">本派車日尚無派車單。按上方「媒合派車」或「手動指派」產生。</div>' : `
+      <div class="table-wrap"><table class="dt"><thead><tr>
+        <th></th><th>派車單號</th><th>派遣人</th><th>派遣時間</th><th>車種類型</th><th>車號</th><th>駕駛人1</th><th>駕駛人2</th><th>申請單數</th><th>狀態</th></tr></thead><tbody>
+        ${dsp.map(d => `<tr><td><button class="btn btn-ghost btn-sm" data-brorder="${d.id}">明細</button></td>
+          <td><b style="color:var(--navy);">${d.id}</b>${d.manual ? ' <span class="badge b-gray">手動</span>' : ''}</td><td>${d.dispatcher}</td><td>${fmtTime(d.dispatchedAt)}</td>
+          <td>${d.vehicleType || '—'}</td><td>${usageVehText(d.vehicle)}</td><td>${d.driver1 ? drvName(d.driver1) : '—'}</td><td>${d.driver2 ? drvName(d.driver2) : '—'}</td>
+          <td>${ModuleB.dispatchOrders(d).length}</td><td>${bOrderBadge(d)}</td></tr>`).join('')}
+      </tbody></table></div>`}
+    </div>
     <div id="br-vehstatus">${renderB_vehicleStatus()}</div>
     <div id="br-matrix">${renderB_matrix(mr && mr.last ? mr.last.matrixRow : null)}</div>
     ${backBar('br-back')}`;
   const rerender = () => { RENDER.b_review(); renderBaList(); };
   $('#br-back').onclick = () => { Object.assign(bReview, { view: 'list', matchResult: null }); RENDER.b_review(); };
-  $('#br-match').onclick = confirmThen({ title: '確認媒合派車？', text: `將以派車日 <b>${date}</b> 對已核准託運單依序執行去程直達、去程非直達、直達車回程與回程非直達派車，媒合到同一台車者產生一張派車單（未送審）。` }, () => {
-    const by = $('#br-by').value.trim() || '調度室';
-    const r = ModuleB.runMatch(date, by); r.by = by;
+  $('#br-match').onclick = confirmThen({ title: '確認媒合派車？', text: `將以派車日 <b>${date}</b> 對已核准申請單依序執行去程直達、去程非直達、直達車回程與回程非直達派車，媒合到同一台車者產生一張派車單（未送審）。` }, () => {
+    const r = ModuleB.runMatch(date, by()); r.by = by();
     bReview.matchResult = r;
     toast(`媒合派車完成：派車 ${r.carried.length} 張、派車單 ${r.dispatches.length} 張`, r.carried.length ? 'ok' : 'err');
     rerender();
   });
-  dsp.forEach(d => {
-    const k = 'bro-' + d.id, os = ModuleB.dispatchOrders(d);
-    const vol = os.reduce((s, o) => s + ModuleB.effVolume(o), 0), wt = os.reduce((s, o) => s + (+o.weight || 0), 0);
-    const fill = cur => { const t = $(`#${k}-type`).value;
-      $(`#${k}-veh`).innerHTML = opt('', '請選擇', cur) + Usage.vehiclesOf('LOGI', t).map(v => {
-        const short = v.volume < vol || v.weight < wt;
-        return opt(v.id, `${v.id}（${v.name}｜${Math.round(v.volume)}L／${v.weight}kg${short ? '・容量不足' : ''}）`, cur, short); }).join(''); };
-    fill(d.vehicle);
-    $(`#${k}-type`).onchange = () => fill('');
-  });
-  $$('#page-b_review [data-brsave]').forEach(b => b.onclick = async () => {
-    const d = ModuleB.liveDispatches().find(x => x.id === b.dataset.brsave), k = 'bro-' + d.id;
-    const f = { vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value,
-      driver2: $(`#${k}-d2`).value, submitted: $(`#${k}-sub`).value === 'yes' };
-    const pre = ModuleB.dispatchResourceError(d, f);
-    if (pre) { toast(pre, 'err'); return; }
-    const text = !d.submitted && f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效。'
-      : d.submitted && !f.submitted ? '派車單將<b>撤回送審</b>，各託運單的待簽審紀錄一併撤回。'
-      : d.submitted ? '已送審的派車單異動車輛／駕駛後將<b>重新送運輸主管簽審</b>。' : '儲存派車單異動（尚未送審）。';
-    if (!(await confirmDialog({ title: `確認儲存派車單 ${d.id}？`, text }))) return;
-    const r = ModuleB.updateDispatch(d, f, $('#br-by').value.trim() || '調度室');
-    if (!r.ok) { toast(r.error, 'err'); return; }
-    toast(`派車單 ${d.id} 已儲存`, 'ok'); rerender();
-  });
+  $$('#page-b_review [data-brorder]').forEach(b => b.onclick = () => openBOrderModal(dsp.find(x => x.id === b.dataset.brorder), by, rerender));
+  $$('#page-b_review [data-brmanual]').forEach(b => b.onclick = () => openBManualAssign(ModuleB.orders.find(x => x.id === b.dataset.brmanual), date, by, rerender));
   $$('#page-b_review [data-brret]').forEach(b => b.onclick = () => openNoCarDialog(ModuleB.orders.find(x => x.id === b.dataset.brret),
     (o, note, by) => ModuleB.returnOrder(o, note, by), rerender));
-  $$('#page-b_review [data-brout]').forEach(b => b.onclick = confirmThen({ title: '確認移出派車單？', text: '此託運單將移出派車單、回到「待調度」（已排定的路線時間不重算）。' }, () => {
-    const r = ModuleB.unassign(ModuleB.orders.find(x => x.id === b.dataset.brout), '調度室');
-    if (!r.ok) { toast(r.error, 'err'); return; } toast('已移出派車單，回待調度', 'ok'); rerender();
-  }));
   initMasonry(p);
 }
 // 3.7 五列決策矩陣（G44 顯示，供調度員覆核）— 資料來源＝ModuleB.DECISION_MATRIX 單一決策表（B-4）

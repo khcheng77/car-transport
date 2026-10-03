@@ -837,7 +837,7 @@ const ModuleB = {
   submitDispatch(d, by) {
     return this.updateDispatch(d, { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2, submitted: true }, by);
   },
-  DISPATCH_FIELDS: ['dispatchVehicle', 'dispatchMode', 'dispatchEndpoint', 'dispatchOrigin', 'dispatchDir', 'pickupTime', 'dispatchDay', 'dispatchDropTime', 'dispatchDriver', 'dispatchDriver2'],
+  DISPATCH_FIELDS: ['dispatchVehicle', 'dispatchMode', 'dispatchEndpoint', 'dispatchOrigin', 'dispatchDir', 'pickupTime', 'dispatchDay', 'dispatchDropTime', 'dispatchDriver', 'dispatchDriver2', 'manualAssigned'],
   _detach(o, reason, by) {
     const d = this.dispatchOf(o);
     if (d) {
@@ -847,6 +847,42 @@ const ModuleB = {
     }
     o.dispatchId = null;
     this.DISPATCH_FIELDS.forEach(k => { o[k] = null; });
+  },
+  /* ---- 手動指派（G127）：調度於派車調度明細頁對「待調度」申請單手動派車 ----
+     · manualAssign：指定車種類型／車號／駕駛人1／駕駛人2，產生一張未送審（暫存）的派車單；
+     · manualMerge：併入同一派車日、尚未送審且未出車的派車單（沿用該派車單的車輛與駕駛）。
+     兩者皆做資源檢核（容積／載重、車號與車種、駕駛不同人、請假、當日其他派車單撞車撞人）。
+     手動指派不重算路線時間：收貨時間暫取申請人希望收貨時間，派遣模式依申請單（急件＝直達）。 */
+  manualTargets(date) { return this.liveDispatches().filter(d => d.date === date && !d.submitted && !this.started(d)); },
+  _applyManual(o) {
+    o.status = 'loaded'; o.dispatchMode = o.direct ? '直達' : '非直達';
+    o.dispatchDir = this.isSouthbound(o) ? 'south' : 'north'; o.dispatchOrigin = o.pickSite; o.dispatchEndpoint = o.dropSite;
+    o.pickupTime = o.wantReceiveTime || null; o.dispatchDay = 1; o.dispatchDropTime = null; o.manualAssigned = true;
+  },
+  manualAssign(o, date, f, by) {
+    if (o.status !== 'approved') return { ok: false, error: '僅「待調度」的申請單可手動指派' };
+    if (!date) return { ok: false, error: '請指定派車日' };
+    const v = DB.vehicles.find(x => x.id === f.vehicle);
+    const d = { id: 'TD' + String(this.dispatchSeq).padStart(3, '0'), date, vehicleType: f.vehicleType || (v ? v.type : ''), vehicle: f.vehicle,
+      driver1: f.driver1 || '', driver2: f.driver2 || '', dispatcher: by || '調度室', dispatchedAt: new Date(),
+      submitted: false, apps: [o.id], cancelled: false, manual: true, log: [] };
+    const err = this.dispatchResourceError(d, d);
+    if (err) return { ok: false, error: err };
+    this.dispatchSeq++;
+    this.dispatches.push(d);
+    this._applyManual(o); this._applyToOrders(d);
+    this._dlog(d, '手動指派產生', by, o.id);
+    return { ok: true, dispatch: d };
+  },
+  manualMerge(o, d, by) {
+    if (o.status !== 'approved') return { ok: false, error: '僅「待調度」的申請單可手動指派' };
+    if (!d || !this.manualTargets(d.date).includes(d)) return { ok: false, error: '只能併入尚未送審、未出車的派車單' };
+    const err = this.dispatchResourceError(Object.assign({}, d, { apps: d.apps.concat(o.id) }), d);
+    if (err) return { ok: false, error: err };
+    d.apps.push(o.id);
+    this._applyManual(o); this._applyToOrders(d);
+    this._dlog(d, '手動併入', by, o.id);
+    return { ok: true, dispatch: d };
   },
   /* 無車退回（G122）：僅「待調度」的託運單；原因必填，結案不可再動 */
   canReturn(o) { return o.status === 'approved'; },

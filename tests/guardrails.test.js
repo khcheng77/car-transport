@@ -1736,6 +1736,27 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
   const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false,
     volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }, o)); H.ModuleB.approve(x); return x; };
 
+  test('G127 手動指派：指定車輛／駕駛產生未送審派車單；可併入未送審派車單；資源與容量檢核', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o1 = mk(H, { applicant: 'A', wantReceiveTime: '10:00' }), o2 = mk(H, { applicant: 'B' }), o3 = mk(H, { applicant: 'C', volume: 900000 });
+    ok(B.manualAssign(o1, DD, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: '' }, '調度室').error.includes('駕駛人1'));
+    const r = B.manualAssign(o1, DD, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: 'DR1' }, '調度室-王');
+    ok(r.ok); const d = r.dispatch;
+    ok(/^TD\d{3}$/.test(d.id) && !d.submitted && d.manual, '產生未送審（暫存）派車單');
+    eq(d.dispatcher, '調度室-王'); eq(o1.status, 'loaded'); eq(o1.dispatchId, d.id); eq(o1.pickupTime, '10:00', '收貨時間暫取希望收貨時間');
+    eq(H.Flow.of(o1), 'dispatching', '調度中');
+    ok(B.manualAssign(o2, DD, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: 'DR2' }, 'x').error.includes('已由派車單'), '同日同車不可重複');
+    ok(B.manualAssign(o2, DD, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR1' }, 'x').error.includes('已有派車單'), '同日同駕駛不可重複');
+    eq(B.manualTargets(DD).map(x => x.id).join(), d.id);
+    ok(B.manualMerge(o3, d, 'x').error.includes('容積'), '併入超出容積不可');
+    ok(B.manualMerge(o2, d, '調度室').ok); eq(d.apps.join(), [o1.id, o2.id].join()); eq(o2.dispatchVehicle, 'V-T02');
+    ok(!B.manualAssign(o2, DD, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR2' }, 'x').ok, '已指派者不可再指派');
+    B.submitDispatch(d);
+    ok(!B.manualTargets(DD).includes(d)); ok(B.manualMerge(o3, d, 'x').error.includes('尚未送審'), '已送審派車單不可併入');
+    B.updateDispatch(d, Object.assign({}, d, { submitted: false }));
+    ok(B.unassign(o2, 'x').ok); eq(o2.status, 'approved'); ok(!o2.manualAssigned, '移出後清除手動指派欄位');
+  });
+
   test('G117 單一媒合按鈕：依序完成去程直達、去程非直達、回程，並依同一台車產生派車單（未送審、號碼／派遣人／時間自動）', () => {
     const H = fresh(), B = H.ModuleB;
     const dr = mk(H, { direct: true, destSite: 'D3', applicant: '急件' });

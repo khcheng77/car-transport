@@ -142,6 +142,7 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
                           └──(退回)──▶ 派車單回調度中；調度中可「移出派車單」回 approved
 ```
 > 已**移除** `accepted` 與 `delivered`（交貨確認，G122）。
+> 手動指派（G127）：`ModuleB.manualAssign(o, date, {vehicleType, vehicle, driver1, driver2}, by)` 產生未送審派車單（`manual: true`）；`ModuleB.manualMerge(o, d, by)` 併入 `manualTargets(date)`（同派車日、未送審、未出車）。皆經 `dispatchResourceError` 檢核，不重算路線時間（`pickupTime` 暫取 `wantReceiveTime`）；`unassign` 可移出回待調度。
 > 實登以**派車單**為單位（G124）：`ModuleB.usageDispatches()` 列出簽審通過的派車單；`ModuleB.dispatchUsageSave(d, {vehicleType, vehicle, driver1, driver2, startKm, endKm}, by)` 經 `Usage.saveGroup` 寫入派車單 `d.usage／d.usageLog`，並同步到單內每張託運單 `usage` → 已回登。
 
 ### 託運單主要欄位（`createOrder`）
