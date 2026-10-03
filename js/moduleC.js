@@ -549,6 +549,16 @@ const ModuleC = {
     if (r.ok) this._returnResourcesHome(a);   // 已回登：資源回歸屬據點（取代原「行程完成」C-2）
     return r;
   },
+  /* 派車單實登（G125）：差旅共乘以「派車單」為單位實登，規則同院區物品轉運（G124）。派車單送審且運輸主管簽審通過
+     （單內申請單皆生效）後才可實登；儲存即完成，派車單內每張申請單轉「已回登」，車輛／司機回歸屬據點（C-2）。 */
+  dispatchEffective(d) { const as = this.dispatchApps(d); return !d.cancelled && d.submitted && as.length > 0 && as.every(a => Signoff.effective(a)); },
+  usageDispatches() { return this.dispatches.filter(d => d.usage || this.dispatchEffective(d)); },
+  dispatchUsageSave(d, data, by, opts) {
+    if (!d.usage && !this.dispatchEffective(d)) return { ok: false, error: '派車單尚未經運輸主管簽審通過，不可實登' };
+    const r = Usage.saveGroup(d, this.dispatchApps(d), data, by, Object.assign({ pool: this.USAGE_POOL }, opts));
+    if (r.ok && !(opts && opts.dryRun)) this.dispatchApps(d).forEach(a => this._returnResourcesHome(a));
+    return r;
+  },
   signRecords() { return this.applications.filter(a => Signoff.inScope(a)); },
   signApprove(a, by, note) { return Signoff.decide(a, true, by, note); },
   // 退回調度：整張派車單回「調度中」（未送審），同單其他申請單簽審一併撤回，由調度修改後重新送審

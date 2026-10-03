@@ -231,6 +231,7 @@ draft ──▶ submitted ──(approve)──▶ approved（待調度；媒合
 matched ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 待出車 ──(出發時間到)──▶ 已出車 ──(實登)──▶ 已回登
 G122 已刪除：coordinate（待人工協調）、boarded／completed（已上車／行程完成）、void（逾期作廢）
 ```
+> 實登以**派車單**為單位（G125）：`ModuleC.usageDispatches()` 列出簽審通過的派車單；`ModuleC.dispatchUsageSave(d, data, by)` 經 `Usage.saveGroup` 寫入派車單並同步到單內每張申請單 `usage` → 已回登，再對各單 `_returnResourcesHome`（當前位置回復歸屬據點）。
 
 ### 申請單主要欄位（`createApp`）
 - `type`(`round` 來回 / `oneway` 單程)、`origin`/`dest`、`departDate`/`earliestPickup`、`returnDate`/`earliestReturn`、`pax`(人數)。
@@ -238,7 +239,7 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 
 ### 歸屬據點與當前位置（v4 語意區分）
 - **`homeSite` 歸屬據點**：行政/資產管理上固定隸屬（保養、常駐、鑰匙管理），**不因單次出差改變**。
-- **`currentSite` 當前位置**：排班可用性判斷依據（G59）。無進行中多天任務時兩者相同；已回登（車輛使用實登 `usageSave`）後 `currentSite` **回復** `homeSite`。
+- **`currentSite` 當前位置**：排班可用性判斷依據（G59）。無進行中多天任務時兩者相同；已回登（派車單實登 `dispatchUsageSave`）後 `currentSite` **回復** `homeSite`。
 
 ### 資源可用性檢核 `findResourceCandidates`（G59/G60/G61 + 空駛最小化）
 於商務池（`seats ≥ pax`）中找可用車 + 司機：

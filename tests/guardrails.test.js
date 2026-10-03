@@ -2102,6 +2102,28 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     eq(d.vehicle, 'V-T02', '實登不改派車單');
   });
 
+  test('G125 C 以派車單實登：簽審通過才列入；儲存即完成、各申請單已回登、資源回歸屬據點', () => {
+    const H = fresh(), C = H.ModuleC;
+    const mk = () => { const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
+      returnDate: '2026-08-28', earliestReturn: '16:00', pax: 1, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' }); C.approve(a); return a; };
+    const a1 = mk(), a2 = mk();
+    C.runBatch('2026-08-26', 't1');
+    const d = C.dispatchOf(a1);
+    ok(d && C.dispatchOf(a2) === d, '同車兩單同一派車單');
+    const U = { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: '', startKm: 30000, endKm: 30320 };
+    ok(!C.usageDispatches().includes(d), '未送審不列入');
+    ok(C.dispatchUsageSave(d, U, '周雅婷').error.includes('簽審'));
+    C.submitDispatch(d); C.signApprove(a1, '運輸主管'); C.signApprove(a2, '運輸主管');
+    ok(C.usageDispatches().includes(d));
+    const v = H.DB.vehicles.find(x => x.id === d.vehicle); v.currentSite = '台中辦公室';
+    ok(C.dispatchUsageSave(d, U, '周雅婷', { dryRun: true }).ok); ok(!d.usage && v.currentSite === '台中辦公室', 'dryRun 不寫入');
+    ok(C.dispatchUsageSave(d, U, '周雅婷').ok);
+    eq(d.usage.distance, 320); eq(H.Flow.of(a1), 'logged'); eq(H.Flow.of(a2), 'logged', '派車單內每張申請單皆已回登');
+    eq(v.currentSite, v.homeSite, '已回登後車輛回歸屬據點');
+    ok(C.dispatchUsageSave(d, Object.assign({}, U, { endKm: 30330 }), '周雅婷').ok);
+    eq(d.usageLog.map(l => l.action).join('/'), '實登/修改實登');
+  });
+
   test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／司機', () => {
     const H = fresh(), B = H.ModuleB, C = H.ModuleC;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });
