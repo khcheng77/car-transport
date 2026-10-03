@@ -186,7 +186,7 @@
     <div class="eyebrow">車輛派遣系統整合案 · 共用軟體單元 · 建議規格</div>
     <h1>申請引導單元</h1>
     <div class="meta">
-      <span>版本 <b>v2.5</b></span>
+      <span>版本 <b>v2.6</b></span>
       <span>日期 <b>2026-10-01</b></span>
       <span>狀態 <b>已實作於原型，待業務單位確認</b></span>
       <span>所屬專案 <b>khcheng77/car-transport</b></span>
@@ -411,7 +411,7 @@
           <tr><td class="nw" rowspan="2">K1 需求</td><td>申請人／部門／分機</td><td>文字（預帶登入者）</td><td>是</td><td>可修改</td></tr>
           <tr><td>運送內容</td><td>單選膠囊</td><td>是</td><td>「只寄送物品（無人隨行）」／「有人要搭車（可附帶物品）」</td></tr>
           <tr><td class="nw" rowspan="3">K2 物品寄送</td><td>寄件據點、收件據點</td><td>下拉（屏東～台北 10 據點）</td><td>是</td><td>兩者相同→A；不同→B</td></tr>
-          <tr><td>希望收貨日期</td><td>日期</td><td>是</td><td>不可早於今天；只帶入 A（院區物品轉運申請無日期欄位）</td></tr>
+          <tr><td>希望收貨日期</td><td>日期</td><td>是</td><td>不可早於今天；帶入 A 與 B（院區物品轉運申請自 2026-10-03 起有希望收貨日期欄位，對應派車日）</td></tr>
           <tr><td>希望收貨時間</td><td>時間</td><td>否</td><td>留空＝越快越好</td></tr>
           <tr><td class="nw">K3 貨物清單</td><td>品名、長寬高、品類、件數、單件重、是否危險品</td><td>共用貨物編輯器</td><td>至少 1 項</td><td>沿用 <code>renderCargoGrid</code>／<code>openCargoEditor</code></td></tr>
           <tr><td class="nw">K4 用車期間</td><td>起日、迄日</td><td>日期</td><td>是</td><td>迄日不得早於起日；顯示天數</td></tr>
@@ -436,7 +436,7 @@
           <tr><td>申請人／部門／分機</td><td>取登入者（A 畫面為唯讀）</td><td><code>applicant</code></td><td><code>applicant</code> <code>dept</code> <code>ext</code></td><td><code>applicant</code> <code>dept</code> <code>ext</code></td></tr>
           <tr><td>寄件據點</td><td><code>branch</code>（院區）</td><td><code>site</code></td><td>—</td><td>—</td></tr>
           <tr><td>收件據點</td><td>—（同院區）</td><td><code>destSite</code></td><td>—</td><td>—</td></tr>
-          <tr><td>希望收貨日期</td><td><code>serviceDate</code></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>希望收貨日期</td><td><code>serviceDate</code></td><td><code>wantReceiveDate</code></td><td>—</td><td>—</td></tr>
           <tr><td>希望收貨時間</td><td><code>deliverTime</code>＋<code>recvMode</code>（今天且留空＝越快越好）</td><td><code>wantReceiveTime</code></td><td>—</td><td>—</td></tr>
           <tr><td>貨物清單</td><td><code>items</code></td><td><code>items</code></td><td>—</td><td><code>items</code>（含 <code>hazardous</code>）</td></tr>
           <tr><td>用車起日／迄日</td><td>—</td><td>—</td><td><code>departDate</code> <code>returnDate</code></td><td><code>startDate</code> <code>endDate</code></td></tr>
@@ -597,7 +597,7 @@
       <li><strong>只帶入可見卡片：</strong>先填 K6 再把運送內容改為「只有物品」，K6 的資料不得被帶入 A／B。</li>
       <li><strong>引導紀錄：</strong>前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判；目標功能送出後回填單號；已送出的紀錄不可再修改，重新帶入另建新紀錄。</li>
       <li><strong>只用一次、可返回、不送單：</strong>跳轉後從清單按「＋ 新增」不再出現帶入資料；未在目標功能送出時，系統不新增任何申請單。</li>
-      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 181 項）。</li>
+      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 182 項）。</li>
     </ul>
   </section>
 
@@ -671,6 +671,7 @@
       <table>
         <thead><tr><th>版本</th><th>內容</th></tr></thead>
         <tbody>
+          <tr><td class="nw">v2.6</td><td>2026-10-03 院區物品轉運申請新增「希望收貨日期」（對應派車日）：引導的希望收貨日期改為 A、B 都帶入（B 帶入 <code>wantReceiveDate</code>，帶入摘要多列「希望收貨日期」）；判定規則不變；測試數更新為 182 項。</td></tr>
           <tr><td class="nw">v2.5</td><td>2026-10-03 差旅共乘「派車調度」新增出發日期預設區間、手動指派（新暫存派車單／併入未送審派車單）與派車單清單（派車階段，申請送出之後），申請引導的判定、卡片、帶入與引導紀錄規則皆不變；測試數更新為 181 項。</td></tr>
           <tr><td class="nw">v2.4</td><td>2026-10-03 院區物品轉運「派車調度」新增手動指派與派車單清單（派車階段，申請送出之後），申請引導的判定、卡片、帶入與引導紀錄規則皆不變；測試數更新為 180 項。</td></tr>
           <tr><td class="nw">v2.3</td><td>2026-10-03 依 UI 規範明確化：首頁「🔍 查詢」「＋ 新增」位於查詢條件卡片標題列（橘色區塊）右上角，不放在欄位下方（與各模組查詢頁、單位主管審核頁一致）。功能與規則不變。</td></tr>

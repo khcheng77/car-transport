@@ -1757,6 +1757,17 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
   const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false,
     volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }, o)); H.ModuleB.approve(x); return x; };
 
+  test('G129 希望收貨日期對應派車日：媒合派車只取收貨日期＝派車日者；未填日期的舊單不限', () => {
+    const H = fresh(), B = H.ModuleB;
+    const a = mk(H, { applicant: 'A', wantReceiveDate: DD }), b = mk(H, { applicant: 'B', wantReceiveDate: '2027-01-05' }), c = mk(H, { applicant: 'C' });
+    eq(a.wantReceiveDate, DD);
+    ok(B.onDate(a, DD) && !B.onDate(b, DD) && B.onDate(c, DD), '收貨日期對應派車日；舊單不限');
+    B.runMatch(DD, '調度室');
+    eq(a.status, 'loaded'); eq(c.status, 'loaded'); eq(b.status, 'approved', '收貨日期不同的單不在本派車日媒合');
+    eq(B.dispatchOf(a).date, DD);
+    ok(!B._matchDate, '媒合結束清除派車日');
+  });
+
   test('G127 手動指派：指定車輛／駕駛產生未送審派車單；可併入未送審派車單；資源與容量檢核', () => {
     const H = fresh(), B = H.ModuleB;
     const o1 = mk(H, { applicant: 'A', wantReceiveTime: '10:00' }), o2 = mk(H, { applicant: 'B' }), o3 = mk(H, { applicant: 'C', volume: 900000 });
@@ -1774,7 +1785,7 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     ok(!B.manualAssign(o2, DD, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR2' }, 'x').ok, '已指派者不可再指派');
     B.submitDispatch(d);
     ok(!B.manualTargets(DD).includes(d)); ok(B.manualMerge(o3, d, 'x').error.includes('尚未送審'), '已送審派車單不可併入');
-    B.updateDispatch(d, Object.assign({}, d, { submitted: false }));
+    B.signReject(o1, '運輸主管', '退回');   // 送審後不可撤回（G129），主管退回後回未送審
     ok(B.unassign(o2, 'x').ok); eq(o2.status, 'approved'); ok(!o2.manualAssigned, '移出後清除手動指派欄位');
   });
 
@@ -1797,7 +1808,7 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     ok(B.dispatchOf(g1).driver1, '預設帶入駕駛人1');
   });
 
-  test('G118 派車單異動：車種／車號相符、容量足夠、駕駛不可重複與撞單；送審／撤回送審／送審後異動重新送簽', () => {
+  test('G118／G129 派車單異動：車種／車號相符、容量足夠、駕駛不可重複與撞單；送審後不可再異動，主管退回後可再改', () => {
     const H = fresh(), B = H.ModuleB;
     const o = mk(H, { volume: 3000, weight: 300 });
     B.runMatch(DD, '調度室');
@@ -1807,8 +1818,10 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     const other = H.DB.drivers.find(x => x.pool === 'LOGI' && x.id !== d.driver1);
     ok(B.updateDispatch(d, Object.assign({}, f, { driver2: other.id })).ok); eq(o.dispatchDriver2, other.id, '駕駛人2 套用至託運單');
     ok(B.updateDispatch(d, Object.assign({}, f, { driver2: other.id, submitted: true })).ok); eq(o.sign.status, 'pending');
-    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: other.id, driver2: d.driver1, submitted: true })).ok); eq(o.sign.round, 2, '送審後異動重新送簽');
-    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: other.id, driver2: '', submitted: false })).ok); eq(o.sign, null, '撤回送審');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: other.id, driver2: d.driver1, submitted: true })).error.includes('已送審'), '送審後不可異動車輛／駕駛');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver2: other.id, submitted: false })).error.includes('已送審'), '送審後不可撤回送審');
+    B.signReject(o, '運輸主管', '請換車'); ok(!d.submitted, '主管退回後派車單回未送審');
+    ok(B.updateDispatch(d, Object.assign({}, f, { driver1: other.id, driver2: '' })).ok, '退回後可再異動');
     // 容量：大單改小車不足
     const big = mk(H, { volume: 30000, weight: 2000, applicant: '大單' });
     B.runMatch('2027-01-02', '調度室'); const db = B.dispatchOf(big);
@@ -1829,7 +1842,7 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     let err = ''; try { B.resubmit(w, { applicant: 'X', site: 'D9', destSite: 'D3', volume: 100, weight: 10, handleMin: 5 }); } catch (e) { err = e.message; }
     ok(err, '無車退回不可修改重送');
     B.submitDispatch(d); ok(B.unassign(a).error.includes('送審'));
-    B.updateDispatch(d, { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: '', submitted: false });
+    B.signReject(a, '運輸主管', '退回調度');   // 送審後不可撤回（G129），主管退回後派車單回未送審
     B.dispatchOrders(d).forEach(x => ok(B.unassign(x, '調度室').ok));
     eq(a.status, 'approved'); eq(H.Flow.of(a), 'todo'); eq(a.dispatchVehicle, null); eq(d.cancelled, true);
   });

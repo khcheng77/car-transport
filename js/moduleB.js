@@ -124,6 +124,8 @@ const ModuleB = {
       // 2.19 收貨時間窗：希望收貨時間 HH:MM——車輛抵達收貨建物須落在〔希望時間 ～ ＋DB.receiveWindowMin〕內
       // （相容：舊欄位 deliverTime 若存在則沿用為希望收貨時間，語意已由「交貨門檻」改為「收貨窗起點」2.19）
       wantReceiveTime: data.wantReceiveTime || data.deliverTime || '',
+      // 希望收貨日期（G129）：與派車日對應——派車調度依收貨日期列在該派車日，媒合派車只取收貨日期＝派車日者
+      wantReceiveDate: data.wantReceiveDate || '',
       recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
       direct: !!data.direct,   // 3.2 急件直達（申請人指定）＝派車輸入條件，觸發獨立派車與回程鎖定
       items,                 // 貨物項目清單
@@ -255,11 +257,15 @@ const ModuleB = {
      依「目標日當天該路線的總貨量」自動判斷：統計當天待載貨量（依 2.16 車輛主檔容量參數），
      總貨量超過小車容量上限 → 派大車，否則派小車。單純門檻判斷，不做填載率精算最佳化。
      leg：'south'（去程南下貨）／'north'（回程北上貨）；mode：'direct' 只計急件直達、否則計非直達貨。 */
+  /* 收貨日期對應派車日（G129）：有希望收貨日期者只在該派車日媒合；舊單未填收貨日期者不限日期（相容）。
+     date 省略時取媒合中的派車日（runMatch 執行期間的 _matchDate）。 */
+  _matchDate: null,
+  onDate(o, date) { date = date || this._matchDate; return !date || !o.wantReceiveDate || o.wantReceiveDate === date; },
   decideSizeClass(mode, dispatchDate, originId, leg) {
     const origin = originId || DB.homeSite;
     const small = this.trunkVehicle('small');
     const big = this.trunkVehicle('big');
-    let pool = this.orders.filter(o => o.status === 'approved'
+    let pool = this.orders.filter(o => o.status === 'approved' && this.onDate(o, dispatchDate)
       && (leg === 'north' ? !this.isSouthbound(o) : this.isSouthbound(o))
       && this.isServable(o, leg === 'north' ? DB.homeSite : origin));
     if (dispatchDate) pool = pool.filter(o => this.meetsCutoff(o, dispatchDate));
@@ -514,7 +520,7 @@ const ModuleB = {
     const veh = DB.vehicles.find(v => v.id === vehicleId);
     const trace = [];
     const origin = originId || DB.homeSite; // 2.22：出發據點可為任一據點
-    const all = this.orders.filter(o => o.status === 'approved' && this.isSouthbound(o));
+    const all = this.orders.filter(o => o.status === 'approved' && this.isSouthbound(o) && this.onDate(o, dispatchDate));
     const unservable = all.filter(o => !this.isServable(o, origin));
     unservable.forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入：${this.unservableReason(o, origin)}</span>`));
     let servable = all.filter(o => this.isServable(o, origin));
@@ -693,7 +699,8 @@ const ModuleB = {
      ④ 回程非直達（含全域直達鎖定檢查）；車型依 2.17 當日總貨量自動選。新裝載的單依「同一台車」併入派車單。 */
   runMatch(dispatchDate, by) {
     const steps = [], trace = [];
-    const pending = (leg, direct) => this.orders.filter(o => o.status === 'approved' && (direct == null || !!o.direct === direct)
+    this._matchDate = dispatchDate || null;   // 本次媒合的派車日（收貨日期對應 G129）
+    const pending = (leg, direct) => this.orders.filter(o => o.status === 'approved' && this.onDate(o, dispatchDate) && (direct == null || !!o.direct === direct)
       && (leg === 'north' ? !this.isSouthbound(o) : this.isSouthbound(o)) && this.isServable(o)
       && (leg === 'north' || !dispatchDate || this.meetsCutoff(o, dispatchDate)));
     const run = (label, fn) => { const r = fn(); steps.push({ label, r }); trace.push(`<span class="hl">【${label}】</span>`, ...r.trace, ''); return r; };
@@ -737,6 +744,7 @@ const ModuleB = {
       r.sizeDecision = dec;
       if (!(r.carried || []).length) break;
     }
+    this._matchDate = null;
     const dispatches = this._toDispatches(dispatchDate, by);
     const carried = steps.flatMap(x => x.r.carried || []);
     trace.push(`媒合完成：派車 ${carried.length} 張｜產生／併入派車單 ${dispatches.map(d => d.id).join('、') || '（無）'}（未送審；調度確認後送出運輸主管簽審）`);
@@ -811,11 +819,14 @@ const ModuleB = {
     }
     return null;
   },
-  /* 調度異動派車單：f = { vehicleType, vehicle, driver1, driver2, submitted }（G118）
-     否 → 是＝送運輸主管簽審；是 → 否＝撤回簽審；已送審者異動車輛／駕駛重新送簽；已有單交貨者不可異動 */
+  /* 調度異動派車單：f = { vehicleType, vehicle, driver1, driver2, submitted }（G118／G129）
+     送審前可異動車種類型／車號／駕駛人1／駕駛人2，是否送審 否 → 是＝送運輸主管簽審；
+     送審後即不可再異動（G129 取代原「撤回送審／送審後異動重新送簽」），運輸主管退回後派車單回未送審才可再改；已出車者不可異動 */
   updateDispatch(d, f, by) {
     if (d.cancelled) return { ok: false, error: '派車單已取消' };
     if (this.started(d)) return { ok: false, error: '派車單已出車，不可再異動' };
+    // G129：送審後即不可再異動（含撤回送審）；運輸主管退回後派車單回未送審，才可再修改
+    if (d.submitted) return { ok: false, error: '派車單已送審，不可再異動' };
     const v = DB.vehicles.find(x => x.id === f.vehicle);
     const next = { vehicleType: f.vehicleType || (v ? v.type : ''), vehicle: f.vehicle, driver1: f.driver1, driver2: f.driver2 || '',
       submitted: f.submitted == null ? d.submitted : !!f.submitted };
@@ -908,7 +919,7 @@ const ModuleB = {
     startNet = startNet || 0;
     const path = this.returnPath(turnaroundId);
     const endpoint = DB.homeSite; // 回程固定回出發據點（G36/B-1）
-    const allReturn = this.orders.filter(o => o.status === 'approved' && !this.isSouthbound(o));
+    const allReturn = this.orders.filter(o => o.status === 'approved' && !this.isSouthbound(o) && this.onDate(o));
     allReturn.filter(o => !this.isServable(o))
       .forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入：${this.unservableReason(o)}</span>`));
     const returnOrders = allReturn.filter(o => this.isServable(o)).sort((a, b) => a.approvedAt - b.approvedAt);
