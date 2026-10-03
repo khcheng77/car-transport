@@ -3443,12 +3443,12 @@ function renderDApproveList(p) {
     <div class="section-h">單位主管審核（直屬主管）</div>
     <div class="section-sub">用車申請<b>先簽核、通過才進調度</b>（沿用核准者關係表，一般用車與例行用車類別相同，不另加簽）。僅首次申請需簽核；派車後的換車、換司機、展延、提前歸還皆不需簽核。（G74/G83）</div>
     <div class="card">
-      <div class="card-title">查詢條件</div>
+      <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
+        <button class="btn btn-primary btn-sm" id="dap-search">🔍 查詢</button></div>
       ${infoGrid('dap-q-fields', [
         fInput('申請人（模糊）', `<input type="text" id="dap-q-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
         fInput('狀態', `<select id="dap-q-status">${stOpts}</select>`),
       ].join(''))}
-      <button class="btn btn-primary btn-sm" id="dap-search">🔍 查詢</button>
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;">
