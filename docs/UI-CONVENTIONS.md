@@ -10,7 +10,7 @@
 每個單元 = 側邊選單一個項目 + 一個 `page-<id>` 容器 + 一個 `RENDER.<id>()` 函式。
 單元內通常是「三畫面」子流程，用一個狀態物件切換（不換路由、只換 innerHTML）：
 
-- **index（查詢/清單頁）**：上半「查詢條件」卡片 + 下半歷史紀錄表格；右上有「🔍 查詢」「＋ 新增」。
+- **index（查詢/清單頁）**：上半「查詢條件」卡片 + 下半歷史紀錄表格；「🔍 查詢」「＋ 新增」放在**查詢條件卡片標題列（橘色區塊）的右上角**，不要放在查詢欄位下方。所有查詢頁一致（申請、單位主管審核、派車調度、簽審、實登、申請引導…）。
 - **detail（明細頁）**：點清單「細節」進入；唯讀資訊卡 + 動作按鈕；最下方「← 回上一頁」。
 - **new（新增頁）**：點「＋ 新增」進入；輸入表單；送出後回 detail 看結果。
 
@@ -118,7 +118,9 @@ p.innerHTML = `
     ].join(''))}
   </div>
   <div class="card">
-    <div class="card-title">查詢條件</div>
+    <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
+      <span><button class="btn btn-primary btn-sm" id="q-search">🔍 查詢</button>
+        <button class="btn btn-accent btn-sm" id="q-new">＋ 新增</button></span></div>   <!-- 按鈕在標題列右上角 -->
     ${infoGrid('foo-q', [
       fInput('關鍵字', `<input type="text" id="q-kw">`),
       fInput('狀態', `<select id="q-status">${opts}</select>`),
