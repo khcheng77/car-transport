@@ -58,6 +58,21 @@ const Usage = {
     return { ok: true, usage: rec.usage };
   },
 
+  /* 群組實登（A 車次 G123／B 派車單 G124）：holder＝車次或派車單（存 usage／usageLog），recs＝其內申請單。
+     驗證同 save；儲存後同步寫入每張申請單（rec.usage → 已回登，歷程各留一筆）。opts.dryRun：只驗證不寫入 */
+  saveGroup(holder, recs, data, by, opts) {
+    opts = opts || {};
+    if (!recs.length) return { ok: false, error: '沒有申請單，不可實登' };
+    const tmp = { usage: holder.usage || null, usageLog: (holder.usageLog || []).slice() };
+    const res = this.save(tmp, data, by, Object.assign({}, opts, { effective: true }));
+    if (!res.ok || opts.dryRun) return res;
+    holder.usage = tmp.usage; holder.usageLog = tmp.usageLog;
+    const last = tmp.usageLog[tmp.usageLog.length - 1];
+    recs.forEach(r => { r.usage = Object.assign({}, tmp.usage);
+      (r.usageLog = r.usageLog || []).push({ at: last.at, action: last.action, by: last.by, snapshot: Object.assign({}, last.snapshot) }); });
+    return { ok: true, usage: tmp.usage, recs };
+  },
+
   /* 貨品回報狀態（G120／G121）：實登明細的貨物清單逐項回報，預設「正常運送」；
      eff＝模組自行判定的「已生效」（同 inScope），派車結果未生效不可回報；每次修改留 rec.itemReportLog */
   ITEM_REPORTS: ['正常運送', '不運送', '不接收'],

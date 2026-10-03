@@ -2078,6 +2078,30 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     ok(!A.setIncident(a1, '亂填').ok); ok(A.setIncident(a1, '').ok); eq(a1.incident, '', '可改回正常運送');
   });
 
+  test('G124 B 以派車單實登：簽審通過才列入；儲存即完成，派車單內各託運單已回登', () => {
+    const H = fresh(), B = H.ModuleB;
+    const mk = () => { const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 30 }); B.approve(o); return o; };
+    const o1 = mk(), o2 = mk();
+    B.dispatch('V-T02', 'greedy');
+    const d = B.dispatchOf(o1);
+    ok(d && B.dispatchOf(o2) === d, '同車兩單同一派車單');
+    const U = { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: '', startKm: 100, endKm: 180 };
+    ok(!B.usageDispatches().includes(d), '未送審不列入');
+    ok(B.dispatchUsageSave(d, U, '周雅婷').error.includes('簽審'), '未簽審不可實登');
+    B.submitDispatch(d); B.signApprove(o1, '運輸主管');
+    ok(!B.usageDispatches().includes(d), '部分託運單簽審通過仍不列入');
+    B.signApprove(o2, '運輸主管');
+    ok(B.usageDispatches().includes(d));
+    ok(B.dispatchUsageSave(d, Object.assign({}, U, { driver1: '' }), '周雅婷').error.includes('駕駛人1'));
+    ok(B.dispatchUsageSave(d, U, '周雅婷', { dryRun: true }).ok); ok(!d.usage && !o1.usage, 'dryRun 不寫入');
+    ok(B.dispatchUsageSave(d, U, '周雅婷').ok);
+    eq(d.usage.distance, 80); eq(d.usage.by, '周雅婷');
+    eq(H.Flow.of(o1), 'logged'); eq(H.Flow.of(o2), 'logged', '派車單內每張託運單皆已回登');
+    ok(B.dispatchUsageSave(d, Object.assign({}, U, { vehicleType: '幹線聯結車', vehicle: 'V-T01', endKm: 190 }), '周雅婷').ok, '可改登實際車輛');
+    eq(d.usageLog.map(l => l.action).join('/'), '實登/修改實登'); eq(o2.usage.vehicle, 'V-T01');
+    eq(d.vehicle, 'V-T02', '實登不改派車單');
+  });
+
   test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／司機', () => {
     const H = fresh(), B = H.ModuleB, C = H.ModuleC;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });

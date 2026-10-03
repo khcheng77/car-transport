@@ -194,6 +194,15 @@ const ModuleB = {
   usagePlan(o) { return { vehicle: o.dispatchVehicle || null, drivers: this.driversOf(o) }; },
   usageRecords() { return this.orders.filter(o => Usage.inScope(o)); },
   usageSave(o, data, by) { return Usage.save(o, data, by, { pool: this.USAGE_POOL }); },
+  /* 派車單實登（G124）：院區物品轉運以「派車單」為單位實登。派車單送審且運輸主管簽審通過（各託運單皆生效）後才可實登；
+     實際車種類型／車號／駕駛人1／駕駛人2 預設帶入派車單（可改為實際使用，不改派車單），輸入起訖里程儲存即完成，
+     派車單內每張託運單轉「已回登」；實登存於派車單 d.usage／d.usageLog（歷程不覆蓋）。 */
+  dispatchEffective(d) { const os = this.dispatchOrders(d); return !d.cancelled && d.submitted && os.length > 0 && os.every(o => Signoff.effective(o)); },
+  usageDispatches() { return this.dispatches.filter(d => d.usage || this.dispatchEffective(d)); },
+  dispatchUsageSave(d, data, by, opts) {
+    if (!d.usage && !this.dispatchEffective(d)) return { ok: false, error: '派車單尚未經運輸主管簽審通過，不可實登' };
+    return Usage.saveGroup(d, this.dispatchOrders(d), data, by, Object.assign({ pool: this.USAGE_POOL }, opts));
+  },
   /* 貨品回報狀態（G120）：車輛使用實登的貨物清單逐項回報；共用 Usage，生效依運輸主管簽審 */
   ITEM_REPORTS: Usage.ITEM_REPORTS,
   itemReport(it) { return Usage.itemReport(it); },
