@@ -549,43 +549,52 @@ const ModuleB = {
       const directDrive = this.travelMin(origin, targetDest, veh.sizeClass);
       const refDays = this.minTripDaysFor(veh, targetDest);
       const loadOf = o => (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
-      // ① 純容量加總決定可載清單（G39：超量整張留下一班；依核准序 G34）
-      let load = 0, wt = 0; const cand = [];
+      /* 南下取貨排程：依行經順序（取貨據點站序由大到小，同站依核准序）逐站計算「幾點來收」——
+         行經時間＝表定出發＋前置＋行駛＋前面各站累計（上貨＋早到等待）；收貨時間窗（2.19）即以此時間判定，
+         判定與回報同一套時間（修正：原本判定不含前站上貨、回報卻含）。回傳 { ok, at:Map, extra, bad, reason } */
+      const schedule = list => {
+        const at = new Map(); let extra = 0;
+        const seq = list.slice().sort((a, b) => this.siteById(b.pickSite).order - this.siteById(a.pickSite).order || a.approvedAt - b.approvedAt);
+        for (const o of seq) {
+          const pass = start + DB.prepMin + this.travelMin(origin, o.pickSite, veh.sizeClass) + extra;
+          const rc = this.receiveCheck(o, pass);
+          if (!rc.ok) return { ok: false, bad: o, pass, reason: rc.reason };
+          at.set(o.id, { pass, wait: rc.wait || 0 });
+          extra += (rc.wait || 0) + loadOf(o);
+        }
+        return { ok: true, at, extra };
+      };
+      // ① 依核准序（G34）逐張納入：容量只計「已確定上車」的單（被剔除者不佔容量）；
+      //    納入後整趟取貨排程須讓本單與先前已上車各單都落在收貨時間窗內（2.19／2.21 不排擠既定行程）
+      const carried = []; let load = 0, wt = 0;
       for (const o of sameDest) {
         const ev = this.effVolume(o);
-        if (load + ev <= veh.volume && wt + o.weight <= veh.weight) { load += ev; wt += o.weight; cand.push(o); }
-        else trace.push(`  <span class="no">✗ ${o.id} 超出容量 → 留下一班直達車（G39）</span>`);
-      }
-      // ② 抵達迄點時間＝表定出發＋前置＋直達行駛＋本趟各取貨據點上貨總和
-      const totalLoadMin = cand.reduce((s, o) => s + loadOf(o), 0);
-      const directEta = minToHHMM(start + DB.prepMin + directDrive + totalLoadMin);
-      trace.push(`<span class="dim">行駛時間查路程表（2.9）：${this.siteById(origin).name}→${this.siteById(targetDest).name} ${directDrive} 分｜出發 ${DB.shiftStartDefault}＋前置 ${DB.prepMin} 分＋沿途上貨 ${totalLoadMin} 分 → 抵達迄點 ${directEta}`);
-      trace.push(`最短天數表（3.1 參考值，不參與運算）：${veh.sizeClass === 'big' ? '大車' : '小車'} → ${this.siteById(targetDest).name} ${refDays != null ? refDays + ' 天' : '（表中無值）'}</span>`);
-      // ③ 2.19 收貨時間窗（以行經取貨據點的時間判定，取代舊交貨門檻）＋落實載入
-      const carried = [];
-      for (const o of cand) {
-        const passEta = start + DB.prepMin + this.travelMin(origin, o.pickSite, veh.sizeClass);
-        const rc = this.receiveCheck(o, passEta);
-        if (!rc.ok) {
-          trace.push(`  <span class="no">✗ ${o.id} 行經 ${this.siteById(o.pickSite).name} ${minToHHMM(passEta)}：${rc.reason} → 媒合不到（2.19，急件另派 2.22）</span>`);
+        if (load + ev > veh.volume || wt + o.weight > veh.weight) {
+          trace.push(`  <span class="no">✗ ${o.id} 超出容量（已上車 ${Math.round(load)}L／${wt}kg）→ 留下一班直達車（G39）</span>`);
           continue;
         }
+        const sch = schedule(carried.concat(o));
+        if (!sch.ok) {
+          const who = sch.bad === o ? `行經 ${this.siteById(o.pickSite).name} ${minToHHMM(sch.pass)}：${sch.reason}`
+            : `納入後 ${sch.bad.id} 行經 ${this.siteById(sch.bad.pickSite).name} ${minToHHMM(sch.pass)}：${sch.reason}（排擠既定行程）`;
+          trace.push(`  <span class="no">✗ ${o.id} ${who} → 媒合不到（2.19，急件另派 2.22）</span>`);
+          continue;
+        }
+        carried.push(o); load += ev; wt += o.weight;
+      }
+      // ② 落實載入與「幾點來收」（與判定同一套排程）
+      const fin = schedule(carried);
+      carried.forEach(o => {
+        const t = fin.at.get(o.id);
         o.status = 'loaded'; o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
         o.dispatchOrigin = origin; o.dispatchDir = 'south';
-        carried.push(o);
-        trace.push(`  <span class="ok">✓ 載入 ${o.id}（申報 ${o.volume}L → 有效 ${this.effVolume(o).toFixed(0)}L${rc.wait ? `，早到等待 ${rc.wait} 分至 ${o.wantReceiveTime}` : ''}）</span>`);
-      }
-      load = carried.reduce((s, o) => s + this.effVolume(o), 0);
-      // ④ 各單「幾點來收」＝車輛南下經過其取貨據點的時間
-      let elapsedLoad = 0;
-      carried.slice()
-        .sort((a, b) => this.siteById(b.pickSite).order - this.siteById(a.pickSite).order || a.approvedAt - b.approvedAt)
-        .forEach(o => {
-          const pass = start + DB.prepMin + this.travelMin(origin, o.pickSite, veh.sizeClass) + elapsedLoad;
-          const w = this.receiveWindow(o);
-          o.pickupTime = minToHHMM(w ? Math.max(pass, w.start) : pass);
-          elapsedLoad += loadOf(o);
-        });
+        o.pickupTime = minToHHMM(t.pass + t.wait);
+        trace.push(`  <span class="ok">✓ 載入 ${o.id}（申報 ${o.volume}L → 有效 ${this.effVolume(o).toFixed(0)}L｜${o.pickupTime} 來收${t.wait ? `，早到等待 ${t.wait} 分至 ${o.wantReceiveTime}` : ''}）</span>`);
+      });
+      // ③ 抵達迄點時間＝表定出發＋前置＋直達行駛＋本趟各取貨據點上貨與等待總和
+      const directEta = minToHHMM(start + DB.prepMin + directDrive + (fin.extra || 0));
+      trace.push(`<span class="dim">行駛時間查路程表（2.9）：${this.siteById(origin).name}→${this.siteById(targetDest).name} ${directDrive} 分｜出發 ${DB.shiftStartDefault}＋前置 ${DB.prepMin} 分＋沿途上貨與等待 ${fin.extra || 0} 分 → 抵達迄點 ${directEta}`);
+      trace.push(`最短天數表（3.1 參考值，不參與運算）：${veh.sizeClass === 'big' ? '大車' : '小車'} → ${this.siteById(targetDest).name} ${refDays != null ? refDays + ' 天' : '（表中無值）'}</span>`);
       const reason = `當天有<b>急件直達</b>申請單（最早核准 ${directs[0].id}）→ 獨立派車（3.2/G38）`;
       this.recordVehicleStatus(veh.id, 2, reason, targetDest, '申請單指定目的地');
       return { mode: 'direct', endpoint: targetDest, carried, trace, lateOrders, dispatchDate, origin,

@@ -141,16 +141,19 @@ const ModuleA = {
   reassignShift(app, shiftId) {
     const sh = DB.regionalShifts.find(s => s.id === shiftId);
     if (!sh) return app;
+    const from = app.assignedShift;
     app.assignedShift = shiftId;
     app.status = 'matched';
-    const st = DB.stations.find(s => s.id === app.station);
-    app.arrival = st ? minToHHMM(this.shiftArrivalAtStation(sh, st.order)) : null;
+    this.refreshArrivals(shiftId, app.serviceDate);                    // 新班次：本單與後面各站到站重算
+    if (from && from !== shiftId) this.refreshArrivals(from, app.serviceDate);   // 原班次少了本單的停站時間
     return app;
   },
   // 移出班次：回未排入、清空班次與到站，待業務重新指定
   removeFromShift(app) {
+    const from = app.assignedShift;
     app.assignedShift = null; app.arrival = null; app.status = 'unscheduled';
     app.note = '已由「已排定車次異動」移出班次，待重新指定。';
+    if (from) this.refreshArrivals(from, app.serviceDate);   // 原班次少了本單的停站時間
     return app;
   },
 
@@ -210,9 +213,38 @@ const ModuleA = {
   /* 站間行駛時間（分／站）：據點為在地路線、站點相鄰，行駛短。
      全程 9 站＝9×INTER_STATION_MIN，須明顯小於班距 60 分，確保整條路線在同一時段內走完。 */
   INTER_STATION_MIN: 3,
-  /* 各班次到達某站的時間（示意）：出發時間 + 站序×站間行駛（全程 ≤ 27 分，不跨時段）*/
-  shiftArrivalAtStation(shift, stationOrder) {
-    return hhmmToMin(shift.depart) + stationOrder * this.INTER_STATION_MIN;
+  /* 各班次到達某站的時間：出發時間＋站序×站間行駛＋「前面各站」的停站處理時間。
+     停站時間＝本班（同日）已排各單在該站的上貨（收貨站）＋卸貨（送貨站）分鐘（G15 同站多單加總）；
+     extra：試算中尚未排入的單（媒合時一併計入，讓排序與到站時間一致）。date 省略＝不分日期（相容）。 */
+  shiftArrivalAtStation(shift, stationOrder, date, extra) {
+    const dwell = this.stationDwell(shift.id, date, extra);
+    let wait = 0;
+    Object.keys(dwell).forEach(o => { if (+o < stationOrder) wait += dwell[o]; });
+    return hhmmToMin(shift.depart) + stationOrder * this.INTER_STATION_MIN + wait;
+  },
+  /* 本班（同日）各站停站時間 { 站序: 分 }：上貨計收貨站、卸貨計送貨站；只給 handleMin（未分上下貨）者全數計送貨站 */
+  stationDwell(shiftId, date, extra) {
+    const out = {};
+    const add = (order, min) => { if (min > 0) out[order] = (out[order] || 0) + min; };
+    const apps = this.applications.filter(a => a.assignedShift === shiftId && a.status === 'matched'
+      && (date == null || a.serviceDate === date) && (!extra || a.id !== extra.id));
+    (extra ? apps.concat(extra) : apps).forEach(a => {
+      const seg = this.segmentOf(a);
+      const split = a.loadMin != null || a.unloadMin != null;
+      if (split) { add(seg.from, +a.loadMin || 0); add(seg.to, +a.unloadMin || 0); }
+      else add(seg.to, +a.handleMin || 0);
+    });
+    return out;
+  },
+  /* 重算某班（同日）所有已排單的到站時間：班次組成異動（排入／改派／移出）後呼叫 */
+  refreshArrivals(shiftId, date) {
+    const sh = DB.regionalShifts.find(s => s.id === shiftId);
+    if (!sh) return;
+    this.applications.filter(a => a.assignedShift === shiftId && a.status === 'matched' && a.serviceDate === date)
+      .forEach(a => {
+        const st = DB.stations.find(s => s.id === a.station);
+        if (st) a.arrival = minToHHMM(this.shiftArrivalAtStation(sh, st.order, date));
+      });
   },
 
   /* 每班次站內處理時間預算（分鐘）＝班距（每小時一班）。
@@ -286,8 +318,8 @@ const ModuleA = {
     let shifts = [...branchShifts];
     if (expect != null) {
       shifts.sort((a, b) => {
-        const da = Math.abs(this.shiftArrivalAtStation(a, station.order) - expect);
-        const db = Math.abs(this.shiftArrivalAtStation(b, station.order) - expect);
+        const da = Math.abs(this.shiftArrivalAtStation(a, station.order, date, app) - expect);
+        const db = Math.abs(this.shiftArrivalAtStation(b, station.order, date, app) - expect);
         return da - db;
       });
       trace.push(`<span class="dim">收貨模式：指定期望 ${app.deliverTime}｜依到站時間差最小排序班次（早晚都比，非硬性截止）</span>`);
@@ -307,7 +339,7 @@ const ModuleA = {
     for (let i = 0; i < shifts.length; i++) {
       const sh = shifts[i];
       const veh = vehiclePool[sh.id];
-      const arr = this.shiftArrivalAtStation(sh, station.order);
+      const arr = this.shiftArrivalAtStation(sh, station.order, date, app);   // 含前面各站停站時間
       const departMin = hhmmToMin(sh.depart); // 發車時間（車輛離開基地）
       trace.push(`\n▶ 嘗試班次 <span class="hl">${sh.label}</span>（車 ${veh.id}）發車 ${sh.depart}｜到站約 ${minToHHMM(arr)}`);
 
@@ -356,7 +388,8 @@ const ModuleA = {
         app.assignedShift = sh.id;
         app.arrival = minToHHMM(arr);
         app.expectDiffMin = diff; // 與期望收貨時間的差（分，正=晚、負=早、null=未指定）
-        return { ok: true, shift: sh, trace, arrival: minToHHMM(arr), expectDiffMin: diff };
+        this.refreshArrivals(sh.id, date);   // 本單的停站時間會延後後面各站，一併重算本班到站
+        return { ok: true, shift: sh, trace, arrival: app.arrival, expectDiffMin: diff };
       }
       const fs = failStation != null ? DB.stations.find(x => x.order === failStation && x.branch === app.branch) : null;
       trace.push(`  <span class="no">✗ 裝不下${fs ? `（於 ${fs.name} 前區段容量不足）` : ''} → pass 下一班（G11）</span>`);

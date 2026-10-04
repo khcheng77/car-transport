@@ -2597,7 +2597,7 @@ function cOrderBadge(o) {
 }
 // 派車調度明細（G128）：待調度申請單（批次媒合／手動指派／無車退回）＋派車單 grid（「明細」開視窗異動與送審）
 const cDrvOpts = (cur, blank) => bOpt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'BIZ').map(d => bOpt(d.id, `${d.name}（${d.id}｜歸屬 ${d.homeSite}）`, cur)).join('');
-const cPaxOf = apps => apps.reduce((s, a) => s + a.pax, 0);
+const cPaxOf = apps => ModuleC.dispatchPax(apps);   // 同時在車人數（單程去回取較大者）
 // 車號下拉（依車種類型）：座位不足者停用
 function cFillVehicles(typeSel, vehSel, cur, pax) {
   const t = $(typeSel).value;
@@ -2997,7 +2997,7 @@ RENDER.a_driver = function () {
     });
     const ordered = Object.values(stops).sort((x, y) => x.order - y.order);
     const body = ordered.map((stp, i) => {
-      const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order));
+      const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order, date === '—' ? null : date));   // 含前面各站停站時間（G131）
       const dropLines = stp.drops.map(a => {
         const del = ['departed', 'logged'].includes(Flow.of(a)) ? ' ' + Flow.badge(a) : '';
         return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${stp.name} / ${a.building}｜接收：${personDisplay(a.recipient)}${del}</div>`;

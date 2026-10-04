@@ -2413,6 +2413,138 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
   });
 });
 
+/* =================================================================
+   第三方演算法疑點（tests/suspected.test.js 移入，2026-10-04 G131）
+   A-S1 到站含前站停站時間｜B-S1 直達被剔除單不佔容量｜B-S2 直達時間窗判定與來收時間一致｜
+   C-S1 單程配對不受建立順序影響｜C-S2 單程配對座位容納回程人數｜C-S3 位置不明資源不當成空駛最小
+   ================================================================= */
+const box = (o) => Object.assign({ name: '件', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 }, o);
+/* =================================================================
+   模組 A 區域物流
+   ================================================================= */
+group('疑點修正 · 巡迴物品轉運（G131）', () => {
+  test('A-S1 到站時間應包含前面站點的上下貨時間', () => {
+    const H = fresh();
+    H.ModuleA.now = () => new Date(2026, 8, 2, 6, 0); // 06:00，早於所有班次
+    // 第一張：100 站上貨 25 分、300 站卸貨 25 分，排入 08:00 班
+    const a1 = H.ModuleA.submit({ applicant: 'A', branch: 'D1', pickStation: 'D1-100', station: 'D1-300',
+      items: [box()], recvMode: 'asap', loadMin: 25, unloadMin: 25 }).app;
+    // 第二張：送到 500 站，同一班
+    const a2 = H.ModuleA.submit({ applicant: 'B', branch: 'D1', pickStation: 'D1-400', station: 'D1-500',
+      items: [box()], recvMode: 'asap', loadMin: 2, unloadMin: 2 }).app;
+    eq(a1.assignedShift, a2.assignedShift, '前提：兩張應在同一班');
+    const depart = H.hhmmToMin(H.DB.regionalShifts.find(s => s.id === a2.assignedShift).depart);
+    const drive = 5 * H.ModuleA.INTER_STATION_MIN;
+    const minArrival = depart + drive + 25 + 25; // 至少要加上 100 站與 300 站的處理時間
+    ok(H.hhmmToMin(a2.arrival) >= minArrival,
+      `500 站到站 ${a2.arrival}，但車在 100 站與 300 站共停留 50 分，最早應為 ${H.minToHHMM(minArrival)}`);
+  });
+});
+
+/* =================================================================
+   模組 B 南北幹線（急件直達）
+   ================================================================= */
+group('疑點修正 · 院區物品轉運急件直達（G131）', () => {
+  test('B-S1 被時間窗剔除的單，不應繼續佔用直達車容量', () => {
+    const H = fresh();
+    const veh = H.DB.vehicles.find(v => v.id === 'V-T01'); // 容量 34560L
+    const passD6 = H.hhmmToMin(H.DB.shiftStartDefault) + H.DB.prepMin + H.ModuleB.travelMin('D9', 'D6', veh.sizeClass);
+    // d1：最早核准、D6 取貨，收貨時間窗已過 → 必被剔除
+    const d1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D6', destSite: 'D1', direct: true, volume: 20000,
+      category: 'BOX', weight: 500, loadMin: 20, unloadMin: 0,
+      wantReceiveTime: H.minToHHMM(passD6 - H.DB.receiveWindowMin - 30) });
+    // d2：基地 D9 取貨、無時間窗；單獨上車容量足夠（22000L < 34560L）
+    const d2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D1', direct: true, volume: 20000,
+      category: 'BOX', weight: 500, loadMin: 20, unloadMin: 0 });
+    H.ModuleB.approve(d1); H.ModuleB.approve(d2);
+    const r = H.ModuleB.dispatch('V-T01', 'direct');
+    ok(!r.carried.some(o => o.id === d1.id), '前提：d1 應因時間窗被剔除');
+    ok(r.carried.some(o => o.id === d2.id),
+      `d2 未上車；車上實際載量 ${r.capUsed}L / ${r.capTotal}L，d2 是被已剔除的 d1 佔掉容量`);
+  });
+
+  test('B-S2 時間窗判定與回報的來收時間應一致', () => {
+    const H = fresh();
+    const veh = H.DB.vehicles.find(v => v.id === 'V-T01');
+    const passD6 = H.hhmmToMin(H.DB.shiftStartDefault) + H.DB.prepMin + H.ModuleB.travelMin('D9', 'D6', veh.sizeClass);
+    // d1：基地 D9 上貨 120 分
+    const d1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D1', direct: true, volume: 1000,
+      category: 'BOX', weight: 100, loadMin: 120, unloadMin: 0 });
+    // d2：D6 取貨；時間窗結束剛好等於「不含上貨」的行經時間
+    const d2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D1', direct: true, volume: 1000,
+      category: 'BOX', weight: 100, loadMin: 20, unloadMin: 0,
+      wantReceiveTime: H.minToHHMM(passD6 - H.DB.receiveWindowMin) });
+    H.ModuleB.approve(d1); H.ModuleB.approve(d2);
+    const r = H.ModuleB.dispatch('V-T01', 'direct');
+    const end = passD6; // 時間窗結束
+    r.carried.forEach(o => {
+      if (o.id !== d2.id) return;
+      ok(H.hhmmToMin(o.pickupTime) <= end,
+        `d2 被判定在窗內而上車，但回報來收時間 ${o.pickupTime} 晚於時間窗結束 ${H.minToHHMM(end)}`);
+    });
+  });
+});
+
+/* =================================================================
+   模組 C 差旅共乘（單程單）
+   ================================================================= */
+group('疑點修正 · 差旅共乘（G131）', () => {
+  const D = '2026-10-20';
+  const oneway = (H, o) => {
+    const a = H.ModuleC.createApp(Object.assign({ applicant: 'X', dept: 'D', ext: '1', type: 'oneway',
+      departDate: D, pax: 1 }, o));
+    H.ModuleC.approve(a); return a;
+  };
+
+  test('C-S1 單程配對不應受申請建立順序影響（回程先建立）', () => {
+    const H = fresh();
+    const back = oneway(H, { origin: '桃園機場T1', dest: '台北總部', earliestPickup: '11:00' });
+    const out = oneway(H, { origin: '台北總部', dest: '桃園機場T1', earliestPickup: '09:00' });
+    H.ModuleC.runBatch(D, '測試', { days: 0 });
+    eq(out.status, 'matched', '去程狀態');
+    eq(back.status, 'matched', `回程狀態（原因：${back.note || back.lastBatchResult || '—'}）`);
+    eq(back.groupId, out.groupId, '去程與回程應配成同一趟');
+  });
+
+  test('C-S2 配對回程時，車輛座位也要容納回程人數', () => {
+    const H = fresh();
+    const out = oneway(H, { origin: '台北總部', dest: '桃園機場T1', earliestPickup: '09:00', pax: 2 });
+    const back = oneway(H, { origin: '桃園機場T1', dest: '台北總部', earliestPickup: '11:00', pax: 8 });
+    H.ModuleC.runBatch(D, '測試', { days: 0 });
+    if (back.groupId && back.groupId === out.groupId) {
+      const v = H.DB.vehicles.find(x => x.id === back.vehicle);
+      ok(v.seats >= back.pax, `回程 ${back.pax} 人配上 ${v.id}（${v.seats} 座）`);
+    }
+  });
+
+  test('C-S3 跨據點調度時，位置不明的資源不應被當成空駛最小', () => {
+    const H = fresh();
+    H.DB.allowCrossSiteDeadhead = true;
+    // 加一台沒有當前位置的車
+    H.DB.vehicles.push({ id: 'V-BX', type: '商務廂車', name: '位置不明', pool: 'BIZ', homeSite: 'D10', seats: 7 });
+    const a = H.ModuleC.createApp({ applicant: 'X', dept: 'D', ext: '1', type: 'round', origin: '台北總部',
+      dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '15:00', pax: 2 });
+    H.ModuleC.approve(a);
+    // 讓台北出發時，已知位置的車都要跨據點：把台北的車移到台中
+    H.DB.vehicles.filter(v => v.pool === 'BIZ' && v.id !== 'V-BX').forEach(v => { v.currentSite = 'D6'; });
+    H.ModuleC.runBatch(D, '測試', { days: 0 });
+    ok(a.vehicle !== 'V-BX', `選中位置不明的 ${a.vehicle}，系統記錄空駛 ${a.deadheadMin} 分`);
+  });
+  test('C-S2 補：已配對的單程派車單送審時，座位以去程／回程較大者計（不相加）', () => {
+    const H = fresh();
+    const out = oneway(H, { origin: '台北總部', dest: '桃園機場T1', earliestPickup: '09:00', pax: 2 });
+    const back = oneway(H, { origin: '桃園機場T1', dest: '台北總部', earliestPickup: '11:00', pax: 3 });
+    H.ModuleC.runBatch(D, '測試', { days: 0 });
+    eq(back.groupId, out.groupId, '前提：去回配成一趟');
+    const o = H.ModuleC.dispatchOf(out);
+    eq(H.ModuleC.dispatchPax(H.ModuleC.dispatchApps(o)), 3, '同時在車人數＝max(2, 3)');
+    ok(H.ModuleC.submitDispatch(o).ok, '可送審（不因 2＋3 人誤判座位不足）');
+    const v4 = H.DB.vehicles.find(v => v.id === 'V-B02');   // 4 座
+    H.ModuleC.signReject(out, '運輸主管', '換車');
+    ok(H.ModuleC.updateDispatch(o, { vehicleType: v4.type, vehicle: v4.id, driver1: o.driver1, driver2: '' }).ok, '3 人可改派 4 座車');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

@@ -101,14 +101,17 @@ const ModuleC = {
   },
 
   /* ---- C-1 空車移動最小化（規格最高優化目標）----
-     空駛＝資源「當前位置」開到「出發地對應據點」的車程（分）。
-     無法量測（查無據點）視為 0。據點間車程與幹線共用主檔路程表（2.9 siteTravel）。 */
+     空駛＝資源「當前位置」開到「出發地對應據點」的車程（分）。據點間車程與幹線共用主檔路程表（2.9 siteTravel）。
+     出發地不屬任何據點 → 0（無空駛可言）；資源當前位置不明或查無路程 → null（無法量測，不得當成空駛最小，
+     候選清單直接排除；修正：原本視為 0 而被優先選中）。 */
   deadheadMin(resource, app) {
     const originSite = DB.bizOriginSite[app.origin];
-    if (!originSite || !resource.currentSite) return 0;
+    if (!originSite) return 0;
+    if (!resource.currentSite) return null;
+    if (resource.currentSite === originSite) return 0;
     // 商務車無大小車之分，一律取小車路程（2.9 分車型表）
     const t = DB.siteTravel.small[resource.currentSite + '|' + originSite];
-    return t != null ? t : 0;
+    return t != null ? t : null;
   },
 
   /* 可用車＋司機候選清單（商務池），依「空駛時間總和」升冪排序（C-1）
@@ -119,7 +122,8 @@ const ModuleC = {
     // G59：以「當前位置」而非「歸屬據點」判斷可用性
     // 預設要求當前位置與出發地相符；DB.allowCrossSiteDeadhead=true 時改為允許調度、以空駛最小者優先（待業務確認）
     const originSite = DB.bizOriginSite[app.origin] || null;
-    const usable = r => DB.allowCrossSiteDeadhead || !originSite || r.currentSite === originSite;
+    // 位置不明／查無空駛路程者（deadheadMin＝null）一律不可用（G59 以當前位置判斷可用性）
+    const usable = r => (DB.allowCrossSiteDeadhead || !originSite || r.currentSite === originSite) && this.deadheadMin(r, app) != null;
 
     const vehs = DB.vehicles.filter(v => v.pool === 'BIZ' && v.seats >= app.pax && usable(v))
       .filter(v => !dates.some(dt => this.isVehicleUnderMaintenance(v.id, dt)))            // G60
@@ -216,7 +220,10 @@ const ModuleC = {
 
     // 分兩型態，不互相混合（G50）
     const rounds = targets.filter(a => a.type === 'round');
-    const oneways = targets.filter(a => a.type === 'oneway');
+    // 單程單：先處理「送往轉運點」的去程，再處理其餘（回程），配對結果不受申請建立順序影響（修正 C-S1）
+    const isOut = a => DB.transferPoints.includes(a.dest) ? 0 : 1;
+    const oneways = targets.filter(a => a.type === 'oneway')
+      .map((a, i) => ({ a, i })).sort((x, y) => isOut(x.a) - isOut(y.a) || x.i - y.i).map(x => x.a);
 
     // === 來回單：地點（出發地/目的地）、起始日期、結束日期、上車時間（去程/回程）
     //     全部完全相同才可合併（G54）===
@@ -298,7 +305,8 @@ const ModuleC = {
       if (estEnd > this.WORK_END) {
         this._coordinate(a, batch, trace, '含等待後超過工時 20:30'); usedO.add(a.id); continue;
       }
-      const res = this.findResource(a, estStart, estEnd, occupied); // 空駛最小優先（C-1）
+      // 座位須同時容納去程與回程人數（修正 C-S2：原本只看去程人數）
+      const res = this.findResource({ ...a, pax: Math.max(a.pax, back ? back.pax : 0) }, estStart, estEnd, occupied); // 空駛最小優先（C-1）
       if (!res) { this._coordinate(a, batch, trace, '無可用車輛/司機（已被指派）'); usedO.add(a.id); continue; }
       this.occupy(occupied, a, res.vehicle.id, res.driver.id);
       if (back) this.occupy(occupied, back, res.vehicle.id, res.driver.id);
@@ -427,9 +435,16 @@ const ModuleC = {
     return [...new Set((apps || this.dispatchApps(order)).flatMap(a => this.tripDates(a)))];
   },
   /* 可派資源檢核（G60/G61/G71/G72）：保修、請假、其他派車單、一般用車佔用；回傳錯誤字串或 null */
+  /* 派車單同時在車人數：同一趟（來回單、同方向單程單）人數加總；單程去程與回程分屬不同時段，取兩者較大者
+     （修正：原本把去程＋回程人數相加，導致已配對的單程派車單因「座位不足」無法送審） */
+  dispatchPax(apps) {
+    const legs = {};
+    apps.forEach(a => { const k = a.type === 'oneway' ? `${a.origin}>${a.dest}` : 'round'; legs[k] = (legs[k] || 0) + a.pax; });
+    return Math.max(0, ...Object.values(legs));
+  },
   dispatchResourceError(order, f) {
     const apps = this.dispatchApps(order), dates = this.dispatchDates(order, apps);
-    const pax = apps.reduce((s, a) => s + a.pax, 0);
+    const pax = this.dispatchPax(apps);
     const v = DB.vehicles.find(x => x.id === f.vehicle && x.pool === 'BIZ');
     if (!f.vehicleType) return '請選擇「車種類型」';
     if (!v) return '請選擇商務池的「車號」';
