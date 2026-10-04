@@ -642,6 +642,24 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
     <div class="content">時間額度不足被跳過的申請單，<b>自動順延到下一個經過同站點的班次</b>，不需人工重新申請；若嘗試到<b>當天最後一班</b>仍排不進去，<b>系統即時跳提醒，請使用者自行修改申請日期</b>。</div>
     <div class="why">與商務用車共乘子系統不同，此處不進入人工協調候補，因為排擠是系統邏輯判斷的結果，視為「順延下一班」較合理。</div>
   </div>
+  <div class="decision-card">
+    <div class="label">決策（實作數值，2026-10-04 更正）</div>
+    <div class="content">站內處理時間額度以<b>班次</b>計：本單上貨＋下貨合計，加上本班（同日）已排各單合計，<b>全線合計不得超過 60 分</b>（＝班距，每小時一班）；超過即順延下一班。站間行駛時間示意值為每站 3 分。</div>
+  </div>
+  <div class="decision-card">
+    <div class="label">決策（預計到站時間，2026-10-04 · G131／G132）</div>
+    <div class="content">
+      預計到站時間＝<b>班次發車時間＋站序 × 站間行駛＋前面各站的停站時間</b>。停站時間＝本班同日各申請單在該站的處理時間：上貨計在收貨站、下貨計在送貨站，同站多單加總（G15）。
+      <div style="margin-top:8px">・挑選班次時（4.1 指定期望時間），「到站與期望時間差」以含本單在內的到站時間試算。</div>
+      <div>・同班次有單<b>排入、改派或移出</b>時，重算整班各單的預計到站時間與「與期望時間差」；司機任務單的各站抵達時間用同一套計算。</div>
+      <div>・移出班次的申請單清除預計到站時間與時間差。</div>
+    </div>
+    <div class="why">車輛在前面站點上下貨會停留，只算行駛時間會低估後面站點的到站時間（第三方測試 A-S1：前兩站共停 50 分，原本仍顯示 08:15 到站）。</div>
+  </div>
+  <div class="pending-card" style="border-left:4px solid var(--accent);padding:12px 16px;margin:12px 0;background:#fffaf2;">
+    <div class="label"><b>待業務決定</b></div>
+    <div class="content">申請人送出時即看到預計到站時間；之後排進同一班的申請單可能把它往後推，目前系統<b>不另行通知申請人</b>。是否需要在到站時間被推後時通知申請人，請業務單位確認。</div>
+  </div>
 
   <h2><span class="num">3.7</span> 車輛指派模式</h2>
   <div class="decision-card">
@@ -928,6 +946,8 @@ Level 1 + Level 2 + 係數修正 → 裝得下？
       <tr><td>實登單位</td><td>以車次（收貨日期＋班次）為單位，儲存起訖里程即完成，車次內各單已回登</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
       <tr><td>實登車輛／司機</td><td>預設帶入車次，可改為實際使用；只記錄實登，不改車次安排</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
       <tr><td>實登人員</td><td>系統自動帶入登入者</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
+      <tr><td>預計到站時間</td><td>發車＋站間行駛＋前面各站停站時間；班次組成異動時重算到站與期望時間差</td><td><span class="badge done">已定案（2026-10-04）</span></td></tr>
+      <tr><td>到站推後通知</td><td>到站時間被後排的單推後時是否通知申請人</td><td><span class="badge pending">待業務決定</span></td></tr>
       <tr><td>貨物清單回報</td><td>本車次申請單「明細」視窗，逐項回報正常運送／不運送／不接收</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
     </tbody>
   </table>
