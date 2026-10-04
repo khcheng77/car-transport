@@ -2545,6 +2545,59 @@ group('疑點修正 · 差旅共乘（G131）', () => {
   });
 });
 
+/* =================================================================
+   修正後副作用（tests/regression-probe.test.js 移入，2026-10-04 G132）
+   P1 到站被後排的單推後時，與期望時間差一併更新｜P2／P3 派車單座位依「同時在車人數」計（同時出發者相加）
+   ================================================================= */
+group('副作用修正（G132）', () => {
+  const D = '2026-10-20';
+  const box = () => ({ name: '件', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10 });
+  test('P1 A：後來的單把到站往後推時，「與期望時間差」也要一起更新', () => {
+    const H = fresh(); H.ModuleA.now = () => new Date(2026, 8, 2, 6, 0);
+    const a1 = H.ModuleA.submit({ applicant: 'A', branch: 'D1', station: 'D1-500', items: [box()],
+      recvMode: 'exact', serviceDate: '2026-09-02', deliverTime: '08:15', loadMin: 0, unloadMin: 2 }).app;
+    const before = a1.arrival;
+    H.ModuleA.submit({ applicant: 'B', branch: 'D1', pickStation: 'D1-100', station: 'D1-300', items: [box()],
+      recvMode: 'exact', serviceDate: '2026-09-02', deliverTime: '08:03', loadMin: 30, unloadMin: 0 });
+    const real = H.hhmmToMin(a1.arrival) - H.hhmmToMin('08:15');
+    ok(a1.arrival !== before, `前提：a1 到站應被推後（仍為 ${a1.arrival}）`);
+    ok(a1.expectDiffMin === real, `a1 到站 ${before}→${a1.arrival}，但「較期望晚」仍記 ${a1.expectDiffMin} 分，實際 ${real} 分`);
+  });
+
+  test('P2 C：單程單併入來回單的派車單，座位應以同時在車人數合計檢核', () => {
+    const H = fresh(); const C = H.ModuleC;
+    const r = C.createApp({ applicant: 'R', dept: 'D', ext: '1', type: 'round', origin: '台北總部', dest: '台中辦公室',
+      departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '15:00', pax: 4 });
+    C.approve(r); C.runBatch(D, 't', { days: 0 });
+    const order = C.dispatchOf(r); const v = H.DB.vehicles.find(x => x.id === order.vehicle);
+    const o = C.createApp({ applicant: 'O', dept: 'D', ext: '1', type: 'oneway', origin: '台北總部', dest: '桃園機場T1',
+      departDate: D, earliestPickup: '09:00', pax: 1 }); C.approve(o);
+    const res = C.manualMerge(o, order, 't');
+    ok(!res.ok, `${v.id}（${v.seats} 座）已載來回 4 人，再併入同時出發的單程 1 人仍允許：共 5 人`);
+  });
+
+  test('P3 C：兩張同時出發、不同轉運點的單程單併同一派車單，人數應相加', () => {
+    const H = fresh(); const C = H.ModuleC;
+    const a = C.createApp({ applicant: 'A', dept: 'D', ext: '1', type: 'oneway', origin: '台北總部', dest: '桃園機場T1',
+      departDate: D, earliestPickup: '09:00', pax: 3 }); C.approve(a); C.runBatch(D, 't', { days: 0 });
+    const order = C.dispatchOf(a); const v = H.DB.vehicles.find(x => x.id === order.vehicle);
+    const b = C.createApp({ applicant: 'B', dept: 'D', ext: '1', type: 'oneway', origin: '台北總部', dest: '桃園機場T2',
+      departDate: D, earliestPickup: '09:00', pax: v.seats - 2 }); C.approve(b);
+    const res = C.manualMerge(b, order, 't');
+    ok(!res.ok, `${v.id}（${v.seats} 座）：3 人＋${v.seats - 2} 人同時從台北出發，仍允許併入`);
+  });
+  test('P4 C：單程去程與配對回程時段不重疊，座位取較大者；同一張來回單去回程不相加', () => {
+    const H = fresh(); const C = H.ModuleC;
+    const mk = o => Object.assign({ applicant: 'X', dept: 'D', ext: '1', departDate: D, pax: 2 }, o);
+    const out = mk({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1', earliestPickup: '09:00', pax: 2 });
+    const back = mk({ type: 'oneway', origin: '桃園機場T1', dest: '台北總部', earliestPickup: '13:00', pax: 3 });
+    const round = mk({ type: 'round', origin: '台北總部', dest: '台中辦公室', earliestPickup: '09:00', returnDate: D, earliestReturn: '15:00', pax: 4 });
+    eq(C.dispatchPax([out, back]), 3, '去回不同時段取較大者');
+    eq(C.dispatchPax([round]), 4, '來回單去程與回程不相加');
+    eq(C.dispatchPax([round, out]), 6, '同時 09:00 出發相加');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

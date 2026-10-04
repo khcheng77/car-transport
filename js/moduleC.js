@@ -435,12 +435,24 @@ const ModuleC = {
     return [...new Set((apps || this.dispatchApps(order)).flatMap(a => this.tripDates(a)))];
   },
   /* 可派資源檢核（G60/G61/G71/G72）：保修、請假、其他派車單、一般用車佔用；回傳錯誤字串或 null */
-  /* 派車單同時在車人數：同一趟（來回單、同方向單程單）人數加總；單程去程與回程分屬不同時段，取兩者較大者
-     （修正：原本把去程＋回程人數相加，導致已配對的單程派車單因「座位不足」無法送審） */
+  /* 派車單同時在車人數（G132）：依「時段」而非路線計算——每張單的每一段行程（單程＝去程；來回＝去程＋回程）
+     佔用車上座位 [上車時間, 上車時間＋車程)（同一天），取任一時刻在車人數的最大值。
+     單程去程與配對回程時段不重疊 → 取較大者；同時出發的單（來回＋單程、不同轉運點的單程）→ 相加。
+     （修正：G131 依路線分組取最大值，同時出發的不同路線被誤判可併入；查無車程以 60 分計） */
   dispatchPax(apps) {
-    const legs = {};
-    apps.forEach(a => { const k = a.type === 'oneway' ? `${a.origin}>${a.dest}` : 'round'; legs[k] = (legs[k] || 0) + a.pax; });
-    return Math.max(0, ...Object.values(legs));
+    const legs = [];
+    const add = (date, hhmm, from, to, pax) => {
+      if (!date || !hhmm) return;
+      const s = hhmmToMin(hhmm), t = this.travelMin(from, to);
+      legs.push({ date, s, e: s + (t != null ? t : 60), pax: +pax || 0 });
+    };
+    apps.forEach(a => {
+      add(a.departDate, a.earliestPickup, a.origin, a.dest, a.pax);
+      if (a.type === 'round') add(a.returnDate, a.earliestReturn, a.dest, a.origin, a.pax);
+    });
+    // 在車人數的最大值必出現在某段行程的上車時刻：逐一以上車時刻統計涵蓋該時刻的各段人數
+    return legs.reduce((max, l) => Math.max(max,
+      legs.filter(x => x.date === l.date && x.s <= l.s && l.s < x.e).reduce((n, x) => n + x.pax, 0)), 0);
   },
   dispatchResourceError(order, f) {
     const apps = this.dispatchApps(order), dates = this.dispatchDates(order, apps);

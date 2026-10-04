@@ -151,7 +151,7 @@ const ModuleA = {
   // 移出班次：回未排入、清空班次與到站，待業務重新指定
   removeFromShift(app) {
     const from = app.assignedShift;
-    app.assignedShift = null; app.arrival = null; app.status = 'unscheduled';
+    app.assignedShift = null; app.arrival = null; app.expectDiffMin = null; app.status = 'unscheduled';
     app.note = '已由「已排定車次異動」移出班次，待重新指定。';
     if (from) this.refreshArrivals(from, app.serviceDate);   // 原班次少了本單的停站時間
     return app;
@@ -243,7 +243,11 @@ const ModuleA = {
     this.applications.filter(a => a.assignedShift === shiftId && a.status === 'matched' && a.serviceDate === date)
       .forEach(a => {
         const st = DB.stations.find(s => s.id === a.station);
-        if (st) a.arrival = minToHHMM(this.shiftArrivalAtStation(sh, st.order, date));
+        if (!st) return;
+        const arr = this.shiftArrivalAtStation(sh, st.order, date);
+        a.arrival = minToHHMM(arr);
+        // 與期望收貨時間差一併重算（G132：原本到站被後排的單推後時仍顯示舊的時間差）
+        a.expectDiffMin = (a.recvMode === 'exact' && a.deliverTime) ? arr - hhmmToMin(a.deliverTime) : null;
       });
   },
 
