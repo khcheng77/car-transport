@@ -186,7 +186,7 @@
     <div class="eyebrow">車輛派遣系統整合案 · 共用軟體單元 · 建議規格</div>
     <h1>申請引導單元</h1>
     <div class="meta">
-      <span>版本 <b>v2.9</b></span>
+      <span>版本 <b>v2.10</b></span>
       <span>日期 <b>2026-10-01</b></span>
       <span>狀態 <b>已實作於原型，待業務單位確認</b></span>
       <span>所屬專案 <b>khcheng77/car-transport</b></span>
@@ -433,21 +433,24 @@
       <table>
         <thead><tr><th>引導欄位</th><th>A 收貨</th><th>B 幹線</th><th>C 出差</th><th>D 一般</th></tr></thead>
         <tbody>
-          <tr><td>申請人／部門／分機</td><td>取登入者（A 畫面為唯讀）</td><td><code>applicant</code></td><td><code>applicant</code> <code>dept</code> <code>ext</code></td><td><code>applicant</code> <code>dept</code> <code>ext</code></td></tr>
+          <tr><td>申請人／部門／分機</td><td>取登入者（A 畫面為唯讀）</td><td><code>applicant</code></td><td><code>applicant</code> <code>dept</code> <code>applicantPhone</code>（畫面「申請人分機手機」）</td><td><code>applicant</code> <code>dept</code> <code>ext</code></td></tr>
           <tr><td>寄件據點</td><td><code>branch</code>（院區）</td><td><code>site</code></td><td>—</td><td>—</td></tr>
           <tr><td>收件據點</td><td>—（同院區）</td><td><code>destSite</code></td><td>—</td><td>—</td></tr>
           <tr><td>希望收貨日期</td><td><code>serviceDate</code></td><td><code>wantReceiveDate</code></td><td>—</td><td>—</td></tr>
           <tr><td>希望收貨時間</td><td><code>deliverTime</code>＋<code>recvMode</code>（今天且留空＝越快越好）</td><td><code>wantReceiveTime</code></td><td>—</td><td>—</td></tr>
           <tr><td>貨物清單</td><td><code>items</code></td><td><code>items</code></td><td>—</td><td><code>items</code>（含 <code>hazardous</code>）</td></tr>
-          <tr><td>用車起日／迄日</td><td>—</td><td>—</td><td><code>departDate</code> <code>returnDate</code></td><td><code>startDate</code> <code>endDate</code></td></tr>
-          <tr><td>出發時間</td><td>—</td><td>—</td><td><code>earliestPickup</code></td><td><code>startTime</code></td></tr>
-          <tr><td>回程／結束時間</td><td>—</td><td>—</td><td><code>earliestReturn</code>（回程上車）</td><td><code>endTime</code>（用車結束）</td></tr>
-          <tr><td>出發地／目的地／其他地點說明</td><td>—</td><td>—</td><td><code>origin</code> <code>dest</code></td><td>寫入 <code>purpose</code></td></tr>
-          <tr><td>來回／單程</td><td>—</td><td>—</td><td><code>type</code></td><td>—</td></tr>
-          <tr><td>人數</td><td>—</td><td>—</td><td><code>pax</code></td><td><code>pax</code></td></tr>
+          <tr><td>用車起日／迄日</td><td>—</td><td>—</td><td><code>reportAt</code> 日期、<code>endAt</code> 日期</td><td><code>startDate</code> <code>endDate</code></td></tr>
+          <tr><td>出發時間</td><td>—</td><td>—</td><td><code>reportAt</code> 時間（車輛報到日期時間）</td><td><code>startTime</code></td></tr>
+          <tr><td>回程／結束時間</td><td>—</td><td>—</td><td><code>endAt</code> 時間（用車結束日期時間；單程不帶）</td><td><code>endTime</code>（用車結束）</td></tr>
+          <tr><td>出發地／目的地／其他地點說明</td><td>—</td><td>—</td><td><code>route</code>（車輛起迄地點：起點＝出發地、終點＝目的地）</td><td>寫入 <code>purpose</code></td></tr>
+          <tr><td>來回／單程</td><td>—</td><td>—</td><td><code>isOneway</code>（是否單程運輸）</td><td>—</td></tr>
+          <tr><td>人數</td><td>—</td><td>—</td><td><code>passengers</code>（乘客數）</td><td><code>pax</code></td></tr>
           <tr><td>沒有司機時可否自己開車</td><td>—</td><td>—</td><td>—</td><td><code>selfDrive</code></td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="callout">
+      <p><b class="k">差旅共乘新欄位不由引導收集（v2.10）：</b>申請事由（必填）、計畫代號、車長與分機手機、車屬據點、是否同意併車（預設是）、據點接駁、特殊證 p／k、是否跨院區、是否進台北市、是否有載運品（三聯單表單編號、護運單號）、備註，都在差旅共乘新增畫面填寫；需要經過其他地點時，可在「車輛起迄地點」調整（依序加入，最後一點為終點，最多 8 點）。這些欄位不影響該走哪一種申請。</p>
     </div>
     <div class="callout">
       <p><b class="k">一般用車 v2 的欄位不由引導收集：</b>用車類別（帶入一律為一般用車）、願意等待駕駛媒合、所需管制區通行證、是否進入台北市、假日／夜間加班需求，都在一般用車新增畫面填寫；這些欄位只影響調度判斷，不影響該走哪一種申請。</p>
@@ -597,7 +600,7 @@
       <li><strong>只帶入可見卡片：</strong>先填 K6 再把運送內容改為「只有物品」，K6 的資料不得被帶入 A／B。</li>
       <li><strong>引導紀錄：</strong>前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判；目標功能送出後回填單號；已送出的紀錄不可再修改，重新帶入另建新紀錄。</li>
       <li><strong>只用一次、可返回、不送單：</strong>跳轉後從清單按「＋ 新增」不再出現帶入資料；未在目標功能送出時，系統不新增任何申請單。</li>
-      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 193 項）。</li>
+      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 201 項）。</li>
     </ul>
   </section>
 
@@ -671,6 +674,7 @@
       <table>
         <thead><tr><th>版本</th><th>內容</th></tr></thead>
         <tbody>
+          <tr><td class="nw">v2.10</td><td>2026-10-06 差旅共乘申請表單欄位改版（G133）：帶入目標欄位改為申請人分機手機、是否單程運輸、車輛起迄地點（起點、終點兩點）、車輛報到／用車結束日期時間、乘客數（第 9 節對照表更新）；申請事由等新欄位不由引導收集，於差旅共乘新增畫面填寫。判定規則、卡片與引導紀錄不變；測試數更新為 201 項。</td></tr>
           <tr><td class="nw">v2.9</td><td>2026-10-04 修正上一輪演算法修正帶出的副作用（巡迴物品轉運期望時間差、差旅共乘派車單座位依時段計算），屬媒合派車階段；申請引導的判定、卡片、帶入與引導紀錄規則皆不變；測試數更新為 193 項。</td></tr>
           <tr><td class="nw">v2.8</td><td>2026-10-04 修正第三方演算法疑點（巡迴物品轉運到站時間、院區物品轉運急件直達容量與收貨時間窗、差旅共乘單程配對與資源選擇），屬媒合派車階段；申請引導的判定、卡片、帶入與引導紀錄規則皆不變；測試數更新為 189 項。</td></tr>
           <tr><td class="nw">v2.7</td><td>2026-10-03 差旅共乘派車單明細視窗新增儲存與刪除申請單、送審後即不可再異動（派車階段，申請送出之後，與院區物品轉運一致）；申請引導的判定、卡片、帶入與引導紀錄規則皆不變，測試數維持 182 項。</td></tr>
