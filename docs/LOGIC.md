@@ -8,7 +8,7 @@
 
 ## 申請單狀態（G122，2026-10-03 四模組對齊，`flow.js`）
 
-畫面一律只顯示下列 10 種狀態，由 `Flow.of(rec)` 依「內部 status＋派車單＋簽審＋時間＋實登」推導；各模組內部 status 僅為實作用值。
+畫面一律只顯示下列 11 種狀態，由 `Flow.of(rec)` 依「內部 status＋派車單＋簽審＋時間＋實登」推導；各模組內部 status 僅為實作用值。
 
 | 顯示狀態 | 條件 | A 巡迴 | B 院區 | C 差旅 | D 一般用車 |
 |---|---|---|---|---|---|
@@ -22,6 +22,7 @@
 | 待出車 | 調度主管同意（A：排入班次） | `matched` | 簽審通過 | 簽審通過 | 簽審通過 |
 | 已出車 | 系統時間 ≥ 出車時間 | 收貨日期＋班次出發 | 派車日＋收貨時間 | 出發日期＋去程上車 | 用車起時 |
 | 已回登 | 車輛使用實登已登錄里程 | `usage` | `usage` | `usage`（車／司機回歸屬據點） | `usage` |
+| 已取消 | 申請人取消申請（結案，G133） | — | — | `cancelled`（派車單送審前） | — |
 
 - 調度主管退回：B／C 整張派車單回「調度中」（未送審）；D 回「待調度」。已出車後派車單不可再異動。
 - 已刪除（G122）：已派車、已交貨（交貨確認）、已駁回，以及 C 待人工協調／已上車／行程完成／逾期作廢，D 整單撤回／已歸還（整段提前歸還）／行程完成。
@@ -232,6 +233,8 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 ```
 draft ──▶ submitted ──(approve)──▶ approved（待調度；媒合不成註明原因）──(批次媒合／手動指派，併入派車單)──▶ matched（調度中）
                └──(reject)──▶ rejected（退回修編）     └──(returnApp)──▶ noCar（無車退回）
+                                                    └──(不同意併車＋批次無車)──▶ noCar（G133，系統自動）
+draft／submitted／rejected／approved／matched（派車單未送審）──(cancelApp，異動事由必填)──▶ cancelled（已取消，G133）
 matched ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 待出車 ──(出發時間到)──▶ 已出車 ──(實登)──▶ 已回登
 G122 已刪除：coordinate（待人工協調）、boarded／completed（已上車／行程完成）、void（逾期作廢）
 ```
@@ -239,8 +242,11 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 > 手動指派（G128）：`ModuleC.manualAssign(app, {vehicleType, vehicle, driver1, driver2}, by)` 產生未送審派車單（`manual: true`）；`ModuleC.manualMerge(app, order, by)` 併入 `manualTargets(date)`（同出發日期、未送審、未出車）。皆經 `dispatchResourceError` 檢核並寫入 `app.overrides`（人工覆寫紀錄，`overridden` 不再被批次重排）；`unassign` 移出回待調度。
 > 實登以**派車單**為單位（G125）：`ModuleC.usageDispatches()` 列出簽審通過的派車單；`ModuleC.dispatchUsageSave(d, data, by)` 經 `Usage.saveGroup` 寫入派車單並同步到單內每張申請單 `usage` → 已回登，再對各單 `_returnResourcesHome`（當前位置回復歸屬據點）。
 
-### 申請單主要欄位（`createApp`）
-- `type`(`round` 來回 / `oneway` 單程)、`origin`/`dest`、`departDate`/`earliestPickup`、`returnDate`/`earliestReturn`、`pax`(人數)。
+### 申請單主要欄位（`createApp` → `_fields`，G133 改版）
+- **表單存檔欄位**：`applicant`（登入者帶入）、`dept`、`applicantPhone`、`reason`（必填）、`projectCode`、`captain`、`captainPhone`、`homeBase`、`isOneway`、`route`（車輛起迄地點，最多 `ROUTE_MAX`=8 點）、`reportAt`／`endAt`（`yyyy-mm-ddTHH:MM`，單程 `endAt` 為空）、`passengers`、`agreeCarpool`（未指定＝true）、`baseShuttle`、`permitP`、`permitK`、`crossCampus`、`enterTaipei`、`hasCargo`、`manifestNo`／`escortNo`（無載運品不存）、`remark`；`changeReason`＋`changeLog[]`（`_change`：修改／取消的異動事由）。
+- **媒合內部欄位（推導）**：`type`＝`isOneway ? 'oneway' : 'round'`、`origin`＝`route[0]`、`dest`＝`route` 最後一點、`departDate`／`earliestPickup`＝`reportAt` 拆開、`returnDate`／`earliestReturn`＝`endAt` 拆開（單程＝出發日）、`pax`＝`passengers`、`ext`＝`applicantPhone`。經過地點不參與媒合與車程。
+- `_fields` 也接受舊欄位（`origin`／`dest`／`departDate`…，供範例資料、申請引導帶入與測試）並反推表單欄位；同時給新舊欄位時以新欄位為準。
+- `formError(data, {editing})`：事由必填；起迄至少 2 點、最多 8 點、相鄰不重複、起訖不同；報到必填；非單程時結束必填且不早於報到；乘客數 ≥ 1；有載運品時三聯單表單編號、護運單號必填；修改時異動事由必填。
 - 車程 `travelMin = bizTravel[起|迄] + bizBuffer(15)`（車程表**對稱**，查無正向則查反向）；`latestArrival` 最晚抵達為**唯讀參考，不參與媒合**。
 
 ### 歸屬據點與當前位置（v4 語意區分）
@@ -252,14 +258,20 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 - **G59 當前位置**：出發地對應據點 `bizOriginSite` 須等於車/司機 `currentSite`（主檔 `allowCrossSiteDeadhead=true` 時改為允許跨據點調度，**待業務確認**）。
 - **G60 車輛保修**：`maintenance` 期間內排除該車。
 - **G61 司機請假**：`driverLeaves` 時段重疊排除該司機。
+- **特殊證（G133）**：`needPermits(apps)`＝申請單勾選的 `P`／`K`；車輛 `permits` 須全數包含（`vehicleHasPermits`）。批次合併群組／單程配對取聯集；`dispatchResourceError` 同樣檢核（手動指派、派車單異動）。
 - **同車/同司機同日**不重複指派（`occupied` 表跨批次/群組共用）。
 - **空車移動最小化（最高優化目標）**：空駛 `deadheadMin` ＝查主檔路程表 `siteTravel[當前位置|出發地據點]`（與幹線共用同一張表 2.9）；當前位置＝出發地據點為 0；**當前位置不明或查無路程回傳 `null`，該資源不列入候選**（G131 修正：原本視為 0 而被當成空駛最小優先選中）；候選清單依**空駛總和升冪排序**，取第一個可行者 → 空駛最小優先、車次數次要。**取捨權重待業務確認**。
 
 ### 批次媒合 `runBatch(fromDate)`（按鈕觸發）
 處理 `fromDate` 起 **7 天內**、`approved` 的單；**已成功單不重排**（G53）；兩型態**不互相混合**（G50）：
 
+**不同意併車（G133，`noCarpool(app)`＝`agreeCarpool === false`）**
+- 來回單群組只含自己、單程單不找回程配對，其他單的群組／配對也排除它。
+- 媒合不成（查無車程、超工時、無資源）一律走 `_fail` → `_noCarAuto`：`status='noCar'`、`noCarNote`＝「無車可派（不同意併車…）：原因」、`noCarBy`＝「批次媒合 MB###」，批次統計 `batch.noCar`；同意併車者照舊 `_coordinate`（待調度註明原因）。
+- `dispatchResourceError`：派車單含 2 張以上申請單且任一不同意併車 → 擋下（手動併入、被併入皆不可）。
+
 **來回單（G54）**
-- 六項**完全相同**才可合併：出發地、目的地、起始日、結束日、去程上車時間、回程上車時間。
+- 六項**完全相同**才可合併：出發地（起點）、目的地（終點）、起始日、結束日、去程上車時間、回程上車時間；且雙方皆同意併車。
 - 工時檢核（G52）：去程完成時間須 `≤ 20:30`（`WORK_END`）。
 - **多天任務最後一天強制回歸屬據點**：回程終點 `returnTerminal = bizSiteOrigin[車輛.homeSite]`；該回程**仍正常參與合併**（終點相同即可），且其完成時間**一併納入工時檢核**——超時則不派車、仍待調度並註明原因（G122 刪除待人工協調）。
 - 逐一檢視候選資源（空駛最小優先），驗證強制回程可行者才指派；查無車程 / 無可用資源 / 回程超時 → 仍待調度並註明原因。
@@ -275,6 +287,11 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 ### 手動併車 `manualCandidates` / `doManualMerge`（G56）
 - 候選＝**前後 1 天**已 `matched` 的單（**不篩目的地、不比時間**），顯示**起訖（出發地 → 目的地）**、出發/最晚抵達、申請人部門分機、已載/剩餘座位（供申請人自行判斷是否順路；不顯示私人手機）。
 - 按「完成合併」即向該車搭便車成立，免調度室二次確認。
+- G133：不同意併車的單沒有候選（申請端不顯示找便車），含不同意併車單的群組不列入候選。
+
+### 取消申請 `canCancel` / `cancelApp(app, reason, by)`（G133）
+- 可取消：`draft`／`submitted`／`approved`／`rejected`；`matched` 須派車單未送審、無簽審待審或生效、未出車。異動事由必填。
+- `matched` 者先 `_detach`（移出派車單，派車單無單即 `cancelled`）；寫入 `changeLog`（動作「取消」）、`cancelledAt`／`cancelledBy`，`status='cancelled'` → Flow「已取消」。
 
 ### 調度室確認與人工覆寫 `overrideAssign`（STEP 4）
 - 調度室檢視批次結果後可**直接手動改派**車輛/司機（含媒合不成的待調度單，建立派車單），**不退回員工重新申請**。
@@ -379,8 +396,10 @@ flowchart LR
   c1["submitted"] -->|approve| c2["approved"]
   c1 -->|reject| cr["rejected"]
   c2 -->|批次媒合／手動指派| c3["matched 調度中（派車單）"]
-  c2 -->|無車退回| cn["noCar 無車退回"]
+  c2 -->|無車退回／不同意併車且無車可派| cn["noCar 無車退回"]
   c3 -->|送審| c4["調度主管審"]
+  c2 -->|取消申請（異動事由必填）| cx["cancelled 已取消"]
+  c3 -->|取消申請（派車單未送審）| cx
   c4 -->|同意| c5["待出車 → 已出車 → 已回登（車/司機回歸屬據點）"]
   c4 -->|退回| c3
 ```
@@ -388,23 +407,27 @@ flowchart LR
 ```mermaid
 flowchart TD
   B0["7 天內 approved（已成功/已覆寫不重排）"] --> T{"型態（來回/單程 不混）"}
-  T -- 來回單 --> R1{"六項完全相同 → 合併<br/>起訖地/起訖日/去程/回程上車"}
+  T -- 來回單 --> R1{"六項完全相同且皆同意併車 → 合併<br/>起訖地/起訖日/去程/回程上車<br/>（不同意併車：只含自己）"}
   R1 --> R2{"去程完成 ≤ 20:30？"}
-  R2 -- 否 --> RC["仍待調度（註明原因）"]
+  R2 -- 否 --> RC["媒合不成（註明原因）"]
   R2 -- 是 --> R3["候選資源依空駛升冪排序<br/>（當前位置→出發地車程）"]
-  R3 --> R4{"逐一驗證：資源可用<br/>（位置/保修/請假/未佔用）<br/>且強制回歸屬據點之回程 ≤ 20:30？"}
+  R3 --> R4{"逐一驗證：資源可用<br/>（位置/保修/請假/未佔用/特殊證）<br/>且強制回歸屬據點之回程 ≤ 20:30？"}
   R4 -- 皆不可行 --> RC
   R4 -- 可行 --> RM["matched：同群組同車同司機<br/>記錄回程終點/空駛/批次"]
   T -- 單程單 --> O1{"目的地為交通轉運點？"}
-  O1 -- 否 --> OC["仍待調度（註明原因）"]
-  O1 -- 是 --> O2{"送達後 4 小時窗內有回程可配？"}
+  O1 -- 否 --> OC["媒合不成（註明原因）"]
+  O1 -- 是 --> O2{"送達後 4 小時窗內有回程可配？<br/>（雙方皆同意併車）"}
   O2 --> O3{"含等待 ≤ 20:30 且有資源（空駛最小優先）？"}
   O3 -- 否 --> OC
   O3 -- 是 --> OM["matched（配成一趟 / 純去程）"]
-  RM --> AU["批次稽核：觸發時間/人/範圍/成功與待協調數"]
+  RC --> NC{"同意併車？"}
+  OC --> NC
+  NC -- 是 --> RW["仍待調度（註明原因）"]
+  NC -- 否 --> RN["noCar 無車可派（G133，告知申請人）"]
+  RM --> AU["批次稽核：觸發時間/人/範圍/成功、待調度、無車可派數"]
   OM --> AU
-  RC --> AU
-  OC --> AU
+  RW --> AU
+  RN --> AU
 ```
 
 ---

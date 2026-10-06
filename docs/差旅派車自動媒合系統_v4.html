@@ -152,6 +152,14 @@
   <section class="block" id="s0">
     <h2 class="sec-title"><span class="num">00</span>本版更新摘要</h2>
     <div class="changelog">
+      <p><b>2026-10-06 更新：申請表單欄位改版（G133）</b></p>
+      <ul>
+        <li><b>04 節改寫為「申請表單欄位」</b>：申請人由登入者帶入；分機改「申請人分機手機」；任務型態改「是否單程運輸」；出發地＋目的地併為「車輛起迄地點」（下拉逐一加入，最多 8 點，媒合依起點與終點）；出發／回程日期與上車時間併為「車輛報到日期時間」「用車結束日期時間」；人數改「乘客數」。新增申請事由、計畫代號、車長與分機手機、車屬據點、是否同意併車、據點接駁、特殊證 p／k、是否跨院區、是否進台北市、是否有載運品（三聯單表單編號、護運單號）、備註、異動事由。</li>
+        <li><b>不同意併車</b>（05、06、10 節）：一單一車，不與他人合併、不配對去回程；無車可派即直接無車退回並告知申請人。</li>
+        <li><b>特殊證 p／k</b>（09 節）：只派有該通行證的車。</li>
+        <li><b>取消申請</b>（11 節）：申請人於派車單送審前可取消，異動事由必填；新增狀態「已取消」。</li>
+      </ul>
+      <p style="margin-top:12px;padding-top:10px;border-top:1px dashed #d5d2c8"><b>原 v4 更新</b></p>
       <ul>
         <li><b>語意澄清（非新決策）</b>：「歸屬據點」是車輛/司機固定的行政屬性；「當前位置」才是排班演算法實際判斷可用性的依據。多數時候兩者相同，僅多天任務進行中會暫時不一致。</li>
         <li><b>新增車輛保修檢核</b>：系統內建保修排程功能，由業務單位維護，排班時自動排除保修期間的車輛。</li>
@@ -242,21 +250,47 @@
   </section>
 
   <section class="block" id="s4">
-    <h2 class="sec-title"><span class="num">04</span>申請表單時間欄位</h2>
+    <h2 class="sec-title"><span class="num">04</span>申請表單欄位（2026-10-06 · G133）</h2>
+    <p>新增與修改共用同一畫面，依畫面由上到下列出。必填欄位標 <b style="color:#c0392b">*</b>。</p>
     <table class="dtable">
-      <tr><th>欄位</th><th>說明</th><th>性質</th></tr>
-      <tr><td>最早上車時間</td><td>使用者最早可被載走的時間（去程）</td><td>使用者填寫，媒合判斷依據</td></tr>
-      <tr><td>最早回程時間</td><td>使用者最早可上車回程的時間</td><td>使用者填寫，媒合判斷依據</td></tr>
-      <tr><td>最晚抵達時間</td><td>系統依車程表算出的預計抵達時間</td><td>系統算出的參考資訊，不參與媒合判斷</td></tr>
+      <tr><th>欄位</th><th>輸入方式</th><th>存檔欄位</th><th>說明</th></tr>
+      <tr><td>申請人</td><td>唯讀</td><td><code>applicant</code></td><td>由登入者帶入（原寫死示範值）</td></tr>
+      <tr><td>部門</td><td>唯讀</td><td><code>dept</code></td><td>由登入者帶入（新版欄位清單未列，暫保留，待確認）</td></tr>
+      <tr><td>申請人分機手機</td><td>文字</td><td><code>applicantPhone</code></td><td>原「分機」，可填分機或手機</td></tr>
+      <tr><td>申請事由 <b style="color:#c0392b">*</b></td><td>文字</td><td><code>reason</code></td><td>新增</td></tr>
+      <tr><td>計畫代號</td><td>文字</td><td><code>projectCode</code></td><td>新增</td></tr>
+      <tr><td>車長</td><td>文字</td><td><code>captain</code></td><td>新增</td></tr>
+      <tr><td>車長分機手機</td><td>文字</td><td><code>captainPhone</code></td><td>新增</td></tr>
+      <tr><td>車屬據點</td><td>下拉</td><td><code>homeBase</code></td><td>新增；選項<b>待業務提供</b>，暫用據點主檔</td></tr>
+      <tr><td>是否單程運輸</td><td>是／否</td><td><code>isOneway</code></td><td>原「任務型態」；是＝單程（終點須為交通轉運點），隱藏用車結束日期時間</td></tr>
+      <tr><td>乘客數</td><td>數字</td><td><code>passengers</code></td><td>原「人數」，至少 1 人</td></tr>
+      <tr><td>車輛起迄地點 <b style="color:#c0392b">*</b></td><td>下拉逐一加入</td><td><code>route</code></td><td>原「出發地＋目的地」；依序加入，最多 <b>8</b> 點，至少起點、終點兩點；第一點＝起點、最後一點＝終點，起訖不可相同、相鄰不可重複</td></tr>
+      <tr><td>車輛報到日期時間 <b style="color:#c0392b">*</b></td><td>日期時間</td><td><code>reportAt</code></td><td>原「出發日期＋最早上車時間」</td></tr>
+      <tr><td>用車結束日期時間 <b style="color:#c0392b">*</b></td><td>日期時間</td><td><code>endAt</code></td><td>原「回程日期＋回程上車時間」；不可早於報到日期時間；單程不填</td></tr>
+      <tr><td>是否同意併車</td><td>是／否</td><td><code>agreeCarpool</code></td><td>新增，預設「是」；否＝一單一車（見 05 節）</td></tr>
+      <tr><td>據點接駁</td><td>是／否</td><td><code>baseShuttle</code></td><td>新增，僅記錄</td></tr>
+      <tr><td>特殊證p／特殊證k</td><td>是／否</td><td><code>permitP</code>／<code>permitK</code></td><td>新增；是＝只派有該通行證的車（見 09 節）</td></tr>
+      <tr><td>是否跨院區</td><td>是／否</td><td><code>crossCampus</code></td><td>新增，僅記錄</td></tr>
+      <tr><td>是否進台北市</td><td>是／否</td><td><code>enterTaipei</code></td><td>新增，僅記錄</td></tr>
+      <tr><td>是否有載運品</td><td>是／否</td><td><code>hasCargo</code></td><td>新增；是＝顯示下兩欄並必填</td></tr>
+      <tr><td>三聯單表單編號</td><td>文字</td><td><code>manifestNo</code></td><td>有載運品時顯示、必填</td></tr>
+      <tr><td>護運單號</td><td>文字</td><td><code>escortNo</code></td><td>有載運品時顯示、必填</td></tr>
+      <tr><td>備註</td><td>多行文字</td><td><code>remark</code></td><td>新增</td></tr>
+      <tr><td>異動事由</td><td>多行文字</td><td><code>changeReason</code></td><td>僅修改（申請中／退回修編）或取消時出現，必填；每次異動記入異動紀錄</td></tr>
     </table>
+    <div class="final-card" style="margin-top:12px;">
+      <div class="d-label">媒合用欄位（系統推導）</div>
+      <p>媒合引擎仍以起點、終點、日期與時間比對，由表單欄位推導：起點＝車輛起迄地點第一點、終點＝最後一點；報到日期時間拆成出發日期＋去程上車時間；用車結束日期時間拆成回程日期＋回程上車時間；乘客數＝人數。<b>經過地點只記錄，不參與媒合與車程計算</b>。</p>
+      <p style="margin-top:8px;"><b>最晚抵達時間</b>（起點→終點車程）仍為系統算出的參考資訊，於明細顯示，不參與媒合判斷。</p>
+    </div>
   </section>
 
   <section class="block" id="s5">
     <h2 class="sec-title"><span class="num">05</span>自動媒合條件</h2>
-    <p><b>來回單的合併比對條件為下列六項全部完全相同</b>（本版將原本隱含的日期條件顯性化）：</p>
+    <p><b>來回單的合併比對條件為下列六項全部完全相同</b>（本版將原本隱含的日期條件顯性化）。2026-10-06 起表單改為「車輛起迄地點」「車輛報到日期時間」「用車結束日期時間」，出發地／目的地即起點／終點，日期與時間由兩個日期時間欄位拆出（04 節）：</p>
     <ul class="plain">
-      <li>出發地完全相同</li>
-      <li>目的地完全相同</li>
+      <li>出發地（起點）完全相同</li>
+      <li>目的地（終點）完全相同</li>
       <li><b>起始日（出發日期）完全相同</b>　<span style="color:#7a7f8c">← 本版顯性化</span></li>
       <li><b>結束日（回程日期）完全相同</b>　<span style="color:#7a7f8c">← 本版顯性化</span></li>
       <li><b>去程最早上車時間完全相同</b></li>
@@ -264,6 +298,15 @@
     </ul>
     <p>另加兩項資源面條件：合併後總人數未超過車輛容量；指派後預估完成時間未超過司機工時上限（20:30）。</p>
     <p>不存在「時間窗重疊、系統挑折衷值」的邏輯——時間欄位必須完全一致才能自動合併。</p>
+    <div class="final-card">
+      <div class="d-label">是否同意併車（2026-10-06 · G133）</div>
+      <ul class="plain">
+        <li><b>合併的前提</b>：所有合併對象都必須「同意併車」。經過地點不同不影響合併（只比起點與終點）。</li>
+        <li><b>不同意併車</b>：直接進入媒合，但只為這張單單獨找車（不與他人合併；單程單也不配對去回程）。</li>
+        <li><b>找不到車</b>：直接<b>無車退回</b>並告知申請人「無車可派」（結案），不留在待調度等調度處理；同意併車的單媒合不成則照舊維持待調度。</li>
+        <li><b>手動處理</b>：調度手動指派可為其單獨產生派車單，但不可把它併入其他派車單，也不可把其他單併入它的派車單。</li>
+      </ul>
+    </div>
     <div class="final-card">
       <div class="d-label">補述：為何要把日期寫成獨立條件</div>
       <p>
@@ -281,7 +324,8 @@
     <h3 class="sub">候選清單範圍與顯示欄位</h3>
     <div class="final-card">
       <div class="d-label">定案內容</div>
-      <p><b>候選對象</b>：出發日期在申請日<b>前後1天</b>內、<b>已確定有派車</b>的其他申請單（不篩選目的地——不論候選單去哪裡，只要日期範圍符合、已有車，都列入清單，由使用者自行判斷是否順路）。</p>
+      <p><b>不同意併車</b>的申請單不提供手動併車；含「不同意併車」申請單的派車單也不列入候選（G133）。</p>
+      <p style="margin-top:8px;"><b>候選對象</b>：出發日期在申請日<b>前後1天</b>內、<b>已確定有派車</b>的其他申請單（不篩選目的地——不論候選單去哪裡，只要日期範圍符合、已有車，都列入清單，由使用者自行判斷是否順路）。</p>
       <p style="margin-top:8px;"><b>顯示欄位</b>：<b>起訖（出發地 → 目的地）</b>、出發時間／最晚抵達時間、申請人姓名與部門/分機（不顯示私人手機）、該車輛已載人數/剩餘容量。<span style="color:#7a7f8c">（v4.1 回填：原僅列目的地，因使用者需依候選車完整路線判斷是否順路，補上出發地、以「出發地 → 目的地」呈現）</span></p>
     </div>
 
@@ -373,6 +417,7 @@
       <li>車輛可用（當前位置對、時段無衝突、<b>不在保修期間</b>）；當前位置不明者不列入候選（G131）</li>
       <li>司機可用（當前位置對、時段無衝突、<b>與請假時段無重疊</b>）；當前位置不明者不列入候選（G131）</li>
       <li>座位足夠：車輛座位 ≥ <b>同時在車人數</b>（見下）</li>
+      <li><b>特殊證</b>：申請單勾選特殊證 p／k 者，車輛主檔的通行證須含 P／K；派車單內任一張需要即整張需要（G133，批次媒合、手動指派、派車單異動皆檢核）</li>
       <li>目的地車程資料存在</li>
       <li>預估完成時間未超過司機工時上限（20:30）</li>
     </ul>
@@ -394,6 +439,7 @@
     <table class="dtable">
       <tr><th>機制</th><th>觸發原因</th><th>處理方式</th></tr>
       <tr><td>待調度（註明原因）<br><span style="font-size:.85em;opacity:.75">原「待人工協調」已刪除</span></td><td>資源面問題：無可用車／司機／查無車程資料／預估超過工時上限</td><td>調度室手動指派（建立派車單）或無車退回</td></tr>
+      <tr><td>無車可派（不同意併車）</td><td>不同意併車的單在批次媒合找不到可單獨派遣的車輛</td><td>系統直接無車退回（結案）並告知申請人（G133）</td></tr>
       <tr><td>手動併車模式</td><td>需求面問題：自動媒合找不到對象</td><td>使用者向已有車的申請單搭便車，逾期未成則自動作廢</td></tr>
       <tr><td>逾期自動作廢</td><td>手動併車模式到出發時間仍未成功</td><td>系統自動作廢並通知申請人，紀錄保留，不轉人工</td></tr>
     </table>
@@ -422,17 +468,31 @@
         <li><b>待二級審</b>　申請人填單送出，等待單位主管審核</li>
         <li><b>退回修編</b>　單位主管退回，申請人修改後重送</li>
         <li><b>待調度</b>　單位主管同意，進入排班池，等待批次媒合；媒合不成者仍為待調度並註明原因</li>
-        <li><b>無車退回</b>　調度將待調度的單退回（原因必填），結案不可再動</li>
+        <li><b>無車退回</b>　調度將待調度的單退回（原因必填），結案不可再動；不同意併車且批次媒合無車可派者由系統直接無車退回（G133）</li>
         <li><b>調度中</b>　批次媒合、手動指派或手動併車成立，已併入派車單（未送審）</li>
         <li><b>調度主管審</b>　派車單送審，等待調度主管（運輸主管簽審）同意；退回則整張派車單回調度中</li>
         <li><b>待出車</b>　調度主管同意，已綁定車輛與司機</li>
         <li><b>已出車</b>　系統時間到達出發日期＋去程上車時間</li>
         <li><b>已回登</b>　車輛使用實登登錄里程（以派車單為單位，見下），本趟結案；車輛／司機當前位置回復歸屬據點</li>
+        <li><b>已取消</b>　申請人取消申請（見下），結案不可再動（G133）</li>
       </ul>
       <p style="margin-top:8px">
         2026-10-03 狀態名稱對齊：原「已送出／已駁回／已核准／已媒合／已上車／已完成」改為上列名稱；「待人工協調」「已作廢（逾期作廢）」已刪除。
         「已出車」「已回登」為執行階段狀態，不參與媒合判斷，讓調度室分辨「排好但還沒跑」與「已經跑完」，並支撐媒合失敗率統計。
       </p>
+    </div>
+  </section>
+
+  <section class="block" id="s11c">
+    <h3 class="sub">取消申請與異動事由（2026-10-06 · G133）</h3>
+    <div class="final-card">
+      <div class="d-label">定案內容</div>
+      <ul class="plain">
+        <li><b>可取消</b>　申請中、待二級審、退回修編、待調度，以及調度中（派車單尚未送審）的申請單；明細頁「取消申請」。</li>
+        <li><b>不可取消</b>　派車單已送審（調度主管審）、待出車、已出車、已回登、無車退回、已取消；請聯繫調度處理。</li>
+        <li><b>異動事由必填</b>　取消時填寫；修改（申請中暫存或退回修編重送）時也必填。每次修改／取消記入異動紀錄（時間、動作、異動人、異動事由），明細頁顯示。</li>
+        <li><b>已在派車單者</b>　自派車單移出；派車單已無申請單即一併取消。</li>
+      </ul>
     </div>
   </section>
 
@@ -473,8 +533,15 @@
   <section class="block" id="s12">
     <h2 class="sec-title"><span class="num">12</span>待確認事項狀態</h2>
     <div class="resolved-banner">
-      <b>✓ 原 Q29–Q33 共 5 項待業務單位確認事項，本輪已全數由使用者明確答覆並收斂定案，目前無待確認事項。</b>
+      <b>✓ 原 Q29–Q33 共 5 項待業務單位確認事項，本輪已全數由使用者明確答覆並收斂定案。</b>
     </div>
+    <p style="margin-top:12px;"><b>2026-10-06 申請表單改版（G133）新增待確認：</b></p>
+    <table class="dtable">
+      <tr><th>項目</th><th>目前做法</th><th>待確認</th></tr>
+      <tr><td>車屬據點選項</td><td>暫用據點主檔，僅記錄</td><td>正式選項清單；是否影響派車（例如限派該據點的車）</td></tr>
+      <tr><td>部門欄位</td><td>保留，由登入者帶入</td><td>新版欄位清單未列，是否移除</td></tr>
+      <tr><td>據點接駁、是否跨院區、是否進台北市、計畫代號、車長</td><td>僅記錄、顯示，不影響媒合</td><td>是否需要參與派車判斷或統計</td></tr>
+    </table>
     <table class="dtable">
       <tr><th>原題號</th><th>問題</th><th>解決方式</th></tr>
       <tr><td>Q29</td><td>合併結果如何寫回系統</td><td>使用者按下「完成合併」即成立，不需調度室確認</td></tr>
@@ -545,10 +612,14 @@
       <div class="term"><div class="t-name">來回單</div><div class="t-def">司機/車輛全程綁定同一批人，去程送達後待命，回程載回原班人馬，去回視為同一趟任務</div></div>
       <div class="term"><div class="t-name">單程單</div><div class="t-def">送往/來自交通轉運點的單程需求，出發前完成配對，4小時時間窗內可配對回程單程單，只能單程配單程</div></div>
       <div class="term"><div class="t-name">司機工時上限</div><div class="t-def">08:00–20:30，共12.5小時，適用兩種任務型態，超時判定指派不可行</div></div>
-      <div class="term"><div class="t-name">最早上車時間</div><div class="t-def">去程使用者最早可被載走的時間，是自動媒合的判斷依據之一</div></div>
-      <div class="term"><div class="t-name">最早回程時間</div><div class="t-def">回程使用者最早可上車的時間，是自動媒合的判斷依據之一</div></div>
+      <div class="term"><div class="t-name">車輛報到日期時間</div><div class="t-def">原「出發日期＋最早上車時間」，是自動媒合的判斷依據之一</div></div>
+      <div class="term"><div class="t-name">用車結束日期時間</div><div class="t-def">原「回程日期＋回程上車時間」（單程不適用），是自動媒合的判斷依據之一</div></div>
       <div class="term"><div class="t-name">最晚抵達時間</div><div class="t-def">系統依車程表算出的預計抵達時間，僅供參考顯示，不參與媒合判斷</div></div>
-      <div class="term"><div class="t-name">自動媒合</div><div class="t-def">出發地、目的地、最早上車/回程時間皆完全相同，人數未超容量，且不超工時上限時，系統自動合併為同一車次</div></div>
+      <div class="term"><div class="t-name">自動媒合</div><div class="t-def">起點、終點、報到與結束日期時間皆完全相同且雙方都同意併車，人數未超容量，且不超工時上限時，系統自動合併為同一車次</div></div>
+      <div class="term"><div class="t-name">車輛起迄地點</div><div class="t-def">申請表單依序加入的地點清單（最多 8 點）；第一點為起點、最後一點為終點，媒合只看起點與終點</div></div>
+      <div class="term"><div class="t-name">不同意併車</div><div class="t-def">申請單一單一車，不與他人合併；批次媒合無車可派即直接無車退回並告知申請人</div></div>
+      <div class="term"><div class="t-name">特殊證 p／k</div><div class="t-def">申請單勾選後只派車輛主檔通行證含 P／K 的車</div></div>
+      <div class="term"><div class="t-name">異動事由</div><div class="t-def">申請人修改或取消申請時必填的原因，記入異動紀錄</div></div>
       <div class="term"><div class="t-name">手動併車模式</div><div class="t-def">自動媒合失敗後，系統列出前後1天已確定有車的候選單，由申請人自行聯繫搭便車</div></div>
       <div class="term"><div class="t-name">逾期自動作廢</div><div class="t-def">手動併車模式到出發時間仍未媒合成功，系統自動作廢申請單，通知申請人並保留紀錄</div></div>
       <div class="term"><div class="t-name">待人工協調（已刪除）</div><div class="t-def">2026-10-03 狀態對齊後刪除：因資源面問題無法自動排班者維持「待調度」並註明原因，交由調度室手動指派或無車退回</div></div>
