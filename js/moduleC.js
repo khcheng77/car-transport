@@ -19,7 +19,7 @@ const ModuleC = {
   createApp(data, opts) {
     const app = Object.assign({ id: 'BZ' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
       approvedAt: null,
-      status: opts && opts.draft ? 'draft' : 'submitted',   // draft（申請中）|submitted（待二級審）|approved（待調度）|rejected（退回修編）|noCar（無車退回）|matched（併入派車單）；顯示狀態由 Flow 推導
+      status: opts && opts.draft ? 'draft' : 'submitted',   // draft（申請中）|submitted（待二級審）|approved（待調度）|rejected（退回修編）|noCar（無車退回）|matched（併入派車單）|cancelled（已取消 G133）；顯示狀態由 Flow 推導
       vehicle: null, driver: null, driver2: null,
       groupId: null, dispatchId: null,
       note: '',
@@ -32,7 +32,33 @@ const ModuleC = {
   saveDraft(app, data) {
     if (app.status !== 'draft') throw new Error('僅「申請中」的申請可暫存修改');
     Object.assign(app, this._fields(data));
+    this._change(app, '修改', data.changeReason, data.applicant);
     return app;
+  },
+  // 異動事由（G133）：修改／取消時必填，留存最新一筆於 changeReason，並累積 changeLog
+  _change(app, action, reason, by) {
+    reason = (reason || '').trim();
+    if (!reason) return;
+    app.changeReason = reason;
+    (app.changeLog = app.changeLog || []).push({ at: new Date(), action, reason, by: by || app.applicant });
+  },
+  /* 取消申請（G133）：申請人於派車單送審前可取消，異動事由必填；已併入未送審派車單者自派車單移出
+     （派車單空了即取消）。派車單已送審、已出車、無車退回、已取消者不可取消。 */
+  canCancel(app) {
+    if (['draft', 'submitted', 'approved', 'rejected'].includes(app.status)) return true;
+    if (app.status !== 'matched') return false;
+    const order = this.dispatchOf(app);
+    return !Signoff.isPending(app) && !Signoff.effective(app) && !Flow.departed(app, this) && !(order && order.submitted);
+  },
+  cancelApp(app, reason, by) {
+    reason = (reason || '').trim();
+    if (!this.canCancel(app)) return { ok: false, error: app.status === 'matched'
+      ? '派車單已送審或已出車，不可取消；請聯繫調度處理' : '此申請單目前狀態不可取消' };
+    if (!reason) return { ok: false, error: '取消申請時「異動事由」為必填' };
+    if (app.status === 'matched') this._detach(app, '申請人取消申請', by || app.applicant);
+    this._change(app, '取消', reason, by);
+    app.status = 'cancelled'; app.cancelledAt = new Date(); app.cancelledBy = by || app.applicant; app.approvedAt = null;
+    return { ok: true };
   },
   canEdit(app) { return ['draft', 'rejected'].includes(app.status); },
   // 申請中／退回修編 → 申請人修改後送出：沿用原單號，進入待二級審（單位主管審核）
@@ -40,23 +66,71 @@ const ModuleC = {
     if (!this.canEdit(app)) throw new Error('僅「申請中」或「退回修編」的申請可修改後送出');
     (app.revisions = app.revisions || []).push({ at: new Date(), returnNote: app.reviewNote || '' });
     Object.assign(app, this._fields(data), { status: 'submitted', approvedAt: null, reviewNote: '', returnedBy: null });
+    this._change(app, '修改', data.changeReason, data.applicant);
     return app;
   },
+  /* 申請表單欄位（G133）：表單存檔欄位為 applicant／applicantPhone／isOneway／route／reportAt／endAt／passengers 及新增欄位；
+     媒合引擎沿用的內部欄位（type／origin／dest／departDate／earliestPickup／returnDate／earliestReturn／pax／ext）由表單欄位推導：
+     · route＝車輛起迄地點（最多 8 點，依序），起點＝route[0]→origin、終點＝route 最後一點→dest；中間地點僅記錄、不參與媒合；
+     · reportAt（車輛報到日期時間）→ departDate＋earliestPickup；endAt（用車結束日期時間）→ returnDate＋earliestReturn（單程不適用）。
+     亦接受舊欄位（origin／dest／departDate…，供範例與測試），會反推表單欄位。 */
+  ROUTE_MAX: 8,
+  YESNO: ['baseShuttle', 'permitP', 'permitK', 'crossCampus', 'enterTaipei', 'hasCargo'],
   _fields(data) {
-    return {
-      applicant: data.applicant,
-      dept: data.dept,
-      ext: data.ext,
-      type: data.type,             // 'round' 來回單 | 'oneway' 單程單
-      origin: data.origin,
-      dest: data.dest,
-      departDate: data.departDate,   // 起始日期（去程當天）yyyy-mm-dd
-      earliestPickup: data.earliestPickup, // 去程最早上車 HH:MM
-      returnDate: data.returnDate || data.departDate, // 結束日期（回程當天）；單程單不適用
-      earliestReturn: data.earliestReturn, // 回程上車時間（來回單）HH:MM
-      pax: data.pax,
+    const isOneway = data.isOneway != null ? !!data.isOneway : data.type === 'oneway';
+    const route = (Array.isArray(data.route) && data.route.length ? data.route : [data.origin, data.dest])
+      .filter(Boolean).slice(0, this.ROUTE_MAX);
+    const reportAt = data.reportAt || (data.departDate ? `${data.departDate}T${data.earliestPickup || ''}` : '');
+    const endAt = isOneway ? '' : (data.endAt || (data.returnDate ? `${data.returnDate}T${data.earliestReturn || ''}` : ''));
+    const [departDate, earliestPickup] = reportAt.split('T');
+    const [returnDate, earliestReturn] = endAt ? endAt.split('T') : [departDate, ''];
+    const passengers = +(data.passengers != null ? data.passengers : data.pax) || 0;
+    const applicantPhone = data.applicantPhone != null ? data.applicantPhone : (data.ext || '');
+    const hasCargo = !!data.hasCargo;
+    const f = {
+      applicant: data.applicant, dept: data.dept, applicantPhone,
+      reason: data.reason || '', projectCode: data.projectCode || '',
+      captain: data.captain || '', captainPhone: data.captainPhone || '', homeBase: data.homeBase || '',
+      isOneway, route, reportAt, endAt, passengers,
+      agreeCarpool: data.agreeCarpool !== false,   // 未指定＝同意併車
+      manifestNo: hasCargo ? (data.manifestNo || '') : '', escortNo: hasCargo ? (data.escortNo || '') : '',
+      remark: data.remark || '',
+      // 媒合引擎內部欄位（推導）
+      ext: applicantPhone,
+      type: isOneway ? 'oneway' : 'round',
+      origin: route[0], dest: route[route.length - 1],
+      departDate: departDate || '', earliestPickup: earliestPickup || '',
+      returnDate: returnDate || departDate || '', earliestReturn: earliestReturn || '',
+      pax: passengers,
     };
+    this.YESNO.forEach(k => { f[k] = !!data[k]; });
+    return f;
   },
+  /* 表單檢核（G133）：回傳錯誤字串或 null；opts.editing＝修改既有申請單（異動事由必填） */
+  formError(data, opts) {
+    const route = (data.route || []).filter(Boolean);
+    if (!(data.reason || '').trim()) return '請填寫「申請事由」';
+    if (route.length < 2) return '「車輛起迄地點」至少要有起點與終點兩個地點';
+    if (route.length > this.ROUTE_MAX) return `「車輛起迄地點」最多 ${this.ROUTE_MAX} 個地點`;
+    if (route.some((x, i) => i && x === route[i - 1])) return '「車輛起迄地點」相鄰地點不可重複';
+    if (route[0] === route[route.length - 1]) return '「車輛起迄地點」起點與終點不可相同';
+    if (!data.reportAt || !/T\d\d:\d\d/.test(data.reportAt)) return '請填寫「車輛報到日期時間」';
+    if (!data.isOneway) {
+      if (!data.endAt || !/T\d\d:\d\d/.test(data.endAt)) return '請填寫「用車結束日期時間」';
+      if (data.endAt < data.reportAt) return '「用車結束日期時間」不可早於「車輛報到日期時間」';
+    }
+    if (!(+data.passengers >= 1)) return '「乘客數」至少 1 人';
+    if (data.hasCargo) {
+      if (!(data.manifestNo || '').trim()) return '有載運品時「三聯單表單編號」為必填';
+      if (!(data.escortNo || '').trim()) return '有載運品時「護運單號」為必填';
+    }
+    if (opts && opts.editing && !(data.changeReason || '').trim()) return '修改申請單時「異動事由」為必填';
+    return null;
+  },
+  noCarpool(app) { return app.agreeCarpool === false; },
+  // 特殊證（G133）：申請單勾選 P／K → 只能派有該通行證的車（車輛主檔 permits）
+  needPermits(apps) { return ['P', 'K'].filter(p => apps.some(a => a['permit' + p])); },
+  vehicleHasPermits(v, need) { return need.every(p => (v.permits || []).includes(p)); },
 
   // 主管准駁；駁回保留紀錄不進排班池（G63）；note＝審核備註（選填/駁回必填）
   approve(app, note) { app.status = 'approved'; app.approvedAt = this.approveSeq++; if (note != null) app.reviewNote = note; },
@@ -125,7 +199,8 @@ const ModuleC = {
     // 位置不明／查無空駛路程者（deadheadMin＝null）一律不可用（G59 以當前位置判斷可用性）
     const usable = r => (DB.allowCrossSiteDeadhead || !originSite || r.currentSite === originSite) && this.deadheadMin(r, app) != null;
 
-    const vehs = DB.vehicles.filter(v => v.pool === 'BIZ' && v.seats >= app.pax && usable(v))
+    const need = this.needPermits([app]);   // 特殊證 P／K（G133）
+    const vehs = DB.vehicles.filter(v => v.pool === 'BIZ' && v.seats >= app.pax && usable(v) && this.vehicleHasPermits(v, need))
       .filter(v => !dates.some(dt => this.isVehicleUnderMaintenance(v.id, dt)))            // G60
       .filter(v => !(occupied && dates.some(dt => occupied.veh.has(v.id + '|' + dt))))
       .sort((a, b) => this.deadheadMin(a, app) - this.deadheadMin(b, app) || a.seats - b.seats);
@@ -232,23 +307,25 @@ const ModuleC = {
     for (const a of rounds) {
       if (usedR.has(a.id) || a.status !== 'approved') continue;
       // 找六項完全相同者合併：出發地、目的地、起始日期、結束日期、去程上車時間、回程上車時間
-      const group = rounds.filter(b => !usedR.has(b.id) && b.status === 'approved' &&
+      // 不同意併車（G133）：一單一車，不與其他申請單合併
+      const group = this.noCarpool(a) ? [a] : rounds.filter(b => !usedR.has(b.id) && b.status === 'approved' && !this.noCarpool(b) &&
         b.origin === a.origin && b.dest === a.dest &&
         b.departDate === a.departDate && b.returnDate === a.returnDate &&
         b.earliestPickup === a.earliestPickup && b.earliestReturn === a.earliestReturn);
       const totalPax = group.reduce((s, b) => s + b.pax, 0);
       const travel = this.travelMin(a.origin, a.dest);
       if (travel == null) {
-        this._coordinate(a, batch, trace, '查無車程資料'); usedR.add(a.id); continue;
+        this._fail(a, batch, trace, '查無車程資料'); usedR.add(a.id); continue;
       }
       // 工時檢核（G52）：去程當天完成時間不得晚於 20:30
       const outEnd = hhmmToMin(a.earliestPickup) + travel;
       if (outEnd > this.WORK_END) {
-        group.forEach(b => { this._coordinate(b, batch, trace, '去程預估完成超過工時 20:30'); usedR.add(b.id); });
+        group.forEach(b => { this._fail(b, batch, trace, '去程預估完成超過工時 20:30'); usedR.add(b.id); });
         continue;
       }
       // 逐一檢視候選資源（空駛最小優先 C-1），並驗證 C-3 強制回歸屬據點之回程工時
-      const cands = this.findResourceCandidates({ ...a, pax: totalPax }, hhmmToMin(a.earliestPickup), outEnd, occupied);
+      const cands = this.findResourceCandidates({ ...a, pax: totalPax,
+        permitP: group.some(b => b.permitP), permitK: group.some(b => b.permitK) }, hhmmToMin(a.earliestPickup), outEnd, occupied);
       let res = null, term = null, retEnd = null, workFail = false;
       for (const c of cands) {
         const t = this.returnTerminalFor(a, c.vehicle);                       // C-3 最後一天回歸屬據點
@@ -260,8 +337,8 @@ const ModuleC = {
       }
       if (!res) {
         const why = workFail ? '回程（強制回歸屬據點）預估完成超過工時 20:30'
-                             : '無可用車輛/司機（保修/請假/已被指派/查無回程車程）';
-        group.forEach(b => { this._coordinate(b, batch, trace, why); usedR.add(b.id); });
+                             : '無可用車輛/司機（保修/請假/已被指派/特殊證不符/查無回程車程）';
+        group.forEach(b => { this._fail(b, batch, trace, why); usedR.add(b.id); });
         continue;
       }
       this.occupy(occupied, a, res.vehicle.id, res.driver.id); // 登記佔用，後續群組不得重用
@@ -289,11 +366,12 @@ const ModuleC = {
       if (usedO.has(a.id) || a.status !== 'approved') continue;
       // 目的地須為轉運點（G50）
       if (!DB.transferPoints.includes(a.dest)) {
-        this._coordinate(a, batch, trace, '單程單目的地非交通轉運點'); usedO.add(a.id); continue;
+        this._fail(a, batch, trace, '單程單目的地非交通轉運點'); usedO.add(a.id); continue;
       }
       // 找回程：同一天、同轉運點出發、回司機出發地、回程最早上車在去程送達後 4 小時內（G51 / Q35）
       const arrMin = hhmmToMin(a.earliestPickup) + (this.travelMin(a.origin, a.dest) || 0);
-      const back = oneways.find(b => !usedO.has(b.id) && b.id !== a.id && b.status === 'approved' &&
+      // 不同意併車（G133）：不與其他申請單配對去回程
+      const back = this.noCarpool(a) ? null : oneways.find(b => !usedO.has(b.id) && b.id !== a.id && b.status === 'approved' && !this.noCarpool(b) &&
         b.departDate === a.departDate &&          // 同一天（一趟完整行程；出發前配對）
         b.origin === a.dest && DB.transferPoints.includes(b.origin) &&
         b.dest === a.origin &&                     // Q35：回程須「從該轉運點回司機出發地」
@@ -303,11 +381,12 @@ const ModuleC = {
       const estEnd = back ? hhmmToMin(back.earliestPickup) + (this.travelMin(back.origin, back.dest) || 0)
                           : arrMin;
       if (estEnd > this.WORK_END) {
-        this._coordinate(a, batch, trace, '含等待後超過工時 20:30'); usedO.add(a.id); continue;
+        this._fail(a, batch, trace, '含等待後超過工時 20:30'); usedO.add(a.id); continue;
       }
       // 座位須同時容納去程與回程人數（修正 C-S2：原本只看去程人數）
-      const res = this.findResource({ ...a, pax: Math.max(a.pax, back ? back.pax : 0) }, estStart, estEnd, occupied); // 空駛最小優先（C-1）
-      if (!res) { this._coordinate(a, batch, trace, '無可用車輛/司機（已被指派）'); usedO.add(a.id); continue; }
+      const res = this.findResource({ ...a, pax: Math.max(a.pax, back ? back.pax : 0),
+        permitP: a.permitP || !!(back && back.permitP), permitK: a.permitK || !!(back && back.permitK) }, estStart, estEnd, occupied); // 空駛最小優先（C-1）
+      if (!res) { this._fail(a, batch, trace, '無可用車輛/司機（已被指派/特殊證不符）'); usedO.add(a.id); continue; }
       this.occupy(occupied, a, res.vehicle.id, res.driver.id);
       if (back) this.occupy(occupied, back, res.vehicle.id, res.driver.id);
       const gid = 'O' + a.id;
@@ -329,11 +408,24 @@ const ModuleC = {
     batch.processed = targets.length;
     batch.matched = batch.items.filter(i => i.result === 'matched').length;
     batch.coordinate = batch.items.filter(i => i.result === 'coordinate').length;
+    batch.noCar = batch.items.filter(i => i.result === 'noCar').length;
     this.batches.push(batch);
-    trace.push(`\n批次 ${batch.id} 完成（觸發人 ${batch.triggeredBy}）：處理 ${batch.processed} 筆｜成功 ${batch.matched} / 未媒合（仍待調度）${batch.coordinate}`);
+    trace.push(`\n批次 ${batch.id} 完成（觸發人 ${batch.triggeredBy}）：處理 ${batch.processed} 筆｜成功 ${batch.matched} / 未媒合（仍待調度）${batch.coordinate}`
+      + (batch.noCar ? ` / 無車可派（不同意併車）${batch.noCar}` : ''));
     return { batch, trace };
   },
 
+  // 媒合不成：同意併車者維持「待調度」；不同意併車者（G133）直接告知無車可派（無車退回）
+  _fail(app, batch, trace, reason) {
+    return this.noCarpool(app) ? this._noCarAuto(app, batch, trace, reason) : this._coordinate(app, batch, trace, reason);
+  },
+  _noCarAuto(app, batch, trace, reason) {
+    const note = `無車可派（不同意併車，無可單獨派遣之車輛）：${reason}`;
+    app.status = 'noCar'; app.approvedAt = null; app.noCarNote = note; app.noCarBy = `批次媒合 ${batch.id}`; app.noCarAt = new Date();
+    app.note = note; app.lastBatch = batch.id; app.lastBatchResult = 'noCar';
+    batch.items.push({ app: app.id, result: 'noCar', reason });
+    trace.push(`  <span class="no">✗ ${app.id} → 無車可派（不同意併車，已通知申請人）：${reason}（G133）</span>`);
+  },
   // 媒合不成：維持「待調度」並註明原因，由調度手動指派或無車退回（G122 刪除「待人工協調」狀態）
   _coordinate(app, batch, trace, reason) {
     app.note = reason;
@@ -462,6 +554,10 @@ const ModuleC = {
     if (!v) return '請選擇商務池的「車號」';
     if (v.type !== f.vehicleType) return '車號與車種類型不符';
     if (v.seats < pax) return `${v.id} 座位 ${v.seats} 不足本派車單 ${pax} 人`;
+    const lack = this.needPermits(apps).filter(p => !(v.permits || []).includes(p));
+    if (lack.length) return `${v.id} 無特殊證 ${lack.join('、')}（申請單需要）`;
+    const solo = apps.length > 1 && apps.find(a => this.noCarpool(a));
+    if (solo) return `申請單 ${solo.id} 不同意併車，不可與其他申請單同一張派車單`;
     const mt = DB.maintenance.find(m => m.vehicle === v.id && dates.some(dt => dt >= m.from && dt <= m.to));
     if (mt) return `${v.id} 保修 ${mt.from}~${mt.to}（${mt.reason}）`;
     if (!f.driver1) return '請選擇「駕駛人1」';
@@ -562,6 +658,7 @@ const ModuleC = {
     const d0 = new Date(app.departDate);
     return this.applications.filter(b => {
       if (b.status !== 'matched' || b.id === app.id) return false;
+      if (this.noCarpool(app) || this.applications.some(x => x.groupId === b.groupId && this.noCarpool(x))) return false; // 不同意併車（G133）
       const d = new Date(b.departDate);
       const diff = Math.abs((d - d0) / 86400000);
       return diff <= 1; // 前後 1 天

@@ -1284,7 +1284,7 @@ function openNoCarDialog(rec, doReturn, onDone) {
 function noCarCard(rec) {
   if (Flow.of(rec) !== 'noCar') return '';
   return `<div class="card"><div class="card-title">無車退回</div>
-    <div class="callout" style="margin-bottom:0;">調度已<b>無車退回</b>此申請（結案，不可再修改或重送）。退回原因：<b>${rec.noCarNote || rec.dispatchNote || '—'}</b>${rec.noCarBy ? `｜${rec.noCarBy}` : ''}${rec.noCarAt ? ` ${fmtTime(rec.noCarAt)}` : ''}</div></div>`;
+    <div class="callout" style="margin-bottom:0;">${/^批次媒合/.test(rec.noCarBy || '') ? '系統媒合<b>無車可派</b>（不同意併車），已無車退回' : '調度已<b>無車退回</b>此申請'}（結案，不可再修改或重送）。退回原因：<b>${rec.noCarNote || rec.dispatchNote || '—'}</b>${rec.noCarBy ? `｜${rec.noCarBy}` : ''}${rec.noCarAt ? ` ${fmtTime(rec.noCarAt)}` : ''}</div></div>`;
 }
 /* ---- 退回修編（單位主管審核退回）：申請端明細卡片與編輯帶值小工具（B／C 共用）---- */
 function returnedCard(rec, btnId) {
@@ -1334,7 +1334,7 @@ function renderBApplyList(p) {
     DB.sites.map(s => `<option value="${s.id}" ${q.site === s.id ? 'selected' : ''}>${s.name}</option>`)).join('');
   const dirOpts = [['', '全部型態'], ['1', '直達'], ['0', '非直達']]
     .map(([v, t]) => `<option value="${v}" ${q.direct === v ? 'selected' : ''}>${t}</option>`).join('');
-  const statusOpts = flowOpts(q.status);
+  const statusOpts = flowOpts(q.status, Flow.STATES.map(x => x[0]).filter(k => k !== 'cancelled'));   // B 無申請人取消
   p.innerHTML = `
     <div class="section-h">院區物品轉運申請（使用者）</div>
     <div class="section-sub">先查詢歷史託運紀錄，點擊任一筆可檢視明細；或按「新增」建立新的院區物品轉運申請單。</div>
@@ -2094,11 +2094,11 @@ RENDER.c_apply = function () {
 /* ---------- 查詢畫面 ---------- */
 function renderCApplyList(p) {
   const q = cApply.query;
-  const oOpts = ['<option value="">全部出發地</option>'].concat(
-    DB.bizOrigins.map(o => `<option ${q.origin === o ? 'selected' : ''}>${o}</option>`)).join('');
-  const dOpts = ['<option value="">全部目的地</option>'].concat(
-    DB.bizDests.map(d => `<option ${q.dest === d ? 'selected' : ''}>${d}</option>`)).join('');
-  const typeOpts = [['', '全部型態'], ['round', '來回單'], ['oneway', '單程單']]
+  const oOpts = ['<option value="">全部起點</option>'].concat(
+    C_PLACES().map(o => `<option ${q.origin === o ? 'selected' : ''}>${o}</option>`)).join('');
+  const dOpts = ['<option value="">全部終點</option>'].concat(
+    C_PLACES().map(d => `<option ${q.dest === d ? 'selected' : ''}>${d}</option>`)).join('');
+  const typeOpts = [['', '全部'], ['round', '否（來回）'], ['oneway', '是（單程）']]
     .map(([v, t]) => `<option value="${v}" ${q.type === v ? 'selected' : ''}>${t}</option>`).join('');
   const statusOpts = flowOpts(q.status);
   p.innerHTML = `
@@ -2114,9 +2114,9 @@ function renderCApplyList(p) {
       </div>
       ${infoGrid('cq-fields', [
         fInput('申請人（模糊）', `<input type="text" id="cq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
-        fInput('任務型態', `<select id="cq-type">${typeOpts}</select>`),
-        fInput('出發地', `<select id="cq-origin">${oOpts}</select>`),
-        fInput('目的地', `<select id="cq-dest">${dOpts}</select>`),
+        fInput('是否單程運輸', `<select id="cq-type">${typeOpts}</select>`),
+        fInput('起點', `<select id="cq-origin">${oOpts}</select>`),
+        fInput('終點', `<select id="cq-dest">${dOpts}</select>`),
         fInput('狀態', `<select id="cq-status">${statusOpts}</select>`),
       ].join(''))}
     </div>
@@ -2157,11 +2157,11 @@ function renderCGrid() {
   $('#cq-count').textContent = `${rows.length} 筆`;
   $('#cq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>去程</th><th>回程</th><th>人</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
+      <th></th><th>單號</th><th>申請人</th><th>單程</th><th>車輛起迄地點</th><th>報到</th><th>結束</th><th>乘客</th><th>狀態</th><th>建立時間</th></tr></thead><tbody>
       ${rows.map(a => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-detail="${a.id}">細節</button></td>
         <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
-        <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin} → ${a.dest}</td>
+        <td>${a.type === 'round' ? '否' : '是'}</td><td>${cRouteStr(a)}</td>
         <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
         <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '<span class="muted">—</span>'}</td>
         <td>${a.pax}</td>
@@ -2174,6 +2174,64 @@ function renderCGrid() {
 }
 
 /* ---------- 明細畫面 ---------- */
+// 申請單欄位（G133）：申請端明細、審核端共用
+const cYN = b => (b ? '是' : '否');
+const cRouteStr = a => (a.route && a.route.length ? a.route : [a.origin, a.dest]).join(' → ');
+const cAtStr = s => (s ? s.replace('T', ' ') : '—');
+function cAppItems(a) {
+  return [
+    fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
+    fItem('申請人', `${a.applicant}（${a.dept || '—'}）`),
+    fItem('申請人分機手機', a.applicantPhone || a.ext || '—'),
+    fItem('申請事由', a.reason || '—'),
+    fItem('計畫代號', a.projectCode || '—'),
+    fItem('車長', a.captain || '—'),
+    fItem('車長分機手機', a.captainPhone || '—'),
+    fItem('車屬據點', a.homeBase || '—'),
+    fItem('是否單程運輸', a.type === 'oneway' ? '是（終點須為交通轉運點）' : '否'),
+    fItem('車輛起迄地點', cRouteStr(a), { full: true }),
+    fItem('車輛報到日期時間', cAtStr(a.reportAt || `${a.departDate}T${a.earliestPickup}`)),
+    fItem('用車結束日期時間', a.type === 'round' ? cAtStr(a.endAt || `${a.returnDate}T${a.earliestReturn}`) : '<span class="muted">單程不適用</span>'),
+    fItem('乘客數', a.passengers != null ? a.passengers : a.pax),
+    fItem('是否同意併車', a.agreeCarpool === false ? '<b>否</b>（單獨派車）' : '是'),
+    fItem('據點接駁', cYN(a.baseShuttle)),
+    fItem('特殊證p', cYN(a.permitP)),
+    fItem('特殊證k', cYN(a.permitK)),
+    fItem('是否跨院區', cYN(a.crossCampus)),
+    fItem('是否進台北市', cYN(a.enterTaipei)),
+    fItem('是否有載運品', cYN(a.hasCargo)),
+  ].concat(a.hasCargo ? [fItem('三聯單表單編號', a.manifestNo || '—'), fItem('護運單號', a.escortNo || '—')] : [])
+   .concat([fItem('備註', a.remark || '—', { full: true })]);
+}
+// 異動紀錄（修改／取消的異動事由）
+function cChangeCard(a) {
+  const log = a.changeLog || [];
+  if (!log.length && a.status !== 'cancelled') return '';
+  return `<div class="card"><div class="card-title">異動紀錄 <span class="g-tag">G133</span></div>
+    ${a.status === 'cancelled' ? `<div class="callout" style="margin-bottom:10px;">此申請已<b>取消</b>（結案）｜${a.cancelledBy || '—'} ${a.cancelledAt ? fmtTime(a.cancelledAt) : ''}</div>` : ''}
+    ${log.length ? `<div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>異動人</th><th>異動事由</th></tr></thead><tbody>
+      ${log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by || '—'}</td><td style="text-align:left;">${l.reason}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}</div>`;
+}
+// 取消申請（G133）：異動事由必填
+function openCCancelDialog(a) {
+  openModal(`取消申請 · ${a.id}`, `
+    <div class="callout" style="margin-bottom:12px;">取消後申請單<b>結案、不可再修改或重送</b>${a.dispatchId ? `；將自派車單 ${a.dispatchId} 移出` : ''}。</div>
+    ${infoGrid('cc-f', fInput('異動事由 <span style="color:#c0392b;">*</span>', `<textarea id="cc-reason" rows="2" placeholder="請說明取消原因"></textarea>`, { stack: true, full: true }))}
+    <div style="text-align:center;margin-top:18px;">
+      <button class="btn btn-danger" id="cc-ok">✕ 取消申請</button>
+      <button class="btn btn-ghost" id="cc-close">返回</button>
+    </div>`);
+  $('#cc-close').onclick = closeModal;
+  $('#cc-ok').onclick = async () => {
+    const reason = $('#cc-reason').value.trim();
+    if (!reason) { toast('取消申請時「異動事由」為必填', 'err'); $('#cc-reason').focus(); return; }
+    if (!(await confirmDialog({ title: '確認取消申請？', text: `${a.id} 將取消（結案）：${reason}` }))) return;
+    const r = ModuleC.cancelApp(a, reason, a.applicant);
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    closeModal(); toast(`${a.id} 已取消`, 'ok'); RENDER.c_apply();
+  };
+}
 function renderCApplyDetail(p, id) {
   const a = ModuleC.applications.find(x => x.id === id);
   if (!a) { cApply.view = 'list'; return RENDER.c_apply(); }
@@ -2183,20 +2241,12 @@ function renderCApplyDetail(p, id) {
     <div class="section-h">差旅共乘申請明細 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${Flow.badge(a)}${signBadge(a)}</span></div>
-      ${infoGrid('cd-basic', [
-        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
-        fItem('申請人', `${a.applicant}（${a.dept}/${a.ext}）`),
-        fItem('任務型態', a.type === 'round' ? '來回單' : '單程單（交通轉運點）'),
-        fItem('路線', `${a.origin} → ${a.dest}`),
-        fItem('去程（出發日期 / 上車時間）', `${a.departDate} ${a.earliestPickup}`),
-        a.type === 'round'
-          ? fItem('回程（回程日期 / 上車時間）', `${a.returnDate} ${a.earliestReturn || '—'}`)
-          : fItem('回程', '<span class="muted">單程單不適用</span>'),
+      ${infoGrid('cd-basic', cAppItems(a).concat([
         fItem('最晚抵達（參考 G55）', `<span class="muted">${ModuleC.latestArrival(a)}</span>`),
-        fItem('人數', a.pax),
         fItem('建立時間', fmtTime(a.createdAt)),
-      ].join(''))}
+      ]).join(''))}
     </div>
+    ${cChangeCard(a)}
     <div class="card">
       <div class="card-title">媒合與行程狀態</div>
       ${infoGrid('cd-match', [
@@ -2208,7 +2258,7 @@ function renderCApplyDetail(p, id) {
       ].join(''))}
       ${action ? `<div class="divider"></div><div><b>乘客操作：</b> ${action}</div>` : ''}
     </div>
-    ${a.status === 'approved' ? `
+    ${a.status === 'approved' && !ModuleC.noCarpool(a) ? `
     <div class="card">
       <div class="card-title">手動併車（找便車）<span class="g-tag">G56</span></div>
       <div class="card-desc">自動媒合未成時，您可自行向「已確定有車」的單搭便車。候選＝出發日期前後 1 天、已派車的單（不篩目的地、不比時間）。聯繫對方後按「完成合併」即成立，免調度室確認。</div>
@@ -2216,7 +2266,14 @@ function renderCApplyDetail(p, id) {
       <div id="cd-candidates"></div>
     </div>` : ''}
     ${returnedCard(a, 'cd-edit')}${noCarCard(a)}
+    ${ModuleC.canCancel(a) ? `<div class="card">
+      <div class="card-title">取消申請 <span class="g-tag">G133</span></div>
+      <div class="card-desc">派車單送審前可取消；取消後結案，不可再修改或重送。已併入派車單者會自派車單移出。</div>
+      <button class="btn btn-danger btn-sm" id="cd-cancel-app">✕ 取消申請</button>
+    </div>` : ''}
     ${backBar('cd-back')}`;
+  const cca = $('#cd-cancel-app');
+  if (cca) cca.onclick = () => openCCancelDialog(a);
   const ced = $('#cd-edit');
   if (ced) ced.onclick = () => { cApply.editId = a.id; cApply.view = 'new'; RENDER.c_apply(); };
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
@@ -2241,42 +2298,86 @@ function renderCApplyDetail(p, id) {
   };
 }
 
-/* ---------- 新增畫面 ---------- */
+/* ---------- 新增畫面（G133 欄位改版）---------- */
+// 車輛起迄地點：下拉選擇後加入，最多 8 點，依序；第一點＝起點、最後一點＝終點（媒合依起訖）
+let caRoute = [];
+const C_PLACES = () => [...new Set(DB.bizOrigins.concat(DB.bizDests))];
+// 是／否單選（radio-pill）
+function cYesNo(name, val) {
+  return `<div class="radio-group">${[['1', '是'], ['0', '否']].map(([v, t]) =>
+    `<label class="radio-pill${(val ? '1' : '0') === v ? ' sel' : ''}"><input type="radio" name="${name}" value="${v}"${(val ? '1' : '0') === v ? ' checked' : ''}>${t}</label>`).join('')}</div>`;
+}
+const cYes = (name, p) => { const r = $(`input[name=${name}]:checked`, p); return !!r && r.value === '1'; };
+function renderCaRoute() {
+  const box = $('#ca-route-list'); if (!box) return;
+  const n = caRoute.length;
+  box.innerHTML = n ? caRoute.map((x, i) => `<span class="badge ${i === 0 || i === n - 1 ? 'b-navy' : 'b-gray'}" style="margin:2px 4px 2px 0;">
+      ${i === 0 ? '起點' : i === n - 1 ? '終點' : '經 ' + i}｜${x}
+      <a href="javascript:void 0" data-rm="${i}" title="移除" style="margin-left:4px;color:inherit;">✕</a></span>${i < n - 1 ? '<span class="muted">→</span> ' : ''}`).join('')
+    : '<span class="muted">尚未加入地點（至少起點、終點兩點）</span>';
+  $$('#ca-route-list [data-rm]').forEach(b => b.onclick = () => { caRoute.splice(+b.dataset.rm, 1); renderCaRoute(); });
+  $('#ca-route-add').disabled = n >= ModuleC.ROUTE_MAX;
+  $('#ca-route-count').textContent = `${n} / ${ModuleC.ROUTE_MAX}`;
+}
 function renderCApplyNew(p) {
   const editing = cApply.editId ? ModuleC.applications.find(x => x.id === cApply.editId && ModuleC.canEdit(x)) : null;
-  const oOpts = DB.bizOrigins.map(o => `<option>${o}</option>`).join('');
-  const dOpts = DB.bizDests.map(d => `<option>${d}</option>`).join('');
+  const me = DB.currentUser;
+  const src = editing || { applicant: `${me.unit}-${me.name}`, dept: me.unit, applicantPhone: me.ext, isOneway: false,
+    route: [], reportAt: '2026-08-27T09:00', endAt: '2026-08-27T16:00', passengers: 2, agreeCarpool: true };
+  caRoute = (src.route || []).slice();
+  const placeOpts = C_PLACES().map(o => `<option>${o}</option>`).join('');
+  // 車屬據點：選項待業務提供，暫用據點主檔
+  const baseOpts = ['<option value="">（請選擇）</option>'].concat(DB.sites.map(s => `<option value="${s.name}"${src.homeBase === s.name ? ' selected' : ''}>${s.name}</option>`)).join('');
+  const v = k => (src[k] == null ? '' : String(src[k]).replace(/"/g, '&quot;'));
   p.innerHTML = `
     <div class="section-h">${editing ? `修改差旅共乘申請 · ${editing.id}` : '新增差旅共乘申請單'}</div>
     ${editing ? editBanner(editing) : ''}
     <div class="card">
-      <div class="card-title">差旅共乘申請 <span class="g-tag">G50/G54</span></div>
+      <div class="card-title">差旅共乘申請 <span class="g-tag">G50/G54/G133</span></div>
       ${infoGrid('ca-fields', [
-        fInput('申請人', `<input type="text" id="ca-applicant" value="業務部-周雅婷">`),
-        fInput('部門', `<input type="text" id="ca-dept" value="業務部">`),
-        fInput('分機', `<input type="text" id="ca-ext" value="2201">`),
-        fInput('任務型態', `
-          <div class="radio-group">
-            <label class="radio-pill sel" id="ca-round"><input type="radio" name="ca-type" value="round" checked>來回單</label>
-            <label class="radio-pill" id="ca-oneway"><input type="radio" name="ca-type" value="oneway">單程單（轉運點）</label>
-          </div>`, { stack: true, full: true }),
-        fInput('出發地', `<select id="ca-origin">${oOpts}</select>`),
-        fInput('目的地', `<select id="ca-dest">${dOpts}</select>`),
+        fInput('申請人', `<input type="text" id="ca-applicant" value="${v('applicant')}" readonly title="由登入者帶入">`),
+        fInput('部門', `<input type="text" id="ca-dept" value="${v('dept')}" readonly title="由登入者帶入">`),
+        fInput('申請人分機手機', `<input type="text" id="ca-phone" value="${v('applicantPhone')}" placeholder="分機或手機">`),
+        fInput('申請事由 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-reason" value="${v('reason')}" placeholder="出差／洽公事由">`),
+        fInput('計畫代號', `<input type="text" id="ca-project" value="${v('projectCode')}">`),
+        fInput('車長', `<input type="text" id="ca-captain" value="${v('captain')}">`),
+        fInput('車長分機手機', `<input type="text" id="ca-captain-phone" value="${v('captainPhone')}" placeholder="分機或手機">`),
+        fInput('車屬據點 <span class="hint" title="選項待業務提供，暫用據點主檔">暫</span>', `<select id="ca-base">${baseOpts}</select>`),
+        fInput('是否單程運輸', cYesNo('ca-oneway', src.isOneway), { stack: true }),
+        fInput('乘客數', `<input type="number" id="ca-pax" min="1" value="${v('passengers')}">`),
+        fInput('車輛起迄地點 <span style="color:#c0392b;">*</span>', `
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <select id="ca-route-pick" style="flex:1;min-width:140px;">${placeOpts}</select>
+            <button class="btn btn-ghost btn-sm" id="ca-route-add" type="button">＋ 加入</button>
+            <span class="muted" id="ca-route-count"></span>
+          </div>
+          <div id="ca-route-list" style="margin-top:6px;"></div>
+          <div class="muted" style="font-size:12px;margin-top:4px;">依序加入，最多 ${ModuleC.ROUTE_MAX} 個地點；第一點為起點、最後一點為終點（媒合依起點與終點）。</div>`, { stack: true, full: true }),
       ].join(''))}
-      <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">去程（起始）</div>
-      ${infoGrid('ca-depart', [
-        fInput('出發日期', `<input type="date" id="ca-date" value="2026-08-27">`),
-        fInput('最早上車時間', `<input type="time" id="ca-pickup" value="09:00">`),
+      <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">用車時間</div>
+      ${infoGrid('ca-time', [
+        fInput('車輛報到日期時間 <span style="color:#c0392b;">*</span>', `<input type="datetime-local" id="ca-report" value="${v('reportAt')}">`),
+        `<div id="ca-end-wrap">${fInput('用車結束日期時間 <span style="color:#c0392b;">*</span>', `<input type="datetime-local" id="ca-end" value="${v('endAt')}">`)}</div>`,
       ].join(''))}
-      <div id="ca-return-wrap">
-        <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">回程（結束）</div>
-        ${infoGrid('ca-return-grid', [
-          fInput('回程日期', `<input type="date" id="ca-rdate" value="2026-08-27">`),
-          fInput('回程上車時間', `<input type="time" id="ca-return" value="16:00">`),
+      <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">用車條件</div>
+      ${infoGrid('ca-flags', [
+        fInput('是否同意併車', cYesNo('ca-carpool', src.agreeCarpool !== false), { stack: true }),
+        fInput('據點接駁', cYesNo('ca-shuttle', src.baseShuttle), { stack: true }),
+        fInput('特殊證p', cYesNo('ca-permitp', src.permitP), { stack: true }),
+        fInput('特殊證k', cYesNo('ca-permitk', src.permitK), { stack: true }),
+        fInput('是否跨院區', cYesNo('ca-cross', src.crossCampus), { stack: true }),
+        fInput('是否進台北市', cYesNo('ca-taipei', src.enterTaipei), { stack: true }),
+        fInput('是否有載運品', cYesNo('ca-cargo', src.hasCargo), { stack: true }),
+      ].join(''))}
+      <div id="ca-cargo-wrap">
+        ${infoGrid('ca-cargo-grid', [
+          fInput('三聯單表單編號 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-manifest" value="${v('manifestNo')}">`),
+          fInput('護運單號 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-escort" value="${v('escortNo')}">`),
         ].join(''))}
       </div>
-      ${infoGrid('ca-pax-grid', fInput('人數', `<input type="number" id="ca-pax" value="2">`))}
-      <div class="callout info">來回單須「出發地、目的地、出發日期、回程日期、去程上車、回程上車」六項完全相同才能媒合（G54）。最晚抵達時間僅供參考，<b>不參與媒合判斷</b>（G55）。</div>
+      ${infoGrid('ca-remark-grid', fInput('備註', `<textarea id="ca-remark" rows="2">${v('remark')}</textarea>`, { stack: true, full: true }))}
+      ${editing ? infoGrid('ca-change-grid', fInput('異動事由 <span style="color:#c0392b;">*</span>', `<textarea id="ca-change" rows="2" placeholder="請說明修改原因"></textarea>`, { stack: true, full: true })) : ''}
+      <div class="callout info">起點、終點、報到與結束日期時間完全相同，且雙方都<b>同意併車</b>才會合併派車（G54）；經過地點不影響媒合。<b>不同意併車</b>：單獨派車，無車可派即直接無車退回。勾選特殊證 p／k 時，只會派有該通行證的車。單程運輸的終點須為交通轉運點。</div>
       <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待二級審）</button>
       <button class="btn btn-ghost" id="ca-draft">💾 暫存（申請中）</button>
       <button class="btn btn-ghost" id="ca-cancel">取消</button>
@@ -2284,49 +2385,49 @@ function renderCApplyNew(p) {
     ${backBar('cn-back')}`;
   const cBack = () => { if (editing) { cApply.view = 'detail'; cApply.detailId = editing.id; } else cApply.view = 'list'; cApply.editId = null; RENDER.c_apply(); };
   $('#cn-back').onclick = cBack;
-  const setType = () => {
-    const round = $('#page-c_apply input[value=round]').checked;
-    $('#ca-round').classList.toggle('sel', round);
-    $('#ca-oneway').classList.toggle('sel', !round);
-    $('#ca-return-wrap').style.display = round ? 'block' : 'none';
+  // radio-pill 選取樣式＋連動顯示
+  const sync = () => {
+    $$('#page-c_apply .radio-pill').forEach(l => l.classList.toggle('sel', $('input', l).checked));
+    $('#ca-end-wrap').style.display = cYes('ca-oneway', p) ? 'none' : '';
+    $('#ca-cargo-wrap').style.display = cYes('ca-cargo', p) ? '' : 'none';
     initMasonry(p);
   };
-  $$('#page-c_apply input[name=ca-type]').forEach(r => r.onchange = setType);
-  // 回程日期不可早於出發日期（來回單多天任務依賴正確 returnDate：保修/佔用/C-3 全程檢核）
-  const syncRDateMin = () => { $('#ca-rdate').min = $('#ca-date').value || ''; };
-  $('#ca-date').onchange = syncRDateMin; syncRDateMin();
-  initMasonry(p);
+  $$('#page-c_apply input[type=radio]').forEach(r => r.addEventListener('change', sync));
+  // 用車結束不可早於報到
+  const syncEndMin = () => { $('#ca-end').min = $('#ca-report').value || ''; };
+  $('#ca-report').onchange = syncEndMin; syncEndMin();
+  $('#ca-route-add').onclick = () => {
+    const x = $('#ca-route-pick').value;
+    if (caRoute.length >= ModuleC.ROUTE_MAX) return toast(`最多 ${ModuleC.ROUTE_MAX} 個地點`, 'err');
+    if (caRoute[caRoute.length - 1] === x) return toast('與上一個地點相同', 'err');
+    caRoute.push(x); renderCaRoute(); initMasonry(p);
+  };
+  renderCaRoute();
+  sync();
   guideApply('C', cApply, p); // 申請引導帶入（若有）
-  if (editing) { // 退回修編：帶入原單內容
-    ['applicant', 'dept', 'ext'].forEach(k => { $('#ca-' + k).value = editing[k] || ''; });
-    const tr = $(`#page-c_apply input[name=ca-type][value=${editing.type}]`); tr.checked = true; tr.onchange();
-    $('#ca-origin').value = editing.origin; $('#ca-dest').value = editing.dest;
-    $('#ca-date').value = editing.departDate; $('#ca-date').onchange();
-    $('#ca-pickup').value = editing.earliestPickup;
-    $('#ca-rdate').value = editing.returnDate || editing.departDate; $('#ca-return').value = editing.earliestReturn || '';
-    $('#ca-pax').value = editing.pax;
+  if (editing) {
     $('#ca-submit').textContent = '▶ 送出（待二級審）';
     if (editing.status !== 'draft') $('#ca-draft').style.display = 'none';
-    initMasonry(p);
   }
   $('#ca-cancel').onclick = cBack;
   const formData = () => {
-    const type = $('#page-c_apply input[name=ca-type]:checked').value;
-    const departDate = $('#ca-date').value;
-    const returnDate = type === 'round' ? $('#ca-rdate').value : departDate;
-    // 輸入驗證：來回單必須有回程日期且不早於出發日期，避免多天任務被誤當單日退化（保修/佔用漏中間天）
-    if (!departDate) { toast('請選擇出發日期', 'err'); return null; }
-    if (type === 'round') {
-      if (!returnDate) { toast('來回單請選擇回程日期', 'err'); return null; }
-      if (returnDate < departDate) { toast('回程日期不可早於出發日期', 'err'); return null; }
-    }
-    return {
-      applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, ext: $('#ca-ext').value,
-      type, origin: $('#ca-origin').value, dest: $('#ca-dest').value,
-      departDate, earliestPickup: $('#ca-pickup').value,
-      returnDate,
-      earliestReturn: $('#ca-return').value, pax: +$('#ca-pax').value,
+    const data = {
+      applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, applicantPhone: $('#ca-phone').value.trim(),
+      reason: $('#ca-reason').value.trim(), projectCode: $('#ca-project').value.trim(),
+      captain: $('#ca-captain').value.trim(), captainPhone: $('#ca-captain-phone').value.trim(), homeBase: $('#ca-base').value,
+      isOneway: cYes('ca-oneway', p), route: caRoute.slice(),
+      reportAt: $('#ca-report').value, endAt: cYes('ca-oneway', p) ? '' : $('#ca-end').value,
+      passengers: +$('#ca-pax').value,
+      agreeCarpool: cYes('ca-carpool', p), baseShuttle: cYes('ca-shuttle', p),
+      permitP: cYes('ca-permitp', p), permitK: cYes('ca-permitk', p),
+      crossCampus: cYes('ca-cross', p), enterTaipei: cYes('ca-taipei', p), hasCargo: cYes('ca-cargo', p),
+      manifestNo: $('#ca-manifest').value.trim(), escortNo: $('#ca-escort').value.trim(),
+      remark: $('#ca-remark').value.trim(),
+      changeReason: editing ? $('#ca-change').value.trim() : '',
     };
+    const err = ModuleC.formError(data, { editing: !!editing });
+    if (err) { toast(err, 'err'); return null; }
+    return data;
   };
   const done = (app, msg) => {
     toast(msg, 'ok');
@@ -2361,7 +2462,7 @@ function loadCDemo() {
     // BZ005：回程日期不同（單天來回）→ 與 BZ001/002 不合併，示範日期須完全相同
     { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '16:00', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
   ];
-  demos.forEach(d => ModuleC.createApp(d));
+  demos.forEach(d => ModuleC.createApp(Object.assign({ reason: '客戶拜訪（範例）' }, d)));
   toast('已載入 5 筆共乘申請（待二級審）', 'ok');
 }
 // 相容：審核端動作呼叫此函式刷新申請端 grid
@@ -2430,7 +2531,7 @@ function renderCApproveGrid() {
       ${rows.map(a => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-cvdetail="${a.id}">細節</button></td>
         <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}（${a.dept}）</td>
-        <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${a.origin}→${a.dest}</td>
+        <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRouteStr(a)}</td>
         <td>${a.departDate.slice(5)} ${a.earliestPickup}</td>
         <td>${a.type === 'round' ? a.returnDate.slice(5) + ' ' + a.earliestReturn : '<span class="muted">—</span>'}</td>
         <td>${a.pax}</td><td>${Flow.badge(a)}${signBadge(a)}</td></tr>`).join('')}
@@ -2445,20 +2546,11 @@ function renderCApproveDetail(p, id) {
     <div class="section-h">差旅共乘申請審核 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${Flow.badge(a)}${signBadge(a)}</span></div>
-      ${infoGrid('cap-basic', [
-        fItem('單號', `<b style="color:var(--navy);">${a.id}</b>`),
-        fItem('申請人', `${a.applicant}（${a.dept}/${a.ext}）`),
-        fItem('任務型態', a.type === 'round' ? '來回單' : '單程單（交通轉運點）'),
-        fItem('路線', `${a.origin} → ${a.dest}`),
-        fItem('去程（出發日期 / 上車時間）', `${a.departDate} ${a.earliestPickup}`),
-        a.type === 'round'
-          ? fItem('回程（回程日期 / 上車時間）', `${a.returnDate} ${a.earliestReturn || '—'}`)
-          : fItem('回程', '<span class="muted">單程單不適用</span>'),
+      ${infoGrid('cap-basic', cAppItems(a).concat([
         fItem('最晚抵達（參考 G55）', `<span class="muted">${ModuleC.latestArrival(a)}</span>`),
-        fItem('人數', a.pax),
         fItem('建立時間', fmtTime(a.createdAt)),
         a.reviewNote ? fItem('審核備註', a.reviewNote) : '',
-      ].join(''))}
+      ]).join(''))}
     </div>
     ${pending ? `
     <div class="card">
@@ -5246,12 +5338,11 @@ function guideApply(unit, state, p) {
     if (d.wantReceiveDate) set('ba-wantdate', d.wantReceiveDate);
     baItems = d.items.map(i => Object.assign({}, i)); renderBaCargo();
   } else if (unit === 'C') {
-    set('ca-applicant', d.applicant); set('ca-dept', d.dept); set('ca-ext', d.ext);
-    pick('ca-type', d.type);
-    set('ca-origin', d.origin); set('ca-dest', d.dest);
-    set('ca-date', d.departDate); $('#ca-date', p).onchange();
-    set('ca-pickup', d.earliestPickup);
-    set('ca-rdate', d.returnDate); set('ca-return', d.earliestReturn);
+    set('ca-applicant', d.applicant); set('ca-dept', d.dept); set('ca-phone', d.ext);
+    pick('ca-oneway', d.type === 'oneway' ? '1' : '0');
+    caRoute = [d.origin, d.dest].filter(Boolean); renderCaRoute();
+    if (d.departDate) { set('ca-report', `${d.departDate}T${d.earliestPickup || '09:00'}`); $('#ca-report', p).onchange(); }
+    if (d.type !== 'oneway' && d.returnDate) set('ca-end', `${d.returnDate}T${d.earliestReturn || '18:00'}`);
     set('ca-pax', d.pax);
   }
   guideBanner(p, pf, state);

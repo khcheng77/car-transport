@@ -1960,7 +1960,7 @@ group('單位主管審核（退回修編與重新送出）', () => {
     const a = C.createApp({ type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: '2026-08-27', earliestPickup: '09:00',
       returnDate: '2026-08-28', earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' });
     C.reject(a, '人數請確認');
-    C.resubmit(a, Object.assign({}, a, { pax: 3 }));
+    C.resubmit(a, Object.assign({}, a, { passengers: 3 }));
     eq(a.status, 'submitted'); eq(a.pax, 3); eq(a.revisions.length, 1);
     C.runBatch('2026-08-26', 't'); eq(a.status, 'submitted', '未核准不進媒合');
   });
@@ -2246,7 +2246,7 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
 group('狀態名稱對齊（G122：申請中～已回登）', () => {
   test('狀態清單只有 10 種，名稱對齊', () => {
     const H = fresh();
-    eq(H.Flow.STATES.map(x => x[1]).join(','), '申請中,待二級審,退回修編,待調度,無車退回,調度中,調度主管審,待出車,已出車,已回登');
+    eq(H.Flow.STATES.map(x => x[1]).join(','), '申請中,待二級審,退回修編,待調度,無車退回,調度中,調度主管審,待出車,已出車,已回登,已取消');
   });
 
   test('四模組皆可暫存為「申請中」，送出後才進入下一關（A 直接排班；B/C/D 待二級審）', () => {
@@ -2595,6 +2595,102 @@ group('副作用修正（G132）', () => {
     eq(C.dispatchPax([out, back]), 3, '去回不同時段取較大者');
     eq(C.dispatchPax([round]), 4, '來回單去程與回程不相加');
     eq(C.dispatchPax([round, out]), 6, '同時 09:00 出發相加');
+  });
+});
+
+group('差旅共乘申請欄位改版（G133）', () => {
+  const D = '2026-10-20';
+  const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', applicantPhone: '0912-345-678', reason: '客戶拜訪',
+    isOneway: false, route: ['台北總部', '新竹分公司', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2 }, o);
+  test('表單欄位存檔，媒合用內部欄位由起訖點／日期時間推導', () => {
+    const C = fresh().ModuleC;
+    const a = C.createApp(form());
+    eq(a.route.join('|'), '台北總部|新竹分公司|台中辦公室'); eq(a.origin, '台北總部', '起點'); eq(a.dest, '台中辦公室', '終點');
+    eq(a.departDate, D); eq(a.earliestPickup, '09:00'); eq(a.returnDate, D); eq(a.earliestReturn, '16:00');
+    eq(a.type, 'round'); eq(a.pax, 2); eq(a.ext, '0912-345-678'); eq(a.agreeCarpool, true, '預設同意併車');
+    const o = C.createApp(form({ isOneway: true, route: ['台北總部', '桃園機場T1'], endAt: `${D}T18:00` }));
+    eq(o.type, 'oneway'); eq(o.endAt, '', '單程不存用車結束'); eq(o.returnDate, D);
+    const legacy = C.createApp({ applicant: 'X', type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '17:00', pax: 3 });
+    eq(legacy.route.join('|'), '台北總部|台中辦公室'); eq(legacy.reportAt, `${D}T08:00`); eq(legacy.passengers, 3);
+    const nc = C.createApp(form({ hasCargo: false, manifestNo: 'M1' }));
+    eq(nc.manifestNo, '', '無載運品不存三聯單號');
+  });
+  test('表單檢核：事由、起訖地點、日期時間、乘客數、載運品單號、異動事由', () => {
+    const C = fresh().ModuleC;
+    eq(C.formError(form()), null, '完整表單通過');
+    ok(/申請事由/.test(C.formError(form({ reason: ' ' }))));
+    ok(/至少/.test(C.formError(form({ route: ['台北總部'] }))));
+    ok(/最多 8/.test(C.formError(form({ route: ['台北總部', '新竹分公司', '台中辦公室', '新竹分公司', '台中辦公室', '新竹分公司', '台中辦公室', '新竹分公司', '高鐵台北站'] }))));
+    ok(/起點與終點不可相同/.test(C.formError(form({ route: ['台北總部', '新竹分公司', '台北總部'] }))));
+    ok(/相鄰/.test(C.formError(form({ route: ['台北總部', '台北總部', '台中辦公室'] }))));
+    ok(/不可早於/.test(C.formError(form({ endAt: `${D}T08:00` }))));
+    eq(C.formError(form({ isOneway: true, endAt: '' })), null, '單程不需結束時間');
+    ok(/乘客數/.test(C.formError(form({ passengers: 0 }))));
+    ok(/三聯單/.test(C.formError(form({ hasCargo: true, escortNo: 'E1' }))));
+    ok(/護運單號/.test(C.formError(form({ hasCargo: true, manifestNo: 'M1' }))));
+    eq(C.formError(form({ hasCargo: true, manifestNo: 'M1', escortNo: 'E1' })), null);
+    ok(/異動事由/.test(C.formError(form(), { editing: true })), '修改須填異動事由');
+    eq(C.formError(form({ changeReason: '改時間' }), { editing: true }), null);
+  });
+  test('不同意併車：條件完全相同也不合併，各自一張派車單', () => {
+    const C = fresh().ModuleC;
+    const a = C.createApp(form()), b = C.createApp(form({ agreeCarpool: false }));
+    C.approve(a); C.approve(b); C.runBatch(D, 't', { days: 0 });
+    eq(a.status, 'matched'); eq(b.status, 'matched');
+    ok(a.dispatchId && b.dispatchId && a.dispatchId !== b.dispatchId, '不同派車單');
+  });
+  test('不同意併車：無車可派即無車退回（告知申請人）；同意併車者仍留待調度', () => {
+    const H = fresh(), C = H.ModuleC;
+    H.DB.vehicles.filter(v => v.pool === 'BIZ').forEach(v => H.DB.maintenance.push({ vehicle: v.id, from: D, to: D, reason: '測試' }));
+    const a = C.createApp(form()), b = C.createApp(form({ agreeCarpool: false }));
+    C.approve(a); C.approve(b); const r = C.runBatch(D, 't', { days: 0 });
+    eq(b.status, 'noCar'); eq(H.Flow.of(b), 'noCar'); ok(/無車可派/.test(b.noCarNote), b.noCarNote);
+    eq(a.status, 'approved', '同意併車者待調度'); eq(r.batch.noCar, 1);
+  });
+  test('不同意併車：單程不配對去回程；不可手動併入他人派車單', () => {
+    const C = fresh().ModuleC;
+    const out = C.createApp(form({ isOneway: true, route: ['台北總部', '桃園機場T1'], agreeCarpool: false }));
+    const back = C.createApp(form({ isOneway: true, route: ['桃園機場T1', '台北總部'], reportAt: `${D}T11:00` }));
+    C.approve(out); C.approve(back); C.runBatch(D, 't', { days: 0 });
+    eq(out.status, 'matched'); ok(out.groupId !== back.groupId, '不與回程配對');
+    const x = C.createApp(form()); C.approve(x); C.runBatch(D, 't', { days: 0 });
+    const y = C.createApp(form({ agreeCarpool: false, reportAt: `${D}T09:00` })); C.approve(y);
+    const res = C.manualMerge(y, C.dispatchOf(x), 't');
+    ok(!res.ok && /不同意併車/.test(res.error), res.error);
+    eq(C.manualCandidates(y).length, 0, '申請端找便車無候選');
+  });
+  test('特殊證 p／k：只派有該通行證的車；派車單換成無證車被擋', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = C.createApp(form({ permitK: true })); C.approve(a); C.runBatch(D, 't', { days: 0 });
+    const v = H.DB.vehicles.find(x => x.id === a.vehicle);
+    ok(v && v.permits.includes('K'), `派到 ${a.vehicle}`);
+    // 台北現地沒有同時有 P、K 的車（V-B03 在台中）→ 同時勾 p、k 者媒合不成
+    const pk = C.createApp(form({ permitP: true, permitK: true })); C.approve(pk); C.runBatch(D, 't', { days: 0 });
+    eq(pk.status, 'approved', '無同時具 P、K 的車 → 待調度');
+    const err = C.dispatchResourceError(C.dispatchOf(a), { vehicleType: '商務轎車', vehicle: 'V-B02', driver1: a.driver });
+    ok(/特殊證/.test(err), err);
+    const c = C.createApp(form({ permitP: true })); C.approve(c);
+    ok(C.findResourceCandidates(c, 540, 600, null).every(x => x.vehicle.permits.includes('P')), '候選皆有 P');
+  });
+  test('取消申請：異動事由必填；已併入未送審派車單者移出；送審後不可取消', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = C.createApp(form()); C.approve(a);
+    ok(!C.cancelApp(a, ' ').ok, '事由必填');
+    ok(C.cancelApp(a, '行程取消', a.applicant).ok);
+    eq(a.status, 'cancelled'); eq(H.Flow.of(a), 'cancelled'); eq(a.changeLog[0].action, '取消'); eq(a.changeReason, '行程取消');
+    ok(!C.canCancel(a), '已取消不可再取消');
+    const b = C.createApp(form()); C.approve(b); C.runBatch(D, 't', { days: 0 });
+    const order = C.dispatchOf(b);
+    ok(C.cancelApp(b, '改搭高鐵').ok); ok(order.cancelled, '派車單空了即取消'); eq(b.dispatchId, null);
+    const c = C.createApp(form()); C.approve(c); C.runBatch(D, 't', { days: 0 });
+    C.submitDispatch(C.dispatchOf(c), 't');
+    const r = C.cancelApp(c, '不去了'); ok(!r.ok && /送審/.test(r.error), r.error);
+  });
+  test('修改送出：異動事由記入異動紀錄', () => {
+    const C = fresh().ModuleC;
+    const a = C.createApp(form()); C.reject(a, '請補計畫代號');
+    C.resubmit(a, form({ projectCode: 'P-001', changeReason: '補計畫代號' }));
+    eq(a.projectCode, 'P-001'); eq(a.changeLog.length, 1); eq(a.changeLog[0].action, '修改'); eq(a.changeReason, '補計畫代號');
   });
 });
 
