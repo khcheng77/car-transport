@@ -15,6 +15,10 @@ const ModuleA = {
 
   /* ---- 現在時間（可於測試注入固定值）與日期工具 ---- */
   now() { return new Date(); },
+  /* 物品運輸單號（G138）：car＋民國年 3 碼＋流水號 5 碼，例 car11500001；申請日期以民國年 115/10/07 表示 */
+  rocYear(d) { return (d || this.now()).getFullYear() - 1911; },
+  rocDate(d) { d = d || this.now(); return `${this.rocYear(d)}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; },
+  nextNo() { return 'car' + this.rocYear() + String(this.seq).padStart(5, '0'); },
   todayStr() { const d = this.now(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; },
   nowMin() { const d = this.now(); return d.getHours() * 60 + d.getMinutes(); },
 
@@ -27,13 +31,17 @@ const ModuleA = {
     const unloadMin = +(data.unloadMin || 0);
     const handleMin = split ? (loadMin + unloadMin) : (+data.handleMin || 0);
     const app = {
-      id: 'LA' + String(this.seq++).padStart(3, '0'),
+      id: this.nextNo(),                // 物品運輸單號（G138）
+      transportStatus: '開單',          // 物品運輸單狀態（G138）
+      applyDate: this.rocDate(),        // 申請日期（民國年，G138）
+      hazardTransport: data.hazardTransport === 'yes' ? 'yes' : 'no',   // 危險品運輸（G138，僅記錄）
+      remark: data.remark || '',        // 備註（G138）
       applicant: data.applicant,
-      applyUnit: data.applyUnit || '',  // 申請單位（登入使用者）
+      applyUnit: data.applyUnit || '',  // 申請單位／委運單位（預帶登入使用者，G138 可修改、必填）
       applyExt: data.applyExt || '',    // 申請人分機（登入使用者）
       branch: data.branch || (DB.branches[0] && DB.branches[0].id), // 車屬院區（收送貨同一院區；獨立路線）
       station: data.station,            // 送貨站（迄）
-      building: data.building,
+      building: data.building || '',   // 送貨建物（G138 表單移除，相容舊資料）
       pickStation: data.pickStation || null, // 收貨站（起）站 id；未帶＝自路線起點載運（相容）
       pickupLoc: data.pickupLoc || '',  // 收貨地點顯示字串
       deliverTime: data.deliverTime || '', // 期望收貨時間 HH:MM（exact 模式僅用於挑班次，非硬性截止 4.1）
@@ -52,6 +60,7 @@ const ModuleA = {
       matchTrace: null,              // 自動媒合過程（供明細顯示）
       createdAt: new Date(),         // 建立時間（查詢/列表用）
     };
+    this.seq++;
     this.applications.push(app);
     return app;
   },

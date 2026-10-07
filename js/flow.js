@@ -29,10 +29,10 @@ const Flow = {
   label(k) { const s = this.STATES.find(x => x[0] === k); return s ? s[1] : k; },
   color(k) { const s = this.STATES.find(x => x[0] === k); return s ? s[2] : 'b-gray'; },
 
-  // 由單號前綴判斷模組：LA＝A、LB＝B、BZ＝C、GU＝D
+  // 由單號前綴判斷模組：car（物品運輸單號，G138；舊 LA）＝A、LB＝B、BZ＝C、GU＝D
   moduleOf(rec) {
     const p = String(rec.id || '').slice(0, 2);
-    return { LA: typeof ModuleA !== 'undefined' && ModuleA, LB: typeof ModuleB !== 'undefined' && ModuleB,
+    return { ca: typeof ModuleA !== 'undefined' && ModuleA, LA: typeof ModuleA !== 'undefined' && ModuleA, LB: typeof ModuleB !== 'undefined' && ModuleB,
       BZ: typeof ModuleC !== 'undefined' && ModuleC, GU: typeof ModuleD !== 'undefined' && ModuleD }[p] || null;
   },
   // "yyyy-mm-dd" + "HH:MM" → Date（本地時間）

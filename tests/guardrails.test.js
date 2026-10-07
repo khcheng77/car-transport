@@ -2814,6 +2814,25 @@ group('差旅共乘申請：報到地點與隨身貨物（G136）', () => {
   });
 });
 
+group('巡迴物品轉運申請表單改版（G138）', () => {
+  const box = () => ({ name: '件', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10, plan: '計畫甲', workNo: 'W-01', pack: '紙箱' });
+  test('物品運輸單號 car＋民國年＋5 碼流水號；單狀態開單；申請日期民國年', () => {
+    const H = fresh(), A = H.ModuleA; A.now = () => new Date(2026, 9, 10, 7, 0);
+    eq(A.nextNo(), 'car11500001'); eq(A.rocDate(), '115/10/10');
+    const a = A.saveDraft({ applicant: 'A', branch: 'D1', station: 'D1-300', pickStation: 'D1-100', items: [box()], recvMode: 'asap', hazardTransport: 'yes', remark: '輕放' });
+    eq(a.id, 'car11500001'); eq(a.transportStatus, '開單'); eq(a.applyDate, '115/10/10');
+    eq(a.hazardTransport, 'yes'); eq(a.remark, '輕放'); eq(a.building, '', '送貨建物移除');
+    eq(A.nextNo(), 'car11500002', '流水號遞增');
+    eq(a.items[0].plan + '|' + a.items[0].workNo + '|' + a.items[0].pack, '計畫甲|W-01|紙箱', '貨物新欄位保留');
+  });
+  test('新單號仍可推導狀態（Flow 依 car 前綴辨識模組）並自動媒合', () => {
+    const H = fresh(), A = H.ModuleA; A.now = () => new Date(2026, 9, 10, 7, 0); H.Flow._now = new Date(2026, 9, 10, 7, 0);
+    const { app, result } = A.submit({ applicant: 'A', branch: 'D1', station: 'D1-300', pickStation: 'D1-100', items: [box()], recvMode: 'asap', serviceDate: '2026-10-10' });
+    ok(result.ok, result.msg); eq(H.Flow.moduleOf(app), A); eq(H.Flow.of(app), 'ready');
+    eq(A.saveDraft({ applicant: 'B', branch: 'D1', station: 'D1-300', items: [box()], recvMode: 'asap' }).hazardTransport, 'no', '危險品運輸預設否');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')
