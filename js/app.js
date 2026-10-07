@@ -2497,10 +2497,12 @@ function renderCApplyNew(p) {
     </div>
     <div style="text-align:center;margin-top:28px;">
       <button class="btn btn-primary" id="ca-submit">▶ 送出</button>
+      ${editing ? '' : '<button class="btn btn-ghost" id="ca-cancel">取消</button>'}
       <button class="btn btn-ghost" id="cn-back">← 回上一頁</button>
     </div>`;
   const cBack = () => { if (editing) { cApply.view = 'detail'; cApply.detailId = editing.id; } else cApply.view = 'list'; cApply.editId = null; RENDER.c_apply(); };
   $('#cn-back').onclick = cBack;
+  if ($('#ca-cancel')) $('#ca-cancel').onclick = cBack;   // 取消：僅從查詢頁按「新增」進入時顯示
   // radio-pill 選取樣式＋連動顯示
   const sync = () => {
     $$('#page-c_apply .radio-pill').forEach(l => l.classList.toggle('sel', $('input', l).checked));
