@@ -22,7 +22,7 @@
 | 待出車 | 調度主管同意（A：排入班次） | `matched` | 簽審通過 | 簽審通過 | 簽審通過 |
 | 已出車 | 系統時間 ≥ 出車時間 | 收貨日期＋班次出發 | 派車日＋收貨時間 | 出發日期＋去程上車 | 用車起時 |
 | 已回登 | 車輛使用實登已登錄里程 | `usage` | `usage` | `usage`（車／司機回歸屬據點） | `usage` |
-| 已取消 | 申請人取消申請（結案，G133） | — | — | `cancelled`（派車單送審前） | — |
+| 已刪除 | 申請人取消申請（結案，G133；G140 由「已取消」改名） | — | — | `cancelled`（派車單送審前） | — |
 
 - 調度主管退回：B／C 整張派車單回「調度中」（未送審）；D 回「待調度」。已出車後派車單不可再異動。
 - 已刪除（G122）：已派車、已交貨（交貨確認）、已駁回，以及 C 待人工協調／已上車／行程完成／逾期作廢，D 整單撤回／已歸還（整段提前歸還）／行程完成。
@@ -236,7 +236,7 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 draft ──▶ submitted ──(approve)──▶ approved（待調度；媒合不成註明原因）──(批次媒合／手動指派，併入派車單)──▶ matched（調度中）
                └──(reject)──▶ rejected（退回修編）     └──(returnApp)──▶ noCar（無車退回）
                                                     └──(不同意併車＋批次無車)──▶ noCar（G133，系統自動）
-draft／submitted／rejected／approved／matched（派車單未送審）──(cancelApp，異動事由必填)──▶ cancelled（已取消，G133）
+draft／submitted／rejected／approved／matched（派車單未送審）──(cancelApp，異動事由必填)──▶ cancelled（已刪除，G133／G140）
 matched ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 待出車 ──(出發時間到)──▶ 已出車 ──(實登)──▶ 已回登
 G122 已刪除：coordinate（待人工協調）、boarded／completed（已上車／行程完成）、void（逾期作廢）
 ```
@@ -294,7 +294,8 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 
 ### 取消申請 `canCancel` / `cancelApp(app, reason, by)`（G133）
 - 可取消：`draft`／`submitted`／`approved`／`rejected`；`matched` 須派車單未送審、無簽審待審或生效、未出車。異動事由必填。
-- `matched` 者先 `_detach`（移出派車單，派車單無單即 `cancelled`）；寫入 `changeLog`（動作「取消」）、`cancelledAt`／`cancelledBy`，`status='cancelled'` → Flow「已取消」。
+- `matched` 者先 `_detach`（移出派車單，派車單無單即 `cancelled`）；寫入 `changeLog`（動作「取消」）、`cancelledAt`／`cancelledBy`，`status='cancelled'` → Flow「已刪除」（G140 改名）。畫面：明細頁卡片是／否單選（預設否，選是才填異動事由）＋「送出」，否＝資料不變。
+- 申請送出（G139）：「是否送審」單選（預設否）＋「送出」：否 → `createApp(data,{draft:true})`／`saveDraft`（`saveDraft` 接受申請中與退回修編，皆存為 `draft`，退回修編者先記 `revisions`）；是 → `createApp`／`resubmit`。
 
 ### 調度室確認與人工覆寫 `overrideAssign`（STEP 4）
 - 調度室檢視批次結果後可**直接手動改派**車輛/司機（含媒合不成的待調度單，建立派車單），**不退回員工重新申請**。
@@ -309,8 +310,10 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 ### 逾期作廢（G57，已由 G122 刪除）
 - 未媒合的單維持「待調度」，由調度手動指派或「無車退回」（`returnApp`，原因必填、結案並通知申請人）。
 
-### 司機任務單
-依 `driver` 分組；列出該駕駛今日每一趟的出發時間、起訖地、車輛、**要接送的乘客**（單位/分機/人數），來回單另標回程資訊。
+### 司機任務單（G141 查詢頁＋細節頁）
+- `cDriverTrips()`：取 `matched` 且 `Signoff.effective` 的申請單，依 `groupId`＋駕駛（駕駛人1／2 各一）組成一趟任務 `{key, driver, apps, head, date, time}`，依日期＋出發時間排序。
+- 查詢頁：日期起訖（預設今天～＋14）、司機篩選；grid＝細節、日期、出發時間、司機名稱。
+- 細節頁：車輛、派車單號、型態、車輛起迄地點、最晚抵達、回程（`returnTerminal`）、乘客合計；接送乘客 grid（單號、申請人、部門、分機手機、人數、報到地點、起迄地點）。
 
 ---
 
@@ -401,7 +404,7 @@ flowchart LR
   c2 -->|批次媒合／手動指派| c3["matched 調度中（派車單）"]
   c2 -->|無車退回／不同意併車且無車可派| cn["noCar 無車退回"]
   c3 -->|送審| c4["調度主管審"]
-  c2 -->|取消申請（異動事由必填）| cx["cancelled 已取消"]
+  c2 -->|取消申請（異動事由必填）| cx["cancelled 已刪除"]
   c3 -->|取消申請（派車單未送審）| cx
   c4 -->|同意| c5["待出車 → 已出車 → 已回登（車/司機回歸屬據點）"]
   c4 -->|退回| c3
