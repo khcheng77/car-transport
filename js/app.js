@@ -2486,11 +2486,19 @@ function renderCApplyNew(p) {
       ${infoGrid('ca-remark-grid', fInput('備註', `<textarea id="ca-remark" rows="2">${v('remark')}</textarea>`, { stack: true, full: true }))}
       ${editing ? infoGrid('ca-change-grid', fInput('異動事由 <span style="color:#c0392b;">*</span>', `<textarea id="ca-change" rows="2" placeholder="請說明修改原因"></textarea>`, { stack: true, full: true })) : ''}
       <div class="callout info">起點、終點、報到與結束日期時間完全相同，且雙方都<b>同意併車</b>才會合併派車（G54）；經過地點不影響媒合。<b>不同意併車</b>：單獨派車，無車可派即直接無車退回。勾選特殊證 p／k 時，只會派有該通行證的車。單程運輸的終點須為交通轉運點。</div>
-      <button class="btn btn-primary" id="ca-submit">▶ 送出申請（待二級審）</button>
-      <button class="btn btn-ghost" id="ca-draft">💾 暫存（申請中）</button>
-      <button class="btn btn-ghost" id="ca-cancel">取消</button>
     </div>
-    ${backBar('cn-back')}`;
+    <div class="card">
+      <div class="card-title">是否送審 <span class="g-tag">G139</span></div>
+      <div class="radio-group" id="ca-send-wrap">
+        <label class="radio-pill"><input type="radio" name="ca-send" value="1">是</label>
+        <label class="radio-pill sel"><input type="radio" name="ca-send" value="0" checked>否</label>
+      </div>
+      <div class="muted" style="margin-top:8px;">否＝儲存為「申請中」（之後可再修改）；是＝儲存並送出，狀態改為「待二級審」（單位主管審核）。</div>
+    </div>
+    <div style="text-align:center;margin-top:28px;">
+      <button class="btn btn-primary" id="ca-submit">▶ 送出</button>
+      <button class="btn btn-ghost" id="cn-back">← 回上一頁</button>
+    </div>`;
   const cBack = () => { if (editing) { cApply.view = 'detail'; cApply.detailId = editing.id; } else cApply.view = 'list'; cApply.editId = null; RENDER.c_apply(); };
   $('#cn-back').onclick = cBack;
   // radio-pill 選取樣式＋連動顯示
@@ -2511,10 +2519,7 @@ function renderCApplyNew(p) {
   sync();
   guideApply('C', cApply, p); // 申請引導帶入（若有）
   if (editing) {
-    $('#ca-submit').textContent = '▶ 送出（待二級審）';
-    if (editing.status !== 'draft') $('#ca-draft').style.display = 'none';
   }
-  $('#ca-cancel').onclick = cBack;
   const formData = () => {
     if (caRouteEdit) { toast('車輛起迄地點有編輯中的列，請先儲存或取消', 'err'); return null; }
     const data = {
@@ -2541,20 +2546,23 @@ function renderCApplyNew(p) {
     cApply.resultIds = null; cApply.editId = null; cApply.view = 'detail'; cApply.detailId = app.id;
     RENDER.c_apply();
   };
-  $('#ca-draft').onclick = async () => {
-    const data = formData(); if (!data) return;
-    if (!(await confirmDialog({ title: '確認暫存？', text: '將儲存為「申請中」，尚未送出；之後可於明細頁編輯並送出。' }))) return;
-    const app = editing ? ModuleC.saveDraft(editing, data) : ModuleC.createApp(data, { draft: true });
-    if (!editing) guideDrafted(cApply, app.id);
-    done(app, `${app.id} 已暫存（申請中）`);
-  };
+  // 送出（G139）：依「是否送審」— 否＝儲存為申請中；是＝儲存並改為待二級審；皆先跳確認
   $('#ca-submit').onclick = async () => {
     const data = formData(); if (!data) return;
-    const ok = await confirmDialog({ title: '確認送出差旅共乘申請？', text: '送出後進入「待二級審」（單位主管審核），通過後由調度批次媒合產生派車單。' });
+    const send = cYes('ca-send', p);
+    const ok = await confirmDialog(send
+      ? { title: '確認送出並送審？', text: '是否送審＝<b>是</b>：儲存後狀態改為「待二級審」（單位主管審核），通過後由調度批次媒合產生派車單。' }
+      : { title: '確認送出（不送審）？', text: '是否送審＝<b>否</b>：儲存為「申請中」，尚未送審；之後可於明細頁編輯再送審。' });
     if (!ok) return;
-    const app = editing ? ModuleC.resubmit(editing, data) : ModuleC.createApp(data);
-    guideSubmitted(editing ? null : cApply, app.id);
-    done(app, `${app.id} 已送出，待二級審`);
+    if (send) {
+      const app = editing ? ModuleC.resubmit(editing, data) : ModuleC.createApp(data);
+      guideSubmitted(editing ? null : cApply, app.id);
+      done(app, `${app.id} 已送審，待二級審`);
+    } else {
+      const app = editing ? ModuleC.saveDraft(editing, data) : ModuleC.createApp(data, { draft: true });
+      if (!editing) guideDrafted(cApply, app.id);
+      done(app, `${app.id} 已儲存（申請中）`);
+    }
   };
 }
 function loadCDemo() {

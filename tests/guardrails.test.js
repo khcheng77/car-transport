@@ -2833,6 +2833,26 @@ group('巡迴物品轉運申請表單改版（G138）', () => {
   });
 });
 
+group('差旅共乘申請：是否送審（G139）', () => {
+  const D = '2026-10-20';
+  const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', reason: '客戶拜訪', isOneway: false,
+    route: ['台北總部', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2, reportPlace: '大門' }, o);
+  test('否＝申請中、是＝待二級審；申請中可再存或送審', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = C.createApp(form(), { draft: true }); eq(H.Flow.of(a), 'draft');
+    C.saveDraft(a, form({ passengers: 3, changeReason: '改人數' })); eq(a.status, 'draft'); eq(a.pax, 3);
+    C.resubmit(a, form({ changeReason: '送審' })); eq(H.Flow.of(a), 'review');
+  });
+  test('退回修編修改後選否 → 回到申請中（保留退回紀錄）', () => {
+    const H = fresh(), C = H.ModuleC;
+    const a = C.createApp(form()); C.reject(a, '請補計畫代號');
+    C.saveDraft(a, form({ projectCode: 'P-1', changeReason: '補計畫代號' }));
+    eq(a.status, 'draft'); eq(a.projectCode, 'P-1'); eq(a.revisions.length, 1);
+    let err = ''; C.approve(C.createApp(form())); const b = C.applications[1];
+    try { C.saveDraft(b, form()); } catch (e) { err = e.message; } ok(err, '待調度不可改');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

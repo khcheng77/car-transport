@@ -29,9 +29,11 @@ const ModuleC = {
     return app;
   },
   // 暫存（申請中）修改
+  // G139：是否送審＝否 → 儲存為「申請中」；退回修編的單修改後選否也回到申請中
   saveDraft(app, data) {
-    if (app.status !== 'draft') throw new Error('僅「申請中」的申請可暫存修改');
-    Object.assign(app, this._fields(data));
+    if (!this.canEdit(app)) throw new Error('僅「申請中」或「退回修編」的申請可修改');
+    if (app.status === 'rejected') (app.revisions = app.revisions || []).push({ at: new Date(), returnNote: app.reviewNote || '' });
+    Object.assign(app, this._fields(data), { status: 'draft' });
     this._change(app, '修改', data.changeReason, data.applicant);
     return app;
   },
