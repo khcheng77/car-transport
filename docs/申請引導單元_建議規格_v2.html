@@ -186,7 +186,7 @@
     <div class="eyebrow">車輛派遣系統整合案 · 共用軟體單元 · 建議規格</div>
     <h1>申請引導單元</h1>
     <div class="meta">
-      <span>版本 <b>v2.10</b></span>
+      <span>版本 <b>v2.11</b></span>
       <span>日期 <b>2026-10-01</b></span>
       <span>狀態 <b>已實作於原型，待業務單位確認</b></span>
       <span>所屬專案 <b>khcheng77/car-transport</b></span>
@@ -337,7 +337,8 @@
               <ul>
                 <li><span class="node"><span class="cond">寄件據點、收件據點都已選</span><span class="card-n"><small>K3</small>貨物清單</span></span>
                   <ul>
-                    <li><span class="node"><span class="cond">兩據點相同</span><span class="to">A 巡迴物品轉運申請</span></span></li>
+                    <li><span class="node"><span class="cond">兩據點相同、危險品運輸＝否，且貨物合計體積與重量皆小於收貨日巡迴車上限</span><span class="to">A 巡迴物品轉運申請</span></span></li>
+                    <li><span class="node"><span class="cond">兩據點相同，危險品運輸＝是，或貨物超過收貨日巡迴車上限</span><span class="to">B 院區物品轉運申請</span></span></li>
                     <li><span class="node"><span class="cond">兩據點不同</span><span class="to">B 院區物品轉運申請</span></span></li>
                   </ul>
                 </li>
@@ -347,8 +348,8 @@
               <ul>
                 <li><span class="node"><span class="cond">起訖日期有效（不論天數）</span><span class="card-n"><small>K6</small>行程</span></span>
                   <ul>
-                    <li><span class="node"><span class="cond">出發地、目的地都在共乘清單，且無隨行物品</span><span class="to">C 差旅共乘申請</span></span></li>
-                    <li><span class="node"><span class="cond">選了「其他地點」，或有隨行物品</span><span class="card-n"><small>K3</small>貨物清單（有物品時）</span><span class="to">D 一般用車</span></span></li>
+                    <li><span class="node"><span class="cond">出發地、目的地都在共乘清單，且無隨行物品或隨行物品屬於隨身物品</span><span class="to">C 差旅共乘申請</span></span></li>
+                    <li><span class="node"><span class="cond">選了「其他地點」，或隨行物品不屬於隨身物品</span><span class="card-n"><small>K3</small>貨物清單（不屬於隨身物品時）</span><span class="to">D 一般用車</span></span></li>
                   </ul>
                 </li>
               </ul>
@@ -365,17 +366,17 @@
         <thead><tr><th>卡片</th><th>出現條件</th><th>用途</th></tr></thead>
         <tbody>
           <tr><td class="nw"><code>K1</code> 需求</td><td>永遠顯示</td><td>申請人資料、運送內容</td></tr>
-          <tr><td class="nw"><code>K2</code> 物品寄送</td><td>運送內容＝只有物品</td><td>寄件／收件據點決定 A 或 B；收貨日期時間</td></tr>
-          <tr><td class="nw"><code>K3</code> 貨物清單</td><td>（運送內容＝只有物品，且 K2 兩據點已選）或（K6 隨行物品＝有）</td><td>共用貨物編輯器，含「是否為危險品」</td></tr>
+          <tr><td class="nw"><code>K2</code> 物品寄送</td><td>運送內容＝只有物品</td><td>寄件／收件據點、危險品運輸與貨物是否超過收貨日巡迴車上限決定 A 或 B；收貨日期時間</td></tr>
+          <tr><td class="nw"><code>K3</code> 貨物清單</td><td>（運送內容＝只有物品，且 K2 兩據點已選）或（K6 隨行物品＝有，且屬於隨身物品＝否）</td><td>共用貨物編輯器，含「是否為危險品」</td></tr>
           <tr><td class="nw"><code>K4</code> 用車期間</td><td>運送內容＝有人搭車</td><td>起訖日期；顯示天數（僅供參考，不影響判定）</td></tr>
           <tr class="retired"><td class="nw"><code>K5</code> 借用資料</td><td>（原：期間 ≥ 30 天）</td><td><span class="badge b-gone">v2 移除</span> 例行用車改為一般用車類別</td></tr>
-          <tr><td class="nw"><code>K6</code> 行程</td><td>K4 起訖日期已填且迄日不早於起日</td><td>地點與隨行物品決定 C 或 D；時間、人數</td></tr>
+          <tr><td class="nw"><code>K6</code> 行程</td><td>K4 起訖日期已填且迄日不早於起日</td><td>地點、隨行物品與是否屬於隨身物品決定 C 或 D；時間、人數</td></tr>
           <tr><td class="nw"><code>K7</code> 判定結果</td><td>永遠顯示</td><td>判定結果、理由、將帶入／仍缺少、「前往並帶入」</td></tr>
         </tbody>
       </table>
     </div>
     <div class="callout">
-      <p><b class="k">卡片內的欄位也會依資料出現：</b>K6 行程中，「來回／單程」只在兩地都在共乘清單且無隨行物品時出現；選「單程」時回程時間收起；「其他地點說明」只在選了「其他地點」時出現；「沒有司機時可以自己開車嗎」只在判定為一般用車時出現。卡片編號保留 K5 空號，避免與 v0.2 文件對照時混淆。</p>
+      <p><b class="k">卡片內的欄位也會依資料出現：</b>K2 物品寄送的「危險品運輸」一律顯示（寄件與收件同據點時必選）；K6 行程中，「屬於隨身物品」只在隨行物品＝有時出現；「來回／單程」只在兩地都在共乘清單且無隨行物品或只有隨身物品時出現；選「單程」時回程時間收起；「其他地點說明」只在選了「其他地點」時出現；「沒有司機時可以自己開車嗎」只在判定為一般用車時出現。卡片編號保留 K5 空號，避免與 v0.2 文件對照時混淆。</p>
     </div>
   </section>
 
@@ -386,19 +387,27 @@
       <table>
         <thead><tr><th>規則</th><th>條件（欄位值）</th><th>導向</th><th>判定結果卡片的理由文字</th></tr></thead>
         <tbody>
-          <tr><td><code>R1</code></td><td>運送內容＝只有物品，且寄件據點＝收件據點</td><td><span class="badge b-unit">A 巡迴物品轉運申請</span></td><td>寄件與收件在同一個據點，由院區內固定班次巡迴收送，送出即自動排入最近班次。</td></tr>
           <tr><td><code>R2</code></td><td>運送內容＝只有物品，且寄件據點≠收件據點</td><td><span class="badge b-unit">B 院區物品轉運申請</span></td><td>寄件與收件在不同據點，由院區物品轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。</td></tr>
+          <tr><td><code>R6</code></td><td>運送內容＝只有物品，寄件據點＝收件據點，且危險品運輸＝是 <span class="badge b-new">v2.11</span></td><td><span class="badge b-unit">B 院區物品轉運申請</span></td><td>危險品運輸，不走院區內巡迴班次，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。</td></tr>
+          <tr><td><code>R7</code></td><td>運送內容＝只有物品，寄件據點＝收件據點，危險品運輸＝否，且貨物清單合計體積或合計重量<b>未小於</b>收貨日巡迴車上限（含任一件單件超過） <span class="badge b-new">v2.11</span></td><td><span class="badge b-unit">B 院區物品轉運申請</span></td><td>貨物合計 ○L／○kg 未小於收貨日巡迴車上限（或「某物品」單件超過上限），改由院區物品轉運派車，需經二級審後由調度派車。</td></tr>
+          <tr><td><code>R1</code></td><td>運送內容＝只有物品，寄件據點＝收件據點，危險品運輸＝否，且貨物清單合計體積與合計重量<b>皆小於</b>收貨日巡迴車上限 <span class="badge b-new">v2.11 加條件</span></td><td><span class="badge b-unit">A 巡迴物品轉運申請</span></td><td>寄件與收件在同一個據點、非危險品，貨物合計小於收貨日巡迴車上限，由院區內固定班次巡迴收送，送出即自動排入最近班次。</td></tr>
           <tr class="retired"><td><code>R3</code></td><td>（原：有人搭車，且期間 ≥ 30 天 → 例行用車）</td><td><span class="badge b-gone">v2 移除</span></td><td>例行用車併入一般用車，時長不分類別。</td></tr>
-          <tr><td><code>R4</code></td><td>運送內容＝有人搭車，出發地∈共乘出發地清單，目的地∈共乘目的地清單，且隨行物品＝無</td><td><span class="badge b-unit">C 差旅共乘申請</span></td><td>往返共乘清單內的地點且未攜帶物品，由系統自動併車共乘。</td></tr>
-          <tr><td><code>R5</code></td><td>運送內容＝有人搭車，且（出發地或目的地＝其他地點，或隨行物品＝有）</td><td><span class="badge b-unit">D 一般用車</span></td><td>地點不在共乘清單或需攜帶物品，由調度人工確認資源後派車，可自駕。</td></tr>
+          <tr><td><code>R4</code></td><td>運送內容＝有人搭車，出發地∈共乘出發地清單，目的地∈共乘目的地清單，且（隨行物品＝沒有，或隨行物品＝有且屬於隨身物品＝是） <span class="badge b-new">v2.11 加條件</span></td><td><span class="badge b-unit">C 差旅共乘申請</span></td><td>往返共乘清單內的地點且未攜帶物品（或只有隨身物品），由系統自動併車共乘。</td></tr>
+          <tr><td><code>R5</code></td><td>運送內容＝有人搭車，且（出發地或目的地＝其他地點，或隨行物品＝有且屬於隨身物品＝否）</td><td><span class="badge b-unit">D 一般用車</span></td><td>地點不在共乘清單或隨行物品不屬於隨身物品，由調度人工確認資源後派車，可自駕。</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="callout">
+      <p><b class="k">未判定的情況（v2.11）：</b>寄件與收件同據點但未選危險品運輸、地點都在共乘清單且隨行物品＝有但未選是否屬於隨身物品時，判定結果卡片提示先選擇，不導向任何申請。</p>
+    </div>
+    <div class="callout">
+      <p><b class="k">收貨日巡迴車上限怎麼算（R1／R7，v2.11）：</b>巡迴車＝寄件據點在希望收貨日期當天各班次使用的車輛（含調度對該日車次改派的車輛），任一台放得下即可。貨物合計體積＝Σ（長×寬×高×件數），以公升計、不含浪費係數；合計重量＝Σ（單件重×件數）。兩者都要<b>小於</b>該車容量與載重才導向 A，等於上限也導向 B。單件超過上限時合計必然超過，理由文字會指出是哪一件物品。判定結果卡片列出合計與上限數字；貨物清單隨時增減，判定即時更新。</p>
     </div>
     <div class="callout">
       <p><b class="k">例行用車怎麼走：</b>總經理、部長秘書的用車需求同樣經 R4／R5 判定；導向一般用車後，在一般用車新增畫面把「用車類別」改成「例行用車」即可（該選項只有這兩種角色看得到）。引導本身不設定類別，帶入時一律為「一般用車」。</p>
     </div>
     <div class="callout warn">
-      <p><b class="k">需要業務單位確認：</b>R4／R5 以「地點是否在共乘清單、是否有隨行物品」劃分 C 與 D，見第 15 節待決事項 1。長天數（例如數個月）且兩地都在共乘清單、無隨行物品時，依規則仍導向 C，見待決事項 2。</p>
+      <p><b class="k">需要業務單位確認：</b>R4／R5 以「地點是否在共乘清單、隨行物品是否屬於隨身物品」劃分 C 與 D（v2.11 已定案，見第 15 節事項 1）。長天數（例如數個月）且兩地都在共乘清單、無隨行物品時，依規則仍導向 C，見待決事項 2。</p>
     </div>
   </section>
 
@@ -410,18 +419,20 @@
         <tbody>
           <tr><td class="nw" rowspan="2">K1 需求</td><td>申請人／部門／分機</td><td>文字（預帶登入者）</td><td>是</td><td>可修改</td></tr>
           <tr><td>運送內容</td><td>單選膠囊</td><td>是</td><td>「只寄送物品（無人隨行）」／「有人要搭車（可附帶物品）」</td></tr>
-          <tr><td class="nw" rowspan="3">K2 物品寄送</td><td>寄件據點、收件據點</td><td>下拉（屏東～台北 10 據點）</td><td>是</td><td>兩者相同→A；不同→B</td></tr>
+          <tr><td class="nw" rowspan="4">K2 物品寄送</td><td>寄件據點、收件據點</td><td>下拉（屏東～台北 10 據點）</td><td>是</td><td>不同→B；相同時再看危險品運輸與巡迴車上限</td></tr>
           <tr><td>希望收貨日期</td><td>日期</td><td>是</td><td>不可早於今天；帶入 A 與 B（院區物品轉運申請自 2026-10-03 起有希望收貨日期欄位，對應派車日）</td></tr>
           <tr><td>希望收貨時間</td><td>時間</td><td>否</td><td>留空＝越快越好</td></tr>
+          <tr><td>危險品運輸 <span class="badge b-new">v2.11</span></td><td>單選膠囊（是／否）</td><td>同據點時是</td><td>是→B；否→依收貨日巡迴車上限判定 A 或 B。貨物清單有標為危險品的物品卻選「否」→列為缺漏。不帶入目標功能</td></tr>
           <tr><td class="nw">K3 貨物清單</td><td>品名、長寬高、品類、件數、單件重、是否危險品</td><td>共用貨物編輯器</td><td>至少 1 項</td><td>沿用 <code>renderCargoGrid</code>／<code>openCargoEditor</code></td></tr>
           <tr><td class="nw">K4 用車期間</td><td>起日、迄日</td><td>日期</td><td>是</td><td>迄日不得早於起日；顯示天數</td></tr>
-          <tr><td class="nw" rowspan="7">K6 行程</td><td>出發地</td><td>下拉（共乘出發地＋「其他地點」）</td><td>是</td><td>如：台北總部、台中辦公室</td></tr>
+          <tr><td class="nw" rowspan="8">K6 行程</td><td>出發地</td><td>下拉（共乘出發地＋「其他地點」）</td><td>是</td><td>如：台北總部、台中辦公室</td></tr>
           <tr><td>目的地</td><td>下拉（共乘目的地＋「其他地點／多點」）</td><td>是</td><td>如：桃園機場T1、高鐵台北站</td></tr>
           <tr><td>其他地點說明</td><td>文字</td><td>選「其他」時必填</td><td>選「其他」時才出現；帶入一般用車的「行程說明」</td></tr>
           <tr><td>來回／單程</td><td>單選膠囊</td><td>C 時必填</td><td>兩地都在清單且無物品時出現；單程限目的地為交通轉運點</td></tr>
           <tr><td>出發時間、回程上車／結束時間</td><td>時間</td><td>是</td><td>搭配 K4 起訖日期；單程時不需回程時間</td></tr>
           <tr><td>人數</td><td>數字</td><td>是</td><td>至少 1 人</td></tr>
-          <tr><td>隨行物品</td><td>單選膠囊（沒有／有）</td><td>是</td><td>「有」→出現 K3、判定為 D；D 時另出現「沒有司機時可否自己開車」（必填）</td></tr>
+          <tr><td>隨行物品</td><td>單選膠囊（沒有／有）</td><td>是</td><td>「有」→出現「屬於隨身物品」；D 時另出現「沒有司機時可否自己開車」（必填）</td></tr>
+          <tr><td>屬於隨身物品 <span class="badge b-new">v2.11</span></td><td>單選膠囊（是／否）</td><td>隨行物品＝有時是</td><td>是→仍可走 C（不需貨物清單）；否→出現 K3（必填）、判定為 D，貨物清單帶入一般用車</td></tr>
         </tbody>
       </table>
     </div>
@@ -438,7 +449,7 @@
           <tr><td>收件據點</td><td>—（同院區）</td><td><code>destSite</code></td><td>—</td><td>—</td></tr>
           <tr><td>希望收貨日期</td><td><code>serviceDate</code></td><td><code>wantReceiveDate</code></td><td>—</td><td>—</td></tr>
           <tr><td>希望收貨時間</td><td><code>deliverTime</code>＋<code>recvMode</code>（今天且留空＝越快越好）</td><td><code>wantReceiveTime</code></td><td>—</td><td>—</td></tr>
-          <tr><td>貨物清單</td><td><code>items</code></td><td><code>items</code></td><td>—</td><td><code>items</code>（含 <code>hazardous</code>）</td></tr>
+          <tr><td>貨物清單</td><td><code>items</code></td><td><code>items</code></td><td>—</td><td><code>items</code>（含 <code>hazardous</code>；僅隨行物品不屬於隨身物品時帶入）</td></tr>
           <tr><td>用車起日／迄日</td><td>—</td><td>—</td><td><code>reportAt</code> 日期、<code>endAt</code> 日期</td><td><code>startDate</code> <code>endDate</code></td></tr>
           <tr><td>出發時間</td><td>—</td><td>—</td><td><code>reportAt</code> 時間（車輛報到日期時間）</td><td><code>startTime</code></td></tr>
           <tr><td>回程／結束時間</td><td>—</td><td>—</td><td><code>endAt</code> 時間（用車結束日期時間；單程不帶）</td><td><code>endTime</code>（用車結束）</td></tr>
@@ -544,6 +555,7 @@
           <div class="fld"><span class="l">結束時間</span><span class="v">17:00</span></div>
           <div class="fld"><span class="l">人數</span><span class="v">3</span></div>
           <div class="fld full"><span class="l">隨行物品</span><span class="pills"><span class="pill">沒有</span><span class="pill sel">有</span></span></div>
+          <div class="fld full"><span class="l">屬於隨身物品</span><span class="pills"><span class="pill">是</span><span class="pill sel">否</span></span></div>
           <div class="fld full"><span class="l">沒有司機時可否自己開車</span><span class="pills"><span class="pill sel">可以</span><span class="pill">不行</span></span></div>
         </div>
       </div>
@@ -578,7 +590,12 @@
           <tr><td>長期用車（數週～數個月）</td><td>不再另走例行用車；依 R4／R5 判定。導向一般用車時，一般用車本身支援數小時～數個月。</td></tr>
           <tr><td>總經理／部長秘書要申請例行用車</td><td>照常引導；導向一般用車後，在一般用車畫面把「用車類別」改為「例行用車」（只有這兩種角色看得到此選項）。</td></tr>
           <tr><td>需要管制區通行證、會進入台北市、要加班</td><td>引導不收集；導向一般用車後在其新增畫面勾選。通行證會影響調度可選的車輛，不影響判定。</td></tr>
-          <tr><td>只有物品，但含危險品</td><td>仍導向 A／B；判定結果與目標畫面提示「目前沒有危險品欄位，請於備註說明並聯絡調度」。<span class="badge b-pend">待確認</span></td></tr>
+          <tr><td>只有物品、同據點、危險品運輸＝是</td><td>導向 B（R6）；判定結果與目標畫面提示「目前沒有危險品欄位，請於備註說明並聯絡調度」。<span class="badge b-new">v2.11 定案</span></td></tr>
+          <tr><td>只有物品、不同據點、含危險品</td><td>照舊導向 B（R2）並提示同上；危險品運輸不影響判定。</td></tr>
+          <tr><td>貨物清單有危險品，危險品運輸卻選「否」</td><td>列為缺漏「危險品運輸（貨物清單含危險品，請選「是」）」，不可前往。</td></tr>
+          <tr><td>同據點貨物剛好等於巡迴車上限</td><td>非「小於」→ 導向 B（R7）。</td></tr>
+          <tr><td>改了希望收貨日期</td><td>巡迴車依新日期重新取（該日車次可能被調度改派較小的車），判定即時更新。</td></tr>
+          <tr><td>有人搭車，隨行物品只有隨身物品</td><td>屬於隨身物品選「是」→ 照 R4 走 C；不需貨物清單。地點不在共乘清單時仍走 D，也不帶貨物清單。</td></tr>
           <tr><td>有人搭車且要跨據點（北↔南）</td><td>於 K6 選「其他地點」並說明，導向 D（一般用車沒有地點限制）。</td></tr>
           <tr><td>兩地都在共乘清單，但要自己開車</td><td>依 R4 仍判定為 C（差旅共乘申請由系統派車）；若必須自駕，改選「其他地點」或聯絡調度。<span class="badge b-pend">待確認</span></td></tr>
           <tr><td>單程且目的地不是交通轉運點</td><td>K6 的「單程」選項只在目的地為轉運點時可選，否則自動退回「來回」。</td></tr>
@@ -594,13 +611,13 @@
   <section id="accept">
     <h2>14. 驗收條件</h2>
     <ul>
-      <li><strong>判定測試：</strong>R1、R2、R4、R5 每條規則，以欄位值輸入 <code>Guide.route(表單值)</code> 皆得到正確功能；判定功能不含例行用車；長天數（例如 92 天）依地點與物品判定為 C 或 D。</li>
+      <li><strong>判定測試：</strong>R1、R2、R4、R5、R6、R7 每條規則（含危險品運輸、巡迴車上限的合計與單件、等於上限、依收貨日改派車輛；隨行物品屬於隨身物品是／否），以欄位值輸入 <code>Guide.route(表單值)</code> 皆得到正確功能；判定功能不含例行用車；長天數（例如 92 天）依地點與物品判定為 C 或 D。</li>
       <li><strong>卡片測試：</strong>卡片顯示與否完全符合第 6.2 節條件表（<code>Guide.visibleCards(表單值)</code>），不論天數都不出現 K5。</li>
       <li><strong>帶入測試：</strong>C、D 的帶入資料能直接通過該功能驗證（含多天一般用車）；A、B 的據點、日期時間、貨物正確出現在新增畫面。</li>
       <li><strong>只帶入可見卡片：</strong>先填 K6 再把運送內容改為「只有物品」，K6 的資料不得被帶入 A／B。</li>
       <li><strong>引導紀錄：</strong>前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判；目標功能送出後回填單號；已送出的紀錄不可再修改，重新帶入另建新紀錄。</li>
       <li><strong>只用一次、可返回、不送單：</strong>跳轉後從清單按「＋ 新增」不再出現帶入資料；未在目標功能送出時，系統不新增任何申請單。</li>
-      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 201 項）。</li>
+      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 212 項）。</li>
     </ul>
   </section>
 
@@ -608,7 +625,7 @@
     <h2>15. 待業務單位決定事項</h2>
     <div class="qa">
       <div class="q2">1. 差旅共乘申請（C）與一般用車（D）以欄位劃分是否可行？</div>
-      <div class="a2">出發地與目的地都在共乘清單內、且沒有隨行物品 → C；選了「其他地點」或有隨行物品 → D。</div>
+      <div class="a2"><span class="badge b-new">v2.11 定案</span> 出發地與目的地都在共乘清單內，且沒有隨行物品或隨行物品屬於隨身物品 → C；選了「其他地點」，或隨行物品不屬於隨身物品 → D。</div>
       <div class="why">差旅共乘申請靠系統自動併車，地點必須在清單內、不處理貨物；一般用車由調度人工派車，可自駕、可帶貨、地點不限。</div>
     </div>
     <div class="qa">
@@ -628,7 +645,7 @@
     </div>
     <div class="qa">
       <div class="q2">5. 只有物品、但含危險品時導向哪裡？</div>
-      <div class="a2">仍導向 A／B，並提示於備註說明、聯絡調度；A／B 是否新增危險品欄位另案評估。</div>
+      <div class="a2"><span class="badge b-new">v2.11 定案</span> 物品寄送新增「危險品運輸」：同據點且危險品運輸＝是 → B（R6）；不同據點照舊 → B。導向後仍提示於備註說明、聯絡調度；A／B 是否新增危險品欄位另案評估。</div>
       <div class="why">一般用車規格明訂「必有人隨行、純載貨走運輸申請」，因此不能導到 D。</div>
     </div>
     <div class="qa">
@@ -653,15 +670,15 @@
           <tr><td>畫面結構</td><td>首頁（查詢＋引導紀錄）／新增（引導表單）／細節（歷史資料），與其他單元一致</td><td><span class="badge b-new">v2 變更</span></td></tr>
           <tr><td>互動方式</td><td>單一需求表單，依填寫內容出現卡片；不使用問答式畫面</td><td><span class="badge b-prop">建議</span></td></tr>
           <tr><td>分流對象</td><td>四種申請：收貨、幹線託運、差旅共乘申請、一般用車（含例行用車類別）</td><td><span class="badge b-new">v2 變更</span></td></tr>
-          <tr><td>判定方式</td><td>依欄位值套用 R1、R2、R4、R5；R3 與 K5 移除，天數不參與判定</td><td><span class="badge b-new">v2 變更</span></td></tr>
-          <tr><td>A／B 劃分</td><td>寄件據點與收件據點相同 → A；不同 → B</td><td><span class="badge b-prop">建議</span></td></tr>
-          <tr><td>C／D 劃分</td><td>地點都在共乘清單且無隨行物品 → C；其餘 → D</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>判定方式</td><td>依欄位值套用 R1、R2、R4、R5、R6、R7；R3 與 K5 移除，天數不參與判定</td><td><span class="badge b-new">v2 變更</span></td></tr>
+          <tr><td>A／B 劃分</td><td>不同據點 → B；同據點：危險品運輸＝是或貨物未小於收貨日巡迴車上限 → B，其餘 → A</td><td><span class="badge b-new">v2.11 定案</span></td></tr>
+          <tr><td>C／D 劃分</td><td>地點都在共乘清單，且無隨行物品或只有隨身物品 → C；其餘 → D</td><td><span class="badge b-new">v2.11 定案</span></td></tr>
           <tr><td>長天數共乘清單內行程</td><td>依 R4 導向 C；必要時再加天數門檻</td><td><span class="badge b-pend">待業務確認</span></td></tr>
           <tr><td>例行用車類別</td><td>引導不設定，帶入為一般用車，由有權限者在一般用車畫面切換</td><td><span class="badge b-pend">待業務確認</span></td></tr>
           <tr><td>引導紀錄</td><td>每次帶入留紀錄；回到修改更新同一筆；送出回填單號</td><td><span class="badge b-new">v2 新增</span></td></tr>
           <tr><td>帶入範圍</td><td>只帶入目前顯示中卡片的資料；只用一次；可回到引導</td><td><span class="badge b-prop">建議</span></td></tr>
           <tr><td>與既有申請並存</td><td>第一階段並存</td><td><span class="badge b-pend">待業務確認</span></td></tr>
-          <tr><td>純貨物含危險品</td><td>導向 A／B 並提示聯絡調度</td><td><span class="badge b-pend">待業務確認</span></td></tr>
+          <tr><td>純貨物含危險品</td><td>危險品運輸＝是 → B，並提示聯絡調度</td><td><span class="badge b-new">v2.11 定案</span></td></tr>
           <tr><td>跨模組查詢</td><td>另案</td><td><span class="badge b-pend">待業務確認</span></td></tr>
         </tbody>
       </table>
@@ -674,6 +691,7 @@
       <table>
         <thead><tr><th>版本</th><th>內容</th></tr></thead>
         <tbody>
+          <tr><td class="nw">v2.11</td><td>2026-10-07 判定規則調整：只寄送物品的物品寄送新增「危險品運輸」，同據點時危險品 → 院區物品轉運（R6）、貨物合計體積或重量未小於收貨日巡迴車上限 → 院區物品轉運（R7），其餘 → 巡迴物品轉運（R1）（G135）；有人要搭車的隨行物品＝有時新增「屬於隨身物品」，隨身物品仍走差旅共乘（R4），否 → 一般用車並填貨物清單（R5）（G134）。第 6～9、12～16 節同步；C／D 劃分、純貨物危險品改為定案；測試數更新為 212 項。</td></tr>
           <tr><td class="nw">v2.10</td><td>2026-10-06 差旅共乘申請表單欄位改版（G133）：帶入目標欄位改為申請人分機手機、是否單程運輸、車輛起迄地點（起點、終點兩點）、車輛報到／用車結束日期時間、乘客數（第 9 節對照表更新）；申請事由等新欄位不由引導收集，於差旅共乘新增畫面填寫。判定規則、卡片與引導紀錄不變；測試數更新為 201 項。</td></tr>
           <tr><td class="nw">v2.9</td><td>2026-10-04 修正上一輪演算法修正帶出的副作用（巡迴物品轉運期望時間差、差旅共乘派車單座位依時段計算），屬媒合派車階段；申請引導的判定、卡片、帶入與引導紀錄規則皆不變；測試數更新為 193 項。</td></tr>
           <tr><td class="nw">v2.8</td><td>2026-10-04 修正第三方演算法疑點（巡迴物品轉運到站時間、院區物品轉運急件直達容量與收貨時間窗、差旅共乘單程配對與資源選擇），屬媒合派車階段；申請引導的判定、卡片、帶入與引導紀錄規則皆不變；測試數更新為 189 項。</td></tr>
