@@ -2574,20 +2574,41 @@ function renderCApplyNew(p) {
     }
   };
 }
+// 範例批次：今天起到 2 週後（日期以今天起算，避免過去日期被視為已出車而鎖定）
 function loadCDemo() {
-  const D = bDayStr(3), D2 = bDayStr(5);   // 範例日期以今天起算（過去日期會被視為已出車，派車單即鎖定不可異動）
+  const d = bDayStr, now = Flow.now();
+  const t0 = `${pad2(Math.min(now.getHours() + 2, 19))}:00`;   // 今天的範例取 2 小時後出發
+  const U = { y: ['業務部-周雅婷', '業務部', '2201'], z: ['財務部-鄭安琪', '財務部', '3310'], w: ['研發部-吳承恩', '研發部', '4102'], l: ['總經理室-林秘書', '總經理室', '1001'] };
+  const R = (who, day, from, to, pick, rday, ret, pax, extra) => Object.assign({ type: 'round', origin: from, dest: to, departDate: d(day), earliestPickup: pick,
+    returnDate: d(rday), earliestReturn: ret, pax, applicant: U[who][0], dept: U[who][1], ext: U[who][2] }, extra || {});
+  const O = (who, day, from, to, pick, pax, extra) => Object.assign({ type: 'oneway', origin: from, dest: to, departDate: d(day), earliestPickup: pick,
+    returnDate: d(day), earliestReturn: '', pax, applicant: U[who][0], dept: U[who][1], ext: U[who][2] }, extra || {});
   const demos = [
-    // BZ001/BZ002：同地點、同起訖日期、同去回上車時間 → 可合併（多天來回）
-    { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
-    { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2, applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310' },
-    // 單程單一對（4 小時窗配對）
-    { type: 'oneway', origin: '台北總部', dest: '桃園機場T1', departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
-    { type: 'oneway', origin: '桃園機場T1', dest: '台北總部', departDate: D, earliestPickup: '11:00', returnDate: D, earliestReturn: '', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
-    // BZ005：回程日期不同（單天來回）→ 與 BZ001/002 不合併，示範日期須完全相同
-    { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '16:00', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
+    // 今天：單程送高鐵
+    O('w', 0, '台北總部', '高鐵台北站', t0, 2),
+    // +1 天：同起訖、同日期時間 → 合併同一張派車單
+    R('y', 1, '台北總部', '台中辦公室', '09:00', 1, '16:00', 2),
+    R('z', 1, '台北總部', '台中辦公室', '09:00', 1, '16:00', 2),
+    // +2 天：需特殊證 k → 只派有 K 證的車
+    R('l', 2, '台北總部', '新竹分公司', '10:00', 2, '15:00', 1, { permitK: true }),
+    // +3 天：單程去程＋回程（4 小時窗內配成一趟）
+    O('w', 3, '台北總部', '桃園機場T1', '08:00', 3),
+    O('y', 3, '桃園機場T1', '台北總部', '11:00', 2),
+    // +5～+7 天：多天來回兩張相同 → 合併；另一張同日單天來回（回程日期不同）不合併
+    R('y', 5, '台北總部', '台中辦公室', '09:00', 7, '16:00', 2),
+    R('z', 5, '台北總部', '台中辦公室', '09:00', 7, '16:00', 1),
+    R('w', 5, '台北總部', '台中辦公室', '09:00', 5, '16:00', 3),
+    // +8 天：不同意併車 → 單獨派車
+    R('l', 8, '台北總部', '高鐵台北站', '09:00', 8, '12:00', 1, { agreeCarpool: false }),
+    // +10 天：單程送桃園機場T2
+    O('z', 10, '台北總部', '桃園機場T2', '07:30', 1),
+    // +12 天：起迄地點多點（經高鐵台北站），媒合仍依起點與終點
+    R('y', 12, '台北總部', '新竹分公司', '09:30', 12, '17:00', 2, { route: ['台北總部', '高鐵台北站', '新竹分公司'] }),
+    // +14 天：來回台中
+    R('w', 14, '台北總部', '台中辦公室', '08:30', 14, '17:00', 3),
   ];
-  demos.forEach(d => ModuleC.createApp(Object.assign({ reason: '客戶拜訪（範例）', reportPlace: `${d.origin} 大門` }, d)));
-  toast('已載入 5 筆共乘申請（待二級審）', 'ok');
+  demos.forEach(x => ModuleC.createApp(Object.assign({ reason: '客戶拜訪（範例）', reportPlace: `${x.origin} 大門` }, x)));
+  toast(`已載入 ${demos.length} 筆共乘申請（${d(0)}～${d(14)}，待二級審）`, 'ok');
 }
 // 相容：審核端動作呼叫此函式刷新申請端 grid
 function renderCaList() { if ($('#cq-grid')) renderCGrid(); }
