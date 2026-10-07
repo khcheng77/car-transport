@@ -152,7 +152,11 @@
   <section class="block" id="s0">
     <h2 class="sec-title"><span class="num">00</span>本版更新摘要</h2>
     <div class="changelog">
-      <p><b>2026-10-06 更新：申請表單欄位改版（G133）</b></p>
+      <p><b>2026-10-07 更新：報到地點與隨身貨物（G136）</b></p>
+      <ul>
+        <li><b>04 節</b>：申請表單新增「報到地點」（必填）與「隨身貨物」grid（選填，7 欄：物品名稱、數量、長、寬、高、重量(KG)、物品外包裝）；僅記錄，不參與媒合，申請明細與單位主管審核畫面顯示。</li>
+      </ul>
+      <p style="margin-top:12px;padding-top:10px;border-top:1px dashed #d5d2c8"><b>2026-10-06 更新：申請表單欄位改版（G133）</b></p>
       <ul>
         <li><b>04 節改寫為「申請表單欄位」</b>：申請人由登入者帶入；分機改「申請人分機手機」；任務型態改「是否單程運輸」；出發地＋目的地併為「車輛起迄地點」（下拉逐一加入，最多 8 點，媒合依起點與終點）；出發／回程日期與上車時間併為「車輛報到日期時間」「用車結束日期時間」；人數改「乘客數」。新增申請事由、計畫代號、車長與分機手機、車屬據點、是否同意併車、據點接駁、特殊證 p／k、是否跨院區、是否進台北市、是否有載運品（三聯單表單編號、護運單號）、備註、異動事由。</li>
         <li><b>不同意併車</b>（05、06、10 節）：一單一車，不與他人合併、不配對去回程；無車可派即直接無車退回並告知申請人。</li>
@@ -266,6 +270,7 @@
       <tr><td>乘客數</td><td>數字</td><td><code>passengers</code></td><td>原「人數」，至少 1 人</td></tr>
       <tr><td>車輛起迄地點 <b style="color:#c0392b">*</b></td><td>下拉逐一加入</td><td><code>route</code></td><td>原「出發地＋目的地」；依序加入，最多 <b>8</b> 點，至少起點、終點兩點；第一點＝起點、最後一點＝終點，起訖不可相同、相鄰不可重複</td></tr>
       <tr><td>車輛報到日期時間 <b style="color:#c0392b">*</b></td><td>日期時間</td><td><code>reportAt</code></td><td>原「出發日期＋最早上車時間」</td></tr>
+      <tr><td>報到地點 <b style="color:#c0392b">*</b></td><td>文字</td><td><code>reportPlace</code></td><td>2026-10-07 新增（G136）；車輛報到的確切位置，例：台北總部 B1 車道口</td></tr>
       <tr><td>用車結束日期時間 <b style="color:#c0392b">*</b></td><td>日期時間</td><td><code>endAt</code></td><td>原「回程日期＋回程上車時間」；不可早於報到日期時間；單程不填</td></tr>
       <tr><td>是否同意併車</td><td>是／否</td><td><code>agreeCarpool</code></td><td>新增，預設「是」；否＝一單一車（見 05 節）</td></tr>
       <tr><td>據點接駁</td><td>是／否</td><td><code>baseShuttle</code></td><td>新增，僅記錄</td></tr>
@@ -275,9 +280,20 @@
       <tr><td>是否有載運品</td><td>是／否</td><td><code>hasCargo</code></td><td>新增；是＝顯示下兩欄並必填</td></tr>
       <tr><td>三聯單表單編號</td><td>文字</td><td><code>manifestNo</code></td><td>有載運品時顯示、必填</td></tr>
       <tr><td>護運單號</td><td>文字</td><td><code>escortNo</code></td><td>有載運品時顯示、必填</td></tr>
+      <tr><td>隨身貨物</td><td>grid（列首刪除、右上新增）</td><td><code>personalCargo[]</code></td><td>2026-10-07 新增（G136），選填；見下表</td></tr>
       <tr><td>備註</td><td>多行文字</td><td><code>remark</code></td><td>新增</td></tr>
       <tr><td>異動事由</td><td>多行文字</td><td><code>changeReason</code></td><td>僅修改（申請中／退回修編）或取消時出現，必填；每次異動記入異動紀錄</td></tr>
     </table>
+    <h3 class="sub">隨身貨物 grid（2026-10-07 · G136）</h3>
+    <table class="dtable">
+      <tr><th>欄位</th><th>輸入方式</th><th>存檔欄位</th><th>檢核（有填列時）</th></tr>
+      <tr><td>物品名稱</td><td>文字</td><td><code>name</code></td><td>必填</td></tr>
+      <tr><td>數量</td><td>數字</td><td><code>qty</code></td><td>整數，至少 1</td></tr>
+      <tr><td>長／寬／高</td><td>數字（cm）</td><td><code>l</code>／<code>w</code>／<code>h</code></td><td>皆須大於 0</td></tr>
+      <tr><td>重量(KG)</td><td>數字</td><td><code>weight</code></td><td>須大於 0（單件重）</td></tr>
+      <tr><td>物品外包裝</td><td>文字＋常用選項（紙箱、塑膠箱、木箱、袋裝、桶裝、無外包裝）</td><td><code>pack</code></td><td>選填</td></tr>
+    </table>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin-top:6px;">隨身貨物不參與媒合（座位、車型、合併條件皆不變）；與「是否有載運品」（三聯單、護運單號）是不同的資料。申請引導判定「隨行物品屬於隨身物品」時導向本申請，但不帶入隨身貨物，由申請人在此填寫。</p>
     <div class="final-card" style="margin-top:12px;">
       <div class="d-label">媒合用欄位（系統推導）</div>
       <p>媒合引擎仍以起點、終點、日期與時間比對，由表單欄位推導：起點＝車輛起迄地點第一點、終點＝最後一點；報到日期時間拆成出發日期＋去程上車時間；用車結束日期時間拆成回程日期＋回程上車時間；乘客數＝人數。<b>經過地點只記錄，不參與媒合與車程計算</b>。</p>
@@ -541,6 +557,7 @@
       <tr><td>車屬據點選項</td><td>暫用據點主檔，僅記錄</td><td>正式選項清單；是否影響派車（例如限派該據點的車）</td></tr>
       <tr><td>部門欄位</td><td>保留，由登入者帶入</td><td>新版欄位清單未列，是否移除</td></tr>
       <tr><td>據點接駁、是否跨院區、是否進台北市、計畫代號、車長</td><td>僅記錄、顯示，不影響媒合</td><td>是否需要參與派車判斷或統計</td></tr>
+      <tr><td>隨身貨物（G136）</td><td>僅記錄、顯示，不影響媒合</td><td>是否要納入選車（車廂空間、載重）；物品外包裝是否改為固定選項</td></tr>
     </table>
     <table class="dtable">
       <tr><th>原題號</th><th>問題</th><th>解決方式</th></tr>

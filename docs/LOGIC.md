@@ -243,10 +243,10 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 > 實登以**派車單**為單位（G125）：`ModuleC.usageDispatches()` 列出簽審通過的派車單；`ModuleC.dispatchUsageSave(d, data, by)` 經 `Usage.saveGroup` 寫入派車單並同步到單內每張申請單 `usage` → 已回登，再對各單 `_returnResourcesHome`（當前位置回復歸屬據點）。
 
 ### 申請單主要欄位（`createApp` → `_fields`，G133 改版）
-- **表單存檔欄位**：`applicant`（登入者帶入）、`dept`、`applicantPhone`、`reason`（必填）、`projectCode`、`captain`、`captainPhone`、`homeBase`、`isOneway`、`route`（車輛起迄地點，最多 `ROUTE_MAX`=8 點）、`reportAt`／`endAt`（`yyyy-mm-ddTHH:MM`，單程 `endAt` 為空）、`passengers`、`agreeCarpool`（未指定＝true）、`baseShuttle`、`permitP`、`permitK`、`crossCampus`、`enterTaipei`、`hasCargo`、`manifestNo`／`escortNo`（無載運品不存）、`remark`；`changeReason`＋`changeLog[]`（`_change`：修改／取消的異動事由）。
+- **表單存檔欄位**：`applicant`（登入者帶入）、`dept`、`applicantPhone`、`reason`（必填）、`projectCode`、`captain`、`captainPhone`、`homeBase`、`isOneway`、`route`（車輛起迄地點，最多 `ROUTE_MAX`=8 點）、`reportAt`／`endAt`（`yyyy-mm-ddTHH:MM`，單程 `endAt` 為空）、`passengers`、`agreeCarpool`（未指定＝true）、`baseShuttle`、`permitP`、`permitK`、`crossCampus`、`enterTaipei`、`hasCargo`、`manifestNo`／`escortNo`（無載運品不存）、`remark`、`reportPlace`（報到地點，G136）、`personalCargo[]`（隨身貨物 `{name, qty, l, w, h, weight, pack}`，`_cargoRows` 數字欄轉數值，G136）；`changeReason`＋`changeLog[]`（`_change`：修改／取消的異動事由）。
 - **媒合內部欄位（推導）**：`type`＝`isOneway ? 'oneway' : 'round'`、`origin`＝`route[0]`、`dest`＝`route` 最後一點、`departDate`／`earliestPickup`＝`reportAt` 拆開、`returnDate`／`earliestReturn`＝`endAt` 拆開（單程＝出發日）、`pax`＝`passengers`、`ext`＝`applicantPhone`。經過地點不參與媒合與車程。
 - `_fields` 也接受舊欄位（`origin`／`dest`／`departDate`…，供範例資料、申請引導帶入與測試）並反推表單欄位；同時給新舊欄位時以新欄位為準。
-- `formError(data, {editing})`：事由必填；起迄至少 2 點、最多 8 點、相鄰不重複、起訖不同；報到必填；非單程時結束必填且不早於報到；乘客數 ≥ 1；有載運品時三聯單表單編號、護運單號必填；修改時異動事由必填。
+- `formError(data, {editing})`：事由必填；起迄至少 2 點、最多 8 點、相鄰不重複、起訖不同；報到必填；非單程時結束必填且不早於報到；乘客數 ≥ 1；有載運品時三聯單表單編號、護運單號必填；報到地點必填；隨身貨物有填列時 `cargoRowError`（名稱必填、數量 ≥ 1 整數、長寬高與重量 > 0）；修改時異動事由必填。隨身貨物不參與媒合。
 - 車程 `travelMin = bizTravel[起|迄] + bizBuffer(15)`（車程表**對稱**，查無正向則查反向）；`latestArrival` 最晚抵達為**唯讀參考，不參與媒合**。
 
 ### 歸屬據點與當前位置（v4 語意區分）
