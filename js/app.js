@@ -2962,12 +2962,12 @@ function renderCrDetail(p, date) {
       <div class="card-desc">對<b>本出發日期</b>已核准的申請單執行批次媒合（已成功單不重排）：媒合到<b>同一台車</b>的申請單產生一張<b>派車單</b>（派車單號、派遣人、派遣時間自動給予，併入派車單即為「調度中」）。媒合不成者仍為待調度並註明原因，可按<b>手動指派</b>：指定車輛／駕駛產生暫存派車單，或併入本日尚未送審的派車單；確定無車可派者按<b>無車退回</b>（原因必填，結案）。</div>
       ${waiting.length === 0 ? '<div class="empty">本日沒有待調度的申請單。</div>' : `
       <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>出發</th><th>人數</th><th>狀態</th><th>操作</th></tr></thead><tbody>
-        ${waiting.map(a => `<tr><td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
-          <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRoute(a)}</td><td>${cTimeText(a)}</td><td>${a.pax}</td>
+        <th>功能</th><th>狀態</th><th>單號</th><th>申請人</th><th>型態</th><th>路線</th><th>出發</th><th>人數</th></tr></thead><tbody>
+        ${waiting.map(a => `<tr><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" data-crassign="${a.id}">手動指派</button>
+            <button class="btn btn-danger btn-sm" data-crret="${a.id}">無車退回</button></td>
           <td>${Flow.badge(a)}${a.note ? `<br><span class="hint">${a.note}</span>` : ''}</td>
-          <td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" data-crassign="${a.id}">手動指派</button>
-            <button class="btn btn-danger btn-sm" data-crret="${a.id}">無車退回</button></td></tr>`).join('')}
+          <td><b style="color:var(--navy);">${a.id}</b></td><td>${a.applicant}</td>
+          <td>${a.type === 'round' ? '來回' : '單程'}</td><td>${cRoute(a)}</td><td>${cTimeText(a)}</td><td>${a.pax}</td></tr>`).join('')}
       </tbody></table></div>`}
     </div>
     <div class="card">
