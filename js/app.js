@@ -2189,7 +2189,6 @@ function cAppItems(a) {
     fItem('車長分機手機', a.captainPhone || '—'),
     fItem('車屬據點', a.homeBase || '—'),
     fItem('是否單程運輸', a.type === 'oneway' ? '是（終點須為交通轉運點）' : '否'),
-    fItem('車輛起迄地點', cRouteStr(a), { full: true }),
     fItem('車輛報到日期時間', cAtStr(a.reportAt || `${a.departDate}T${a.earliestPickup}`)),
     fItem('報到地點', gEsc(a.reportPlace || '—')),
     fItem('用車結束日期時間', a.type === 'round' ? cAtStr(a.endAt || `${a.returnDate}T${a.earliestReturn}`) : '<span class="muted">單程不適用</span>'),
@@ -2247,6 +2246,7 @@ function renderCApplyDetail(p, id) {
         fItem('建立時間', fmtTime(a.createdAt)),
       ]).join(''))}
     </div>
+    ${cRouteCard(a)}
     ${cCargoCard(a)}
     ${cChangeCard(a)}
     <div class="card">
@@ -2333,25 +2333,69 @@ function cYesNo(name, val) {
     `<label class="radio-pill${(val ? '1' : '0') === v ? ' sel' : ''}"><input type="radio" name="${name}" value="${v}"${(val ? '1' : '0') === v ? ' checked' : ''}>${t}</label>`).join('')}</div>`;
 }
 const cYes = (name, p) => { const r = $(`input[name=${name}]:checked`, p); return !!r && r.value === '1'; };
+// 車輛起迄地點 grid（G137）：功能（編輯／刪除）、地點（下拉）、順序（可改數字排序）；
+// 編輯為 inline mode（同時只編輯一列），儲存與刪除皆跳確認視窗；右上「＋ 新增」新增一列並進入編輯。
+let caRouteEdit = null;   // { idx, isNew }
 function renderCaRoute() {
-  const box = $('#ca-route-list'); if (!box) return;
-  const n = caRoute.length;
-  box.innerHTML = n ? caRoute.map((x, i) => `<span class="badge ${i === 0 || i === n - 1 ? 'b-navy' : 'b-gray'}" style="margin:2px 4px 2px 0;">
-      ${i === 0 ? '起點' : i === n - 1 ? '終點' : '經 ' + i}｜${x}
-      <a href="javascript:void 0" data-rm="${i}" title="移除" style="margin-left:4px;color:inherit;">✕</a></span>${i < n - 1 ? '<span class="muted">→</span> ' : ''}`).join('')
-    : '<span class="muted">尚未加入地點（至少起點、終點兩點）</span>';
-  $$('#ca-route-list [data-rm]').forEach(b => b.onclick = () => { caRoute.splice(+b.dataset.rm, 1); renderCaRoute(); });
-  $('#ca-route-add').disabled = n >= ModuleC.ROUTE_MAX;
-  $('#ca-route-count').textContent = `${n} / ${ModuleC.ROUTE_MAX}`;
+  const box = $('#ca-route-grid'); if (!box) return;
+  const n = caRoute.length, ed = caRouteEdit;
+  const tag = i => i === 0 ? '<span class="badge b-navy" style="margin-left:6px;">起點</span>'
+    : i === n - 1 ? '<span class="badge b-navy" style="margin-left:6px;">終點</span>' : '';
+  const row = (x, i) => ed && ed.idx === i
+    ? `<tr><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" type="button" data-rsave="${i}">儲存</button> <button class="btn btn-ghost btn-sm" type="button" data-rcancel="${i}">取消</button></td>
+        <td><select id="ca-rt-place">${C_PLACES().map(o => `<option${o === x ? ' selected' : ''}>${o}</option>`).join('')}</select></td>
+        <td><input type="number" id="ca-rt-order" min="1" max="${n}" step="1" value="${i + 1}" style="width:80px;"></td></tr>`
+    : `<tr><td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" type="button" data-redit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" type="button" data-rdel="${i}">刪除</button></td>
+        <td>${gEsc(x)}${tag(i)}</td><td>${i + 1}</td></tr>`;
+  box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr><th>功能</th><th>地點</th><th>順序</th></tr></thead><tbody>
+    ${n ? caRoute.map(row).join('') : '<tr><td colspan="3" class="muted" style="text-align:center;padding:14px;">尚未加入地點，請按右上角「＋ 新增」（至少起點、終點兩點）。</td></tr>'}
+    </tbody></table></div>
+    <div class="muted" style="font-size:12px;margin-top:6px;">依「順序」排列，最多 ${ModuleC.ROUTE_MAX} 個地點；順序 1 為起點、最後一個為終點（媒合依起點與終點）。目前 ${n} / ${ModuleC.ROUTE_MAX}。</div>`;
+  const busy = () => { if (caRouteEdit) { toast('請先儲存或取消編輯中的地點', 'err'); return true; } return false; };
+  const rerender = () => { renderCaRoute(); initMasonry($('#page-c_apply')); };
+  $$('#ca-route-grid [data-redit]').forEach(b => b.onclick = () => { if (busy()) return; caRouteEdit = { idx: +b.dataset.redit, isNew: false }; rerender(); });
+  $$('#ca-route-grid [data-rdel]').forEach(b => b.onclick = async () => {
+    if (busy()) return;
+    const i = +b.dataset.rdel;
+    if (!(await confirmDialog({ title: '確認刪除地點？', text: `將刪除第 ${i + 1} 個地點「${caRoute[i]}」，其後地點順序往前遞補。` }))) return;
+    caRoute.splice(i, 1); rerender();
+  });
+  $$('#ca-route-grid [data-rcancel]').forEach(b => b.onclick = () => {
+    if (caRouteEdit && caRouteEdit.isNew) caRoute.splice(caRouteEdit.idx, 1);
+    caRouteEdit = null; rerender();
+  });
+  $$('#ca-route-grid [data-rsave]').forEach(b => b.onclick = async () => {
+    const i = +b.dataset.rsave, place = $('#ca-rt-place').value, ord = Math.round(+$('#ca-rt-order').value);
+    if (!(ord >= 1 && ord <= n)) return toast(`「順序」須為 1～${n}`, 'err');
+    const isNew = caRouteEdit.isNew;
+    if (!(await confirmDialog({ title: isNew ? '確認新增地點？' : '確認修改地點？', text: `地點「${place}」，順序 ${ord}。` }))) return;
+    caRoute.splice(i, 1); caRoute.splice(ord - 1, 0, place);
+    caRouteEdit = null; rerender();
+  });
+}
+function caRouteAdd() {
+  if (caRouteEdit) return toast('請先儲存或取消編輯中的地點', 'err');
+  if (caRoute.length >= ModuleC.ROUTE_MAX) return toast(`最多 ${ModuleC.ROUTE_MAX} 個地點`, 'err');
+  const last = caRoute[caRoute.length - 1];
+  caRoute.push(C_PLACES().find(x => x !== last) || C_PLACES()[0]);
+  caRouteEdit = { idx: caRoute.length - 1, isNew: true };
+  renderCaRoute(); initMasonry($('#page-c_apply'));
+}
+// 明細／審核：車輛起迄地點唯讀 grid
+function cRouteCard(a) {
+  const r = a.route && a.route.length ? a.route : [a.origin, a.dest].filter(Boolean), n = r.length;
+  return `<div class="card"><div class="card-title">車輛起迄地點 <span class="g-tag">G137</span></div>
+    <div class="table-wrap"><table class="dt"><thead><tr><th>順序</th><th>地點</th></tr></thead><tbody>
+    ${r.map((x, i) => `<tr><td>${i + 1}</td><td>${gEsc(x)}${i === 0 ? ' <span class="badge b-navy">起點</span>' : i === n - 1 ? ' <span class="badge b-navy">終點</span>' : ''}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
 }
 function renderCApplyNew(p) {
   const editing = cApply.editId ? ModuleC.applications.find(x => x.id === cApply.editId && ModuleC.canEdit(x)) : null;
   const me = DB.currentUser;
   const src = editing || { applicant: `${me.unit}-${me.name}`, dept: me.unit, applicantPhone: me.ext, isOneway: false,
     route: [], reportAt: '2026-08-27T09:00', endAt: '2026-08-27T16:00', passengers: 2, agreeCarpool: true };
-  caRoute = (src.route || []).slice();
+  caRoute = (src.route || []).slice(); caRouteEdit = null;
   caCargo = (src.personalCargo || []).map(r => Object.assign({}, r));
-  const placeOpts = C_PLACES().map(o => `<option>${o}</option>`).join('');
   // 車屬據點：選項待業務提供，暫用據點主檔
   const baseOpts = ['<option value="">（請選擇）</option>'].concat(DB.sites.map(s => `<option value="${s.name}"${src.homeBase === s.name ? ' selected' : ''}>${s.name}</option>`)).join('');
   const v = k => (src[k] == null ? '' : String(src[k]).replace(/"/g, '&quot;'));
@@ -2359,7 +2403,7 @@ function renderCApplyNew(p) {
     <div class="section-h">${editing ? `修改差旅共乘申請 · ${editing.id}` : '新增差旅共乘申請單'}</div>
     ${editing ? editBanner(editing) : ''}
     <div class="card">
-      <div class="card-title">差旅共乘申請 <span class="g-tag">G50/G54/G133</span></div>
+      <div class="card-title">基本資料 <span class="g-tag">G50/G54/G133</span></div>
       ${infoGrid('ca-fields', [
         fInput('申請人', `<input type="text" id="ca-applicant" value="${v('applicant')}" readonly title="由登入者帶入">`),
         fInput('部門', `<input type="text" id="ca-dept" value="${v('dept')}" readonly title="由登入者帶入">`),
@@ -2371,15 +2415,17 @@ function renderCApplyNew(p) {
         fInput('車屬據點 <span class="hint" title="選項待業務提供，暫用據點主檔">暫</span>', `<select id="ca-base">${baseOpts}</select>`),
         fInput('是否單程運輸', cYesNo('ca-oneway', src.isOneway), { stack: true }),
         fInput('乘客數', `<input type="number" id="ca-pax" min="1" value="${v('passengers')}">`),
-        fInput('車輛起迄地點 <span style="color:#c0392b;">*</span>', `
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-            <select id="ca-route-pick" style="flex:1;min-width:140px;">${placeOpts}</select>
-            <button class="btn btn-ghost btn-sm" id="ca-route-add" type="button">＋ 加入</button>
-            <span class="muted" id="ca-route-count"></span>
-          </div>
-          <div id="ca-route-list" style="margin-top:6px;"></div>
-          <div class="muted" style="font-size:12px;margin-top:4px;">依序加入，最多 ${ModuleC.ROUTE_MAX} 個地點；第一點為起點、最後一點為終點（媒合依起點與終點）。</div>`, { stack: true, full: true }),
       ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span>車輛起迄地點 <span style="color:#c0392b;">*</span> <span class="g-tag">G137</span></span>
+        <button class="btn btn-accent btn-sm" type="button" id="ca-route-add">＋ 新增</button>
+      </div>
+      <div id="ca-route-grid"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">用車資料</div>
       <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">用車時間</div>
       ${infoGrid('ca-time', [
         fInput('車輛報到日期時間 <span style="color:#c0392b;">*</span>', `<input type="datetime-local" id="ca-report" value="${v('reportAt')}">`),
@@ -2428,12 +2474,7 @@ function renderCApplyNew(p) {
   // 用車結束不可早於報到
   const syncEndMin = () => { $('#ca-end').min = $('#ca-report').value || ''; };
   $('#ca-report').onchange = syncEndMin; syncEndMin();
-  $('#ca-route-add').onclick = () => {
-    const x = $('#ca-route-pick').value;
-    if (caRoute.length >= ModuleC.ROUTE_MAX) return toast(`最多 ${ModuleC.ROUTE_MAX} 個地點`, 'err');
-    if (caRoute[caRoute.length - 1] === x) return toast('與上一個地點相同', 'err');
-    caRoute.push(x); renderCaRoute(); initMasonry(p);
-  };
+  $('#ca-route-add').onclick = caRouteAdd;
   renderCaRoute();
   renderCaCargo();
   $('#ca-pcargo-add').onclick = () => { caCargo.push({ name: '', qty: 1, l: '', w: '', h: '', weight: '', pack: '' }); renderCaCargo(); initMasonry(p); };
@@ -2445,6 +2486,7 @@ function renderCApplyNew(p) {
   }
   $('#ca-cancel').onclick = cBack;
   const formData = () => {
+    if (caRouteEdit) { toast('車輛起迄地點有編輯中的列，請先儲存或取消', 'err'); return null; }
     const data = {
       applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, applicantPhone: $('#ca-phone').value.trim(),
       reason: $('#ca-reason').value.trim(), projectCode: $('#ca-project').value.trim(),
@@ -2587,6 +2629,7 @@ function renderCApproveDetail(p, id) {
         a.reviewNote ? fItem('審核備註', a.reviewNote) : '',
       ]).join(''))}
     </div>
+    ${cRouteCard(a)}
     ${cCargoCard(a)}
     ${pending ? `
     <div class="card">
@@ -5381,7 +5424,7 @@ function guideApply(unit, state, p) {
   } else if (unit === 'C') {
     set('ca-applicant', d.applicant); set('ca-dept', d.dept); set('ca-phone', d.ext);
     pick('ca-oneway', d.type === 'oneway' ? '1' : '0');
-    caRoute = [d.origin, d.dest].filter(Boolean); renderCaRoute();
+    caRoute = [d.origin, d.dest].filter(Boolean); caRouteEdit = null; renderCaRoute();
     if (d.departDate) { set('ca-report', `${d.departDate}T${d.earliestPickup || '09:00'}`); $('#ca-report', p).onchange(); }
     if (d.type !== 'oneway' && d.returnDate) set('ca-end', `${d.returnDate}T${d.earliestReturn || '18:00'}`);
     set('ca-pax', d.pax);
