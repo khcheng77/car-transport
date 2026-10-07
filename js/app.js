@@ -2430,7 +2430,7 @@ function renderCApplyNew(p) {
   const editing = cApply.editId ? ModuleC.applications.find(x => x.id === cApply.editId && ModuleC.canEdit(x)) : null;
   const me = DB.currentUser;
   const src = editing || { applicant: `${me.unit}-${me.name}`, dept: me.unit, applicantPhone: me.ext, isOneway: false,
-    route: [], reportAt: '2026-08-27T09:00', endAt: '2026-08-27T16:00', passengers: 2, agreeCarpool: true };
+    route: [], reportAt: `${bDayStr(1)}T09:00`, endAt: `${bDayStr(1)}T16:00`, passengers: 2, agreeCarpool: true };   // 預設明天（過去日期會被視為已出車而鎖定）
   caRoute = (src.route || []).slice(); caRouteEdit = null;
   caCargo = (src.personalCargo || []).map(r => Object.assign({}, r));
   // 車屬據點：選項待業務提供，暫用據點主檔
@@ -2575,7 +2575,7 @@ function renderCApplyNew(p) {
   };
 }
 function loadCDemo() {
-  const D = '2026-08-27', D2 = '2026-08-29';
+  const D = bDayStr(3), D2 = bDayStr(5);   // 範例日期以今天起算（過去日期會被視為已出車，派車單即鎖定不可異動）
   const demos = [
     // BZ001/BZ002：同地點、同起訖日期、同去回上車時間 → 可合併（多天來回）
     { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D2, earliestReturn: '16:00', pax: 2, applicant: '業務部-周雅婷', dept: '業務部', ext: '2201' },
@@ -2852,8 +2852,9 @@ function cOrderCardHtml(o) {
       <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
       ${o.log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by}</td><td style="text-align:left;">${l.note || '—'}</td></tr>`).join('')}
       </tbody></table></div></details>` : ''}
-    ${locked ? '' : `<div style="text-align:center;margin-top:16px;"><button class="btn btn-primary" data-crsave="${o.id}">💾 儲存</button>
-      <button class="btn btn-ghost" id="cro-close">取消</button></div>`}`;
+    <div style="text-align:center;margin-top:16px;">
+      ${locked ? '' : `<button class="btn btn-primary" data-crsave="${o.id}">▶ 送出</button>`}
+      <button class="btn btn-ghost" id="cro-close">取消</button></div>`;
 }
 // 派車單明細視窗：送審前異動車輛／駕駛、是否送審、刪除申請單（回待調度）；送審後唯讀（G130）
 // keep：重開視窗時保留尚未儲存的欄位值（刪除申請單後）
@@ -2874,7 +2875,7 @@ function openCOrderModal(o, by, rerender, keep) {
     const pre = ModuleC.dispatchResourceError(o, f);
     if (pre) { toast(pre, 'err'); return; }
     const text = f.submitted ? '派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效；<b>送審後即不可再異動</b>。' : '儲存派車單異動（尚未送審）。';
-    if (!(await confirmDialog({ title: `確認儲存派車單 ${o.id}？`, text }))) return;
+    if (!(await confirmDialog({ title: `確認送出派車單 ${o.id}？`, text }))) return;
     const r = ModuleC.updateDispatch(o, f, by());
     if (!r.ok) { toast(r.error, 'err'); return; }
     done(`派車單 ${o.id} 已${f.submitted ? '儲存並送審' : '儲存'}`);
@@ -3765,7 +3766,7 @@ function renderDApplyNew(p) {
   initMasonry(p);
 }
 function loadDDemo() {
-  const D1 = '2026-08-27', D2 = '2026-08-28';
+  const D1 = bDayStr(3), D2 = bDayStr(4);   // 範例日期以今天起算（過去日期會被視為已出車）
   const demos = [
     // 一般載人＋少量設備（人貨混合）
     { applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', startDate: D1, startTime: '09:00', endDate: D1, endTime: '12:00', pax: 3, selfDrive: false,
