@@ -1,6 +1,6 @@
 /* ============================================================
    guide.js — 共用單元：申請引導（依填寫內容判定申請並帶入）
-   建議規格 v0.2：需求表單＋依條件出現的卡片（K1～K7，K5 借用資料已隨例行用車移除）、判定決策表 R1/R2/R4/R5
+   建議規格 v0.2：需求表單＋依條件出現的卡片（K1～K7，K5 借用資料已隨例行用車移除）、判定決策表 R1/R2/R4/R5/R6/R7（G135 危險品運輸、巡迴車上限）
    只分流、不送單：產生目標功能的帶入資料，送出一律在目標功能完成。
    本檔為純邏輯（不碰畫面），畫面在 app.js 的 RENDER.guide。
    ============================================================ */
@@ -30,6 +30,29 @@ const Guide = {
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
   /* 隨行物品（G134）：有隨行物品時再問「屬於隨身物品」（是／否）。
      bulkCargo＝有物品且非隨身物品（需填貨物清單、走一般用車）；noCargoForShare＝沒有物品或只有隨身物品（可走差旅共乘）。 */
+  /* 收貨日巡迴車上限（G135）：寄件據點當天各班次（含車次覆寫）使用的巡迴車；
+     貨物清單合計＝體積 Σ長×寬×高×件數（公升，不含浪費係數）、重量 Σ單件重×件數。 */
+  cargoTotals(items) {
+    return (items || []).reduce((a, it) => {
+      const q = +it.qty || 1;
+      return { volume: a.volume + it.l * it.w * it.h / 1000 * q, weight: a.weight + (+it.weight || 0) * q };
+    }, { volume: 0, weight: 0 });
+  },
+  patrolVehicles(site, date) {
+    if (typeof ModuleA === 'undefined') return [];
+    const ids = [...new Set(DB.regionalShifts.filter(s => s.branch === site).map(s => ModuleA.shiftPlan(date || '', s.id).vehicle))];
+    return ids.map(id => DB.vehicles.find(x => x.id === id)).filter(Boolean);
+  },
+  /* 貨物是否放得進收貨日的巡迴車：合計體積、合計重量皆小於某一台巡迴車上限（單件超過上限者合計必然超過）。
+     回傳 { fits, total, vehicle（最大的一台，供說明）, overItem（單件超過上限的物品） } */
+  patrolFit(v) {
+    const vs = this.patrolVehicles(v.fromSite, v.recvDate), total = this.cargoTotals(v.items);
+    if (!vs.length) return { fits: false, total, vehicle: null, overItem: null };
+    const big = vs.slice().sort((a, b) => b.volume - a.volume || b.weight - a.weight)[0];
+    const overItem = (v.items || []).find(it => !vs.some(x => it.l * it.w * it.h / 1000 < x.volume && (+it.weight || 0) < x.weight)) || null;
+    const fits = vs.some(x => total.volume < x.volume && total.weight < x.weight);
+    return { fits, total, vehicle: big, overItem };
+  },
   bulkCargo(v) { return v.hasCargo === 'yes' && v.personalItems === 'no'; },
   noCargoForShare(v) { return v.hasCargo === 'no' || (v.hasCargo === 'yes' && v.personalItems === 'yes'); },
 
@@ -57,9 +80,21 @@ const Guide = {
     if (!v.mode) return { unit: null, hint: '請先在「需求」卡片選擇運送內容。' };
     if (v.mode === 'goods') {
       if (!v.fromSite || !v.toSite) return { unit: null, hint: '請選擇寄件據點與收件據點。' };
-      return v.fromSite === v.toSite
-        ? { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，由院區內固定班次巡迴收送，送出即自動排入最近班次。` }
-        : { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由院區物品轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。` };
+      if (v.fromSite !== v.toSite) {
+        return { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由院區物品轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。` };
+      }
+      // 同據點（G135）：危險品運輸 → 院區物品轉運；貨物超過收貨日巡迴車上限 → 院區物品轉運；否則巡迴物品轉運
+      if (v.hazardTransport !== 'yes' && v.hazardTransport !== 'no') return { unit: null, hint: '寄件與收件在同一據點。請選擇是否為危險品運輸。' };
+      if (v.hazardTransport === 'yes') {
+        return { unit: 'B', rule: 'R6', reason: `危險品運輸，不走院區內巡迴班次，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。` };
+      }
+      const f = this.patrolFit(v), t = f.total, fmt = n => Math.round(n * 10) / 10;
+      const cap = f.vehicle ? `收貨日 ${v.recvDate || '—'} 巡迴車上限 ${fmt(f.vehicle.volume)}L／${fmt(f.vehicle.weight)}kg` : '收貨日無巡迴車';
+      if (!f.fits) {
+        const why = f.overItem ? `「${f.overItem.name}」單件體積或重量超過巡迴車上限（${cap}）` : `貨物合計 ${fmt(t.volume)}L／${fmt(t.weight)}kg 未小於${cap}`;
+        return { unit: 'B', rule: 'R7', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，但${why}，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。` };
+      }
+      return { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」、非危險品，貨物合計 ${fmt(t.volume)}L／${fmt(t.weight)}kg 小於${cap}，由院區內固定班次巡迴收送，送出即自動排入最近班次。` };
     }
     if (!v.startDate || !v.endDate) return { unit: null, hint: '請填寫用車起日與迄日。' };
     const n = this.days(v.startDate, v.endDate);
@@ -88,6 +123,7 @@ const Guide = {
       if (!v.recvDate) out.push('希望收貨日期');
       else if (v.recvDate < this.todayStr()) out.push('希望收貨日期（不可早於今天）');
       if (!v.items || !v.items.length) out.push('貨物清單（至少 1 項）');
+      if (v.hazardTransport === 'no' && (v.items || []).some(it => it.hazardous)) out.push('危險品運輸（貨物清單含危險品，請選「是」）');
     }
     if (u === 'C' || u === 'D') {
       if (!v.departTime) out.push('出發時間');
@@ -153,7 +189,7 @@ const Guide = {
         break;
       }
     }
-    if ((r.unit === 'A' || r.unit === 'B') && items.some(it => it.hazardous)) {
+    if ((r.unit === 'A' || r.unit === 'B') && (items.some(it => it.hazardous) || v.hazardTransport === 'yes')) {
       warnings.push(`${this.UNITS[r.unit].name}目前沒有危險品欄位，請於備註說明並聯絡調度。`);
     }
     return { unit: r.unit, page: this.UNITS[r.unit].page, data, labels, warnings };

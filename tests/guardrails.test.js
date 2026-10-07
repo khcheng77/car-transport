@@ -2308,7 +2308,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
 
   test('R1／R2：寄件與收件據點相同 → 收貨申請，不同 → 幹線託運', () => {
     const G = fresh().Guide;
-    eq(G.route(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).unit, 'A');
+    eq(G.route(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', hazardTransport: 'no' })).unit, 'A');
     eq(G.route(base({ mode: 'goods', fromSite: 'D9', toSite: 'D3' })).unit, 'B');
     ok(!G.route(base({ mode: 'goods', fromSite: 'D9' })).unit, '缺收件據點未判定');
   });
@@ -2357,7 +2357,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     eq(b.unit, 'B'); eq(b.data.site, 'D9'); eq(b.data.destSite, 'D3'); eq(b.data.wantReceiveTime, '10:30');
     ok(!('pax' in b.data) && !('purpose' in b.data), '隱藏卡片（行程）的資料不帶入');
     ok(b.warnings.length === 1, '危險品提示');
-    const a = G.prefill(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: G.todayStr(), items: [box] }));
+    const a = G.prefill(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', hazardTransport: 'no', recvDate: G.todayStr(), items: [box] }));
     eq(a.unit, 'A'); eq(a.data.branch, 'D6'); eq(a.data.recvMode, 'asap', '今天且未填時間 → 越快越好');
   });
 
@@ -2367,7 +2367,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     ok(G.missing(d).some(m => m.includes('自己開車')));
     const c = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '新竹分公司', hasCargo: 'no', tripType: 'oneway' });
     ok(G.missing(c).some(m => m.includes('單程')), '新竹分公司非轉運點不可單程');
-    ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).some(m => m.includes('貨物')), '物品至少 1 項');
+    ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', hazardTransport: 'no' })).some(m => m.includes('貨物')), '物品至少 1 項');
   });
 
   test('引導紀錄：前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判', () => {
@@ -2726,6 +2726,60 @@ group('申請引導：隨行物品屬於隨身物品（G134）', () => {
     eq(G.route(o).unit, 'D'); ok(G.missing(o).includes('屬於隨身物品'));
     o.personalItems = 'yes'; o.items = [box];
     eq(G.missing(o).length, 0, '隨身物品不需貨物清單'); eq(G.prefill(o).data.items.length, 0, '不帶貨物清單');
+  });
+});
+
+group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
+  const FUT = '2099-03-01';
+  const g = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', mode: 'goods', fromSite: 'D6', toSite: 'D6',
+    recvDate: FUT, recvTime: '', hazardTransport: '', items: [] }, o);
+  const it = o => Object.assign({ name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 }, o);
+  test('同據點未選危險品運輸 → 未判定；不同據點不需選即院區物品轉運', () => {
+    const G = fresh().Guide;
+    const r = G.route(g()); ok(!r.unit && r.hint.includes('危險品運輸'), r.hint);
+    eq(G.route(g({ toSite: 'D3' })).unit, 'B');
+  });
+  test('危險品運輸 是 → 院區物品轉運（R6），帶入時提示危險品', () => {
+    const G = fresh().Guide;
+    const v = g({ hazardTransport: 'yes', items: [it()] });
+    const r = G.route(v); eq(r.unit, 'B'); eq(r.rule, 'R6');
+    eq(G.missing(v).length, 0, G.missing(v).join('、'));
+    const pf = G.prefill(v); eq(pf.data.site, 'D6'); eq(pf.data.destSite, 'D6'); ok(pf.warnings.length === 1, '危險品提示');
+  });
+  test('非危險品、合計皆小於收貨日巡迴車上限 → 巡迴物品轉運（R1）', () => {
+    const H = fresh(), G = H.Guide;
+    const veh = G.patrolVehicles('D6', FUT); ok(veh.length > 0, '有巡迴車');
+    const r = G.route(g({ hazardTransport: 'no', items: [it()] })); eq(r.unit, 'A'); eq(r.rule, 'R1');
+  });
+  test('合計體積或合計重量超過上限 → 院區物品轉運（R7）', () => {
+    const H = fresh(), G = H.Guide;
+    const cap = G.patrolVehicles('D6', FUT).reduce((a, x) => (x.volume > a.volume ? x : a));
+    // 單件不超過，但件數合計體積超過
+    const vol = g({ hazardTransport: 'no', items: [it({ l: 100, w: 100, h: 100, qty: Math.ceil(cap.volume / 1000) + 1, weight: 1 })] });
+    eq(G.route(vol).unit, 'B'); eq(G.route(vol).rule, 'R7'); ok(G.route(vol).reason.includes('合計'));
+    // 合計重量超過
+    const wt = g({ hazardTransport: 'no', items: [it({ weight: 1000 }), it({ name: '箱2', weight: 1000 })] });
+    eq(G.route(wt).unit, 'B', '4000kg 超過所有巡迴車重量上限');
+    // 剛好等於上限 → 非「小於」→ 院區物品轉運
+    const eqW = g({ hazardTransport: 'no', items: [it({ qty: 1, weight: Math.max(...G.patrolVehicles('D6', FUT).map(x => x.weight)) })] });
+    eq(G.route(eqW).unit, 'B', '等於上限不算小於');
+  });
+  test('單件體積或重量超過上限 → 院區物品轉運並指出物品', () => {
+    const G = fresh().Guide;
+    const r = G.route(g({ hazardTransport: 'no', items: [it(), it({ name: '大型機台', l: 500, w: 200, h: 200, qty: 1, weight: 10 })] }));
+    eq(r.unit, 'B'); ok(r.reason.includes('大型機台'), r.reason);
+  });
+  test('巡迴車依收貨日：該日車次改派小車時以小車上限判斷', () => {
+    const H = fresh(), G = H.Guide;
+    H.DB.regionalShifts.filter(s => s.branch === 'D6').forEach(s => H.ModuleA.setShiftPlan(FUT, s.id, { vehicle: 'V-L02', driver: null }));
+    const small = H.DB.vehicles.find(x => x.id === 'V-L02');
+    const v = g({ hazardTransport: 'no', items: [it({ l: 100, w: 100, h: 100, qty: Math.floor(small.volume / 1000) + 1, weight: 1 })] });
+    eq(G.route(v).unit, 'B', '超過當日小車容量');
+    eq(G.route(Object.assign({}, v, { recvDate: '2099-03-02' })).unit, 'A', '隔日仍為預設車輛（含大車）可放');
+  });
+  test('貨物清單含危險品卻選否 → 列為缺漏', () => {
+    const G = fresh().Guide;
+    ok(G.missing(g({ hazardTransport: 'no', items: [it({ hazardous: true })] })).some(m => m.includes('危險品運輸')));
   });
 });
 

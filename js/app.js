@@ -4930,7 +4930,7 @@ function renderDispUsageDetail(k, p) {
 let guideState = { view: 'list', detailId: null, query: { applicant: '', unit: '', status: '' }, resultIds: null, v: null, recId: null, shown: [] };
 function guideDefaults() {
   return { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
-    mode: '', fromSite: '', toSite: '', recvDate: Guide.todayStr(), recvTime: '', items: [],
+    mode: '', fromSite: '', toSite: '', recvDate: Guide.todayStr(), recvTime: '', hazardTransport: '', items: [],
     startDate: '', endDate: '',
     origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 1,
     hasCargo: '', personalItems: '', selfDrive: null };
@@ -5046,7 +5046,8 @@ function renderGuideDetail(p, id) {
   const filled = [fItem('申請人', `${gEsc(v.applicant)}${v.dept ? `（${gEsc(v.dept)}/${gEsc(v.ext)}）` : ''}`),
     fItem('運送內容', v.mode === 'goods' ? '只寄送物品（無人隨行）' : '有人要搭車')];
   if (cards.includes('K2')) filled.push(fItem('寄件據點', Guide.siteName(v.fromSite)), fItem('收件據點', Guide.siteName(v.toSite)),
-    fItem('希望收貨', `${dash(v.recvDate)} ${v.recvTime || '（越快越好）'}`));
+    fItem('希望收貨', `${dash(v.recvDate)} ${v.recvTime || '（越快越好）'}`),
+    fItem('危險品運輸', v.hazardTransport === 'yes' ? '是' : v.hazardTransport === 'no' ? '否' : dash('')));
   if (cards.includes('K4')) filled.push(fItem('用車期間', `${v.startDate} ～ ${v.endDate}（${Guide.days(v.startDate, v.endDate)} 天）`, { w2: true }));
   if (cards.includes('K6')) {
     filled.push(fItem('地點', `${Guide.placeName(v.origin)} → ${Guide.placeName(v.dest)}`, { w2: true }));
@@ -5146,11 +5147,12 @@ function renderGuideNew(p) {
       fInput('分機', `<input type="text" id="gf-ext" value="${gEsc(v.ext)}">`),
       fInput('運送內容', gPills('gf-mode', v.mode, [['goods', '📦 只寄送物品（無人隨行）'], ['people', '🚗 有人要搭車（可附帶物品）']]), { stack: true, full: true }),
     ].join('')))}
-    ${card('K2', '物品寄送', '寄件與收件據點相同＝院區內收送；不同＝跨據點幹線收送。', infoGrid('gg-K2', [
+    ${card('K2', '物品寄送', '寄件與收件據點相同、非危險品且貨物小於收貨日巡迴車上限＝巡迴物品轉運；危險品、超過巡迴車上限或不同據點＝院區物品轉運。', infoGrid('gg-K2', [
       fInput('寄件據點', `<select id="gf-fromSite">${siteOpts(v.fromSite)}</select>`),
       fInput('收件據點', `<select id="gf-toSite">${siteOpts(v.toSite)}</select>`),
       fInput('希望收貨日期', `<input type="date" id="gf-recvDate" min="${Guide.todayStr()}" value="${gEsc(v.recvDate)}">`),
       fInput('希望收貨時間 <span class="hint">選填；不填＝越快越好</span>', `<input type="time" id="gf-recvTime" value="${gEsc(v.recvTime)}">`),
+      fInput('危險品運輸', gPills('gf-hazardTransport', v.hazardTransport, [['yes', '是'], ['no', '否']]), { stack: true }),
     ].join('')))}
     ${card('K4', '用車期間', '起訖含當日計算；多天用車請填實際起訖日。', infoGrid('gg-K4', [
       fInput('起日', `<input type="date" id="gf-startDate" value="${gEsc(v.startDate)}">`),
@@ -5191,7 +5193,7 @@ function guideWire(p) {
     $('#gf-' + k, p).onchange = e => { v[k] = e.target.value; guideRefresh(p); };
   });
   const bools = { selfDrive: 1 };
-  ['mode', 'tripType', 'hasCargo', 'personalItems', 'selfDrive'].forEach(k => {
+  ['mode', 'hazardTransport', 'tripType', 'hasCargo', 'personalItems', 'selfDrive'].forEach(k => {
     $$(`input[name=gf-${k}]`, p).forEach(r => r.onchange = () => {
       v[k] = bools[k] ? r.value === 'yes' : r.value;
       $$(`#gf-${k}-wrap .radio-pill`, p).forEach(l => l.classList.toggle('sel', $('input', l).checked));
