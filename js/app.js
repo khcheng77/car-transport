@@ -2922,9 +2922,6 @@ function renderCrDetail(p, date) {
           <td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" data-crassign="${a.id}">手動指派</button>
             <button class="btn btn-danger btn-sm" data-crret="${a.id}">無車退回</button></td></tr>`).join('')}
       </tbody></table></div>`}
-      ${br ? `<div class="result ok" style="margin-top:14px;"><div class="r-head">✓ 批次 ${br.batch.id} 完成（派遣人 ${br.batch.triggeredBy}）</div>
-        <div>處理 ${br.batch.processed} 筆｜成功 ${br.batch.matched} 筆｜未媒合（仍待調度）${br.batch.coordinate} 筆｜產生派車單 ${br.dispatches.length} 張</div></div>
-        <div class="trace">${br.trace.join('\n')}</div>` : ''}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>派車單（${orders.length} 張）</span>
@@ -2959,6 +2956,10 @@ function renderCrDetail(p, date) {
       </div>
     </div>
     ${renderC_batchLog()}
+    ${br ? `<div class="card" id="cr-result"><div class="card-title">批次媒合結果</div>
+      <div class="result ok"><div class="r-head">✓ 批次 ${br.batch.id} 完成（派遣人 ${br.batch.triggeredBy}）</div>
+        <div>處理 ${br.batch.processed} 筆｜成功 ${br.batch.matched} 筆｜未媒合（仍待調度）${br.batch.coordinate} 筆${br.batch.noCar ? `｜無車可派（不同意併車）${br.batch.noCar} 筆` : ''}｜產生派車單 ${br.dispatches.length} 張</div></div>
+      <div class="trace">${br.trace.join('\n')}</div></div>` : ''}
     ${backBar('cr-back')}`;
   const rerender = () => { RENDER.c_review(); renderCaList(); };
   $('#cr-back').onclick = () => { Object.assign(cReview, { view: 'list', batchResult: null }); RENDER.c_review(); };
