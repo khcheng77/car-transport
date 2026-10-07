@@ -2191,6 +2191,7 @@ function cAppItems(a) {
     fItem('是否單程運輸', a.type === 'oneway' ? '是（終點須為交通轉運點）' : '否'),
     fItem('車輛起迄地點', cRouteStr(a), { full: true }),
     fItem('車輛報到日期時間', cAtStr(a.reportAt || `${a.departDate}T${a.earliestPickup}`)),
+    fItem('報到地點', gEsc(a.reportPlace || '—')),
     fItem('用車結束日期時間', a.type === 'round' ? cAtStr(a.endAt || `${a.returnDate}T${a.earliestReturn}`) : '<span class="muted">單程不適用</span>'),
     fItem('乘客數', a.passengers != null ? a.passengers : a.pax),
     fItem('是否同意併車', a.agreeCarpool === false ? '<b>否</b>（單獨派車）' : '是'),
@@ -2246,6 +2247,7 @@ function renderCApplyDetail(p, id) {
         fItem('建立時間', fmtTime(a.createdAt)),
       ]).join(''))}
     </div>
+    ${cCargoCard(a)}
     ${cChangeCard(a)}
     <div class="card">
       <div class="card-title">媒合與行程狀態</div>
@@ -2302,6 +2304,29 @@ function renderCApplyDetail(p, id) {
 // 車輛起迄地點：下拉選擇後加入，最多 8 點，依序；第一點＝起點、最後一點＝終點（媒合依起訖）
 let caRoute = [];
 const C_PLACES = () => [...new Set(DB.bizOrigins.concat(DB.bizDests))];
+// 隨身貨物（G136）：可編輯 grid，7 欄＝物品名稱、數量、長、寬、高、重量(KG)、物品外包裝
+let caCargo = [];
+const C_CARGO_COLS = [['name', '物品名稱', 'text', '例：樣品箱'], ['qty', '數量', 'number', ''], ['l', '長(cm)', 'number', ''],
+  ['w', '寬(cm)', 'number', ''], ['h', '高(cm)', 'number', ''], ['weight', '重量(KG)', 'number', ''], ['pack', '物品外包裝', 'text', '例：紙箱']];
+function renderCaCargo() {
+  const box = $('#ca-pcargo'); if (!box) return;
+  const cell = (r, i, [k, , type, ph]) => `<td><input type="${type}" data-pc="${i}" data-k="${k}" value="${gEsc(r[k])}"${type === 'number' ? ` min="${k === 'qty' ? 1 : 0}" step="${k === 'qty' ? 1 : 'any'}" style="width:80px;"` : ''}${ph ? ` placeholder="${ph}"` : ''}${k === 'pack' ? ' list="ca-pack-list"' : ''}></td>`;
+  box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr><th></th>${C_CARGO_COLS.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>
+    ${caCargo.length ? caCargo.map((r, i) => `<tr><td><button class="btn btn-ghost btn-sm" type="button" data-pcdel="${i}">刪除</button></td>${C_CARGO_COLS.map(c => cell(r, i, c)).join('')}</tr>`).join('')
+      : `<tr><td colspan="${C_CARGO_COLS.length + 1}" class="muted" style="text-align:center;padding:14px;">無隨身貨物（選填），需要時按右上角「＋ 新增」。</td></tr>`}
+    </tbody></table></div>
+    <datalist id="ca-pack-list">${ModuleC.CARGO_PACKS.map(x => `<option value="${x}">`).join('')}</datalist>`;
+  $$('#ca-pcargo [data-pc]').forEach(inp => inp.oninput = () => { caCargo[+inp.dataset.pc][inp.dataset.k] = inp.value; });
+  $$('#ca-pcargo [data-pcdel]').forEach(b => b.onclick = () => { caCargo.splice(+b.dataset.pcdel, 1); renderCaCargo(); initMasonry($('#page-c_apply')); });
+}
+// 明細／審核：隨身貨物唯讀 grid
+function cCargoCard(a) {
+  const rows = a.personalCargo || [];
+  return `<div class="card"><div class="card-title">隨身貨物 <span class="g-tag">G136</span></div>
+    ${rows.length ? `<div class="table-wrap"><table class="dt"><thead><tr>${C_CARGO_COLS.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>
+      ${rows.map(r => `<tr>${C_CARGO_COLS.map(([k]) => `<td>${gEsc(r[k] === '' || r[k] == null ? '—' : r[k])}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>` : '<div class="muted">無隨身貨物。</div>'}</div>`;
+}
 // 是／否單選（radio-pill）
 function cYesNo(name, val) {
   return `<div class="radio-group">${[['1', '是'], ['0', '否']].map(([v, t]) =>
@@ -2325,6 +2350,7 @@ function renderCApplyNew(p) {
   const src = editing || { applicant: `${me.unit}-${me.name}`, dept: me.unit, applicantPhone: me.ext, isOneway: false,
     route: [], reportAt: '2026-08-27T09:00', endAt: '2026-08-27T16:00', passengers: 2, agreeCarpool: true };
   caRoute = (src.route || []).slice();
+  caCargo = (src.personalCargo || []).map(r => Object.assign({}, r));
   const placeOpts = C_PLACES().map(o => `<option>${o}</option>`).join('');
   // 車屬據點：選項待業務提供，暫用據點主檔
   const baseOpts = ['<option value="">（請選擇）</option>'].concat(DB.sites.map(s => `<option value="${s.name}"${src.homeBase === s.name ? ' selected' : ''}>${s.name}</option>`)).join('');
@@ -2357,6 +2383,7 @@ function renderCApplyNew(p) {
       <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">用車時間</div>
       ${infoGrid('ca-time', [
         fInput('車輛報到日期時間 <span style="color:#c0392b;">*</span>', `<input type="datetime-local" id="ca-report" value="${v('reportAt')}">`),
+        fInput('報到地點 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-report-place" value="${v('reportPlace')}" placeholder="例：台北總部 B1 車道口">`),
         `<div id="ca-end-wrap">${fInput('用車結束日期時間 <span style="color:#c0392b;">*</span>', `<input type="datetime-local" id="ca-end" value="${v('endAt')}">`)}</div>`,
       ].join(''))}
       <div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin:6px 0 4px;">用車條件</div>
@@ -2375,6 +2402,11 @@ function renderCApplyNew(p) {
           fInput('護運單號 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-escort" value="${v('escortNo')}">`),
         ].join(''))}
       </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ink-soft);font-weight:600;margin:10px 0 4px;">
+        <span>隨身貨物 <span class="muted" style="font-weight:400;">（選填；僅記錄，不影響媒合）</span></span>
+        <button class="btn btn-accent btn-sm" type="button" id="ca-pcargo-add">＋ 新增</button>
+      </div>
+      <div id="ca-pcargo"></div>
       ${infoGrid('ca-remark-grid', fInput('備註', `<textarea id="ca-remark" rows="2">${v('remark')}</textarea>`, { stack: true, full: true }))}
       ${editing ? infoGrid('ca-change-grid', fInput('異動事由 <span style="color:#c0392b;">*</span>', `<textarea id="ca-change" rows="2" placeholder="請說明修改原因"></textarea>`, { stack: true, full: true })) : ''}
       <div class="callout info">起點、終點、報到與結束日期時間完全相同，且雙方都<b>同意併車</b>才會合併派車（G54）；經過地點不影響媒合。<b>不同意併車</b>：單獨派車，無車可派即直接無車退回。勾選特殊證 p／k 時，只會派有該通行證的車。單程運輸的終點須為交通轉運點。</div>
@@ -2403,6 +2435,8 @@ function renderCApplyNew(p) {
     caRoute.push(x); renderCaRoute(); initMasonry(p);
   };
   renderCaRoute();
+  renderCaCargo();
+  $('#ca-pcargo-add').onclick = () => { caCargo.push({ name: '', qty: 1, l: '', w: '', h: '', weight: '', pack: '' }); renderCaCargo(); initMasonry(p); };
   sync();
   guideApply('C', cApply, p); // 申請引導帶入（若有）
   if (editing) {
@@ -2417,6 +2451,7 @@ function renderCApplyNew(p) {
       captain: $('#ca-captain').value.trim(), captainPhone: $('#ca-captain-phone').value.trim(), homeBase: $('#ca-base').value,
       isOneway: cYes('ca-oneway', p), route: caRoute.slice(),
       reportAt: $('#ca-report').value, endAt: cYes('ca-oneway', p) ? '' : $('#ca-end').value,
+      reportPlace: $('#ca-report-place').value.trim(), personalCargo: caCargo.map(r => Object.assign({}, r)),
       passengers: +$('#ca-pax').value,
       agreeCarpool: cYes('ca-carpool', p), baseShuttle: cYes('ca-shuttle', p),
       permitP: cYes('ca-permitp', p), permitK: cYes('ca-permitk', p),
@@ -2462,7 +2497,7 @@ function loadCDemo() {
     // BZ005：回程日期不同（單天來回）→ 與 BZ001/002 不合併，示範日期須完全相同
     { type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '09:00', returnDate: D, earliestReturn: '16:00', pax: 3, applicant: '研發部-吳承恩', dept: '研發部', ext: '4102' },
   ];
-  demos.forEach(d => ModuleC.createApp(Object.assign({ reason: '客戶拜訪（範例）' }, d)));
+  demos.forEach(d => ModuleC.createApp(Object.assign({ reason: '客戶拜訪（範例）', reportPlace: `${d.origin} 大門` }, d)));
   toast('已載入 5 筆共乘申請（待二級審）', 'ok');
 }
 // 相容：審核端動作呼叫此函式刷新申請端 grid
@@ -2552,6 +2587,7 @@ function renderCApproveDetail(p, id) {
         a.reviewNote ? fItem('審核備註', a.reviewNote) : '',
       ]).join(''))}
     </div>
+    ${cCargoCard(a)}
     ${pending ? `
     <div class="card">
       <div class="card-title">單位主管審核 <span class="g-tag">G63</span></div>

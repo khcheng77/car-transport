@@ -2602,7 +2602,8 @@ group('副作用修正（G132）', () => {
 group('差旅共乘申請欄位改版（G133）', () => {
   const D = '2026-10-20';
   const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', applicantPhone: '0912-345-678', reason: '客戶拜訪',
-    isOneway: false, route: ['台北總部', '新竹分公司', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2 }, o);
+    isOneway: false, route: ['台北總部', '新竹分公司', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2,
+    reportPlace: '台北總部 B1 車道口' }, o);
   test('表單欄位存檔，媒合用內部欄位由起訖點／日期時間推導', () => {
     const C = fresh().ModuleC;
     const a = C.createApp(form());
@@ -2780,6 +2781,36 @@ group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
   test('貨物清單含危險品卻選否 → 列為缺漏', () => {
     const G = fresh().Guide;
     ok(G.missing(g({ hazardTransport: 'no', items: [it({ hazardous: true })] })).some(m => m.includes('危險品運輸')));
+  });
+});
+
+group('差旅共乘申請：報到地點與隨身貨物（G136）', () => {
+  const D = '2026-10-20';
+  const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', reason: '客戶拜訪', isOneway: false,
+    route: ['台北總部', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2, reportPlace: '台北總部大門' }, o);
+  const row = o => Object.assign({ name: '筆電包', qty: 1, l: 45, w: 35, h: 10, weight: 3, pack: '袋裝' }, o);
+  test('存檔報到地點與隨身貨物 7 欄（數字欄轉數值）', () => {
+    const C = fresh().ModuleC;
+    const a = C.createApp(form({ personalCargo: [row({ qty: '2', l: '45', weight: '3.5' })] }));
+    eq(a.reportPlace, '台北總部大門');
+    eq(JSON.stringify(a.personalCargo), JSON.stringify([{ name: '筆電包', qty: 2, l: 45, w: 35, h: 10, weight: 3.5, pack: '袋裝' }]));
+    eq(C.createApp(form()).personalCargo.length, 0, '未填隨身貨物＝空清單');
+  });
+  test('報到地點必填；隨身貨物可不填，填了則名稱、數量、長寬高、重量需有效', () => {
+    const C = fresh().ModuleC;
+    eq(C.formError(form()), null);
+    ok(/報到地點/.test(C.formError(form({ reportPlace: ' ' }))));
+    eq(C.formError(form({ personalCargo: [row(), row({ name: '樣品箱', pack: '' })] })), null, '外包裝可空白');
+    ok(/第 2 列.*物品名稱/.test(C.formError(form({ personalCargo: [row(), row({ name: '' })] }))));
+    ok(/數量/.test(C.formError(form({ personalCargo: [row({ qty: 0 })] }))));
+    ok(/長、寬、高/.test(C.formError(form({ personalCargo: [row({ h: 0 })] }))));
+    ok(/重量/.test(C.formError(form({ personalCargo: [row({ weight: '' })] }))));
+  });
+  test('隨身貨物不影響媒合（相同條件仍合併）', () => {
+    const C = fresh().ModuleC;
+    const a = C.createApp(form({ personalCargo: [row()] })), b = C.createApp(form());
+    C.approve(a); C.approve(b); C.runBatch(D, 't', { days: 0 });
+    ok(a.dispatchId && a.dispatchId === b.dispatchId, '同一張派車單');
   });
 });
 

@@ -92,6 +92,8 @@ const ModuleC = {
       reason: data.reason || '', projectCode: data.projectCode || '',
       captain: data.captain || '', captainPhone: data.captainPhone || '', homeBase: data.homeBase || '',
       isOneway, route, reportAt, endAt, passengers,
+      reportPlace: data.reportPlace || '',            // 報到地點（G136）
+      personalCargo: this._cargoRows(data.personalCargo),   // 隨身貨物（G136）
       agreeCarpool: data.agreeCarpool !== false,   // 未指定＝同意併車
       manifestNo: hasCargo ? (data.manifestNo || '') : '', escortNo: hasCargo ? (data.escortNo || '') : '',
       remark: data.remark || '',
@@ -106,6 +108,22 @@ const ModuleC = {
     this.YESNO.forEach(k => { f[k] = !!data[k]; });
     return f;
   },
+  /* 隨身貨物（G136）：物品名稱、數量、長、寬、高（cm）、重量（kg）、物品外包裝；僅記錄，不參與媒合 */
+  CARGO_PACKS: ['紙箱', '塑膠箱', '木箱', '袋裝', '桶裝', '無外包裝'],
+  _cargoRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map(r => ({ name: String(r.name || '').trim(), qty: +r.qty || 0,
+      l: +r.l || 0, w: +r.w || 0, h: +r.h || 0, weight: +r.weight || 0, pack: String(r.pack || '').trim() }));
+  },
+  cargoRowError(rows) {
+    for (let i = 0; i < (rows || []).length; i++) {
+      const r = rows[i], n = `隨身貨物第 ${i + 1} 列`;
+      if (!String(r.name || '').trim()) return `${n}：請填寫「物品名稱」`;
+      if (!(Number.isInteger(+r.qty) && +r.qty >= 1)) return `${n}：「數量」至少 1`;
+      if (!(+r.l > 0 && +r.w > 0 && +r.h > 0)) return `${n}：「長、寬、高」須大於 0`;
+      if (!(+r.weight > 0)) return `${n}：「重量(KG)」須大於 0`;
+    }
+    return null;
+  },
   /* 表單檢核（G133）：回傳錯誤字串或 null；opts.editing＝修改既有申請單（異動事由必填） */
   formError(data, opts) {
     const route = (data.route || []).filter(Boolean);
@@ -115,11 +133,13 @@ const ModuleC = {
     if (route.some((x, i) => i && x === route[i - 1])) return '「車輛起迄地點」相鄰地點不可重複';
     if (route[0] === route[route.length - 1]) return '「車輛起迄地點」起點與終點不可相同';
     if (!data.reportAt || !/T\d\d:\d\d/.test(data.reportAt)) return '請填寫「車輛報到日期時間」';
+    if (!(data.reportPlace || '').trim()) return '請填寫「報到地點」';
     if (!data.isOneway) {
       if (!data.endAt || !/T\d\d:\d\d/.test(data.endAt)) return '請填寫「用車結束日期時間」';
       if (data.endAt < data.reportAt) return '「用車結束日期時間」不可早於「車輛報到日期時間」';
     }
     if (!(+data.passengers >= 1)) return '「乘客數」至少 1 人';
+    const ce = this.cargoRowError(data.personalCargo); if (ce) return ce;
     if (data.hasCargo) {
       if (!(data.manifestNo || '').trim()) return '有載運品時「三聯單表單編號」為必填';
       if (!(data.escortNo || '').trim()) return '有載運品時「護運單號」為必填';
