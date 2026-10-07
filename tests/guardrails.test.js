@@ -2246,7 +2246,7 @@ group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
 group('狀態名稱對齊（G122：申請中～已回登）', () => {
   test('狀態清單只有 10 種，名稱對齊', () => {
     const H = fresh();
-    eq(H.Flow.STATES.map(x => x[1]).join(','), '申請中,待二級審,退回修編,待調度,無車退回,調度中,調度主管審,待出車,已出車,已回登,已取消');
+    eq(H.Flow.STATES.map(x => x[1]).join(','), '申請中,待二級審,退回修編,待調度,無車退回,調度中,調度主管審,待出車,已出車,已回登,已刪除');
   });
 
   test('四模組皆可暫存為「申請中」，送出後才進入下一關（A 直接排班；B/C/D 待二級審）', () => {
@@ -2680,7 +2680,7 @@ group('差旅共乘申請欄位改版（G133）', () => {
     ok(!C.cancelApp(a, ' ').ok, '事由必填');
     ok(C.cancelApp(a, '行程取消', a.applicant).ok);
     eq(a.status, 'cancelled'); eq(H.Flow.of(a), 'cancelled'); eq(a.changeLog[0].action, '取消'); eq(a.changeReason, '行程取消');
-    ok(!C.canCancel(a), '已取消不可再取消');
+    ok(!C.canCancel(a), '已刪除不可再取消'); eq(H.Flow.label('cancelled'), '已刪除');
     const b = C.createApp(form()); C.approve(b); C.runBatch(D, 't', { days: 0 });
     const order = C.dispatchOf(b);
     ok(C.cancelApp(b, '改搭高鐵').ok); ok(order.cancelled, '派車單空了即取消'); eq(b.dispatchId, null);

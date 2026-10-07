@@ -2238,29 +2238,10 @@ function cChangeCard(a) {
   const log = a.changeLog || [];
   if (!log.length && a.status !== 'cancelled') return '';
   return `<div class="card"><div class="card-title">異動紀錄 <span class="g-tag">G133</span></div>
-    ${a.status === 'cancelled' ? `<div class="callout" style="margin-bottom:10px;">此申請已<b>取消</b>（結案）｜${a.cancelledBy || '—'} ${a.cancelledAt ? fmtTime(a.cancelledAt) : ''}</div>` : ''}
+    ${a.status === 'cancelled' ? `<div class="callout" style="margin-bottom:10px;">此申請已<b>刪除</b>（申請人取消申請，結案）｜${a.cancelledBy || '—'} ${a.cancelledAt ? fmtTime(a.cancelledAt) : ''}</div>` : ''}
     ${log.length ? `<div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>異動人</th><th>異動事由</th></tr></thead><tbody>
       ${log.map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action}</td><td>${l.by || '—'}</td><td style="text-align:left;">${l.reason}</td></tr>`).join('')}
     </tbody></table></div>` : ''}</div>`;
-}
-// 取消申請（G133）：異動事由必填
-function openCCancelDialog(a) {
-  openModal(`取消申請 · ${a.id}`, `
-    <div class="callout" style="margin-bottom:12px;">取消後申請單<b>結案、不可再修改或重送</b>${a.dispatchId ? `；將自派車單 ${a.dispatchId} 移出` : ''}。</div>
-    ${infoGrid('cc-f', fInput('異動事由 <span style="color:#c0392b;">*</span>', `<textarea id="cc-reason" rows="2" placeholder="請說明取消原因"></textarea>`, { stack: true, full: true }))}
-    <div style="text-align:center;margin-top:18px;">
-      <button class="btn btn-danger" id="cc-ok">✕ 取消申請</button>
-      <button class="btn btn-ghost" id="cc-close">返回</button>
-    </div>`);
-  $('#cc-close').onclick = closeModal;
-  $('#cc-ok').onclick = async () => {
-    const reason = $('#cc-reason').value.trim();
-    if (!reason) { toast('取消申請時「異動事由」為必填', 'err'); $('#cc-reason').focus(); return; }
-    if (!(await confirmDialog({ title: '確認取消申請？', text: `${a.id} 將取消（結案）：${reason}` }))) return;
-    const r = ModuleC.cancelApp(a, reason, a.applicant);
-    if (!r.ok) { toast(r.error, 'err'); return; }
-    closeModal(); toast(`${a.id} 已取消`, 'ok'); RENDER.c_apply();
-  };
 }
 function renderCApplyDetail(p, id) {
   const a = ModuleC.applications.find(x => x.id === id);
@@ -2299,13 +2280,39 @@ function renderCApplyDetail(p, id) {
     </div>` : ''}
     ${returnedCard(a, 'cd-edit')}${noCarCard(a)}
     ${ModuleC.canCancel(a) ? `<div class="card">
-      <div class="card-title">取消申請 <span class="g-tag">G133</span></div>
-      <div class="card-desc">派車單送審前可取消；取消後結案，不可再修改或重送。已併入派車單者會自派車單移出。</div>
-      <button class="btn btn-danger btn-sm" id="cd-cancel-app">✕ 取消申請</button>
+      <div class="card-title">取消申請 <span class="g-tag">G133/G140</span></div>
+      <div class="radio-group" id="cd-cxl-wrap">
+        <label class="radio-pill"><input type="radio" name="cd-cxl" value="1">是</label>
+        <label class="radio-pill sel"><input type="radio" name="cd-cxl" value="0" checked>否</label>
+      </div>
+      <div id="cd-cxl-reason-wrap" style="display:none;margin-top:10px;">
+        ${infoGrid('cd-cxl-f', fInput('異動事由 <span style="color:#c0392b;">*</span>', `<textarea id="cd-cxl-reason" rows="2" placeholder="請說明取消原因"></textarea>`, { stack: true, full: true }))}
+      </div>
+      <div class="muted" style="margin-top:8px;">否＝資料不變；是＝取消申請，狀態改為「已刪除」（結案，不可再修改或重送；已併入未送審派車單者自派車單移出）。派車單送審後不可取消。</div>
     </div>` : ''}
-    ${backBar('cd-back')}`;
-  const cca = $('#cd-cancel-app');
-  if (cca) cca.onclick = () => openCCancelDialog(a);
+    <div style="text-align:center;margin-top:28px;">
+      ${ModuleC.canCancel(a) ? '<button class="btn btn-primary" id="cd-cxl-submit">▶ 送出</button>' : ''}
+      <button class="btn btn-ghost" id="cd-back">← 回上一頁</button>
+    </div>`;
+  // 取消申請（G140）：是／否＋送出；是＝已刪除（異動事由必填），否＝資料不變；送出前確認
+  $$('#page-c_apply input[name=cd-cxl]').forEach(r => r.onchange = () => {
+    $$('#cd-cxl-wrap .radio-pill').forEach(l => l.classList.toggle('sel', $('input', l).checked));
+    $('#cd-cxl-reason-wrap').style.display = cYes('cd-cxl', p) ? '' : 'none';
+    initMasonry(p);
+  });
+  const cxs = $('#cd-cxl-submit');
+  if (cxs) cxs.onclick = async () => {
+    const yes = cYes('cd-cxl', p), reason = yes ? $('#cd-cxl-reason').value.trim() : '';
+    if (yes && !reason) { toast('取消申請時「異動事由」為必填', 'err'); $('#cd-cxl-reason').focus(); return; }
+    const ok = await confirmDialog(yes
+      ? { title: '確認取消申請？', text: `${a.id} 狀態將改為「已刪除」（結案）${a.dispatchId ? `，並自派車單 ${a.dispatchId} 移出` : ''}：${reason}` }
+      : { title: '確認送出？', text: '取消申請＝<b>否</b>：資料不變。' });
+    if (!ok) return;
+    if (!yes) { toast(`${a.id} 資料未變更`, 'ok'); return; }
+    const r = ModuleC.cancelApp(a, reason, a.applicant);
+    if (!r.ok) { toast(r.error, 'err'); return; }
+    toast(`${a.id} 已刪除`, 'ok'); RENDER.c_apply();
+  };
   const ced = $('#cd-edit');
   if (ced) ced.onclick = () => { cApply.editId = a.id; cApply.view = 'new'; RENDER.c_apply(); };
   $('#cd-back').onclick = () => { cApply.view = 'list'; RENDER.c_apply(); };
@@ -2497,12 +2504,12 @@ function renderCApplyNew(p) {
     </div>
     <div style="text-align:center;margin-top:28px;">
       <button class="btn btn-primary" id="ca-submit">▶ 送出</button>
-      ${editing ? '' : '<button class="btn btn-ghost" id="ca-cancel">取消</button>'}
-      <button class="btn btn-ghost" id="cn-back">← 回上一頁</button>
+      ${editing ? '<button class="btn btn-ghost" id="cn-back">← 回上一頁</button>' : '<button class="btn btn-ghost" id="ca-cancel">取消</button>'}
     </div>`;
   const cBack = () => { if (editing) { cApply.view = 'detail'; cApply.detailId = editing.id; } else cApply.view = 'list'; cApply.editId = null; RENDER.c_apply(); };
-  $('#cn-back').onclick = cBack;
-  if ($('#ca-cancel')) $('#ca-cancel').onclick = cBack;   // 取消：僅從查詢頁按「新增」進入時顯示
+  // 新增（查詢頁按「新增」）只顯示「取消」；修改（明細頁進入）只顯示「回上一頁」（G140）
+  if ($('#cn-back')) $('#cn-back').onclick = cBack;
+  if ($('#ca-cancel')) $('#ca-cancel').onclick = cBack;
   // radio-pill 選取樣式＋連動顯示
   const sync = () => {
     $$('#page-c_apply .radio-pill').forEach(l => l.classList.toggle('sel', $('input', l).checked));

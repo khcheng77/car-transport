@@ -19,7 +19,7 @@ const ModuleC = {
   createApp(data, opts) {
     const app = Object.assign({ id: 'BZ' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
       approvedAt: null,
-      status: opts && opts.draft ? 'draft' : 'submitted',   // draft（申請中）|submitted（待二級審）|approved（待調度）|rejected（退回修編）|noCar（無車退回）|matched（併入派車單）|cancelled（已取消 G133）；顯示狀態由 Flow 推導
+      status: opts && opts.draft ? 'draft' : 'submitted',   // draft（申請中）|submitted（待二級審）|approved（待調度）|rejected（退回修編）|noCar（無車退回）|matched（併入派車單）|cancelled（已刪除：申請人取消申請 G133／G140）；顯示狀態由 Flow 推導
       vehicle: null, driver: null, driver2: null,
       groupId: null, dispatchId: null,
       note: '',
