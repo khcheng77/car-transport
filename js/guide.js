@@ -28,6 +28,10 @@ const Guide = {
       && DB.bizOrigins.includes(v.origin) && DB.bizDests.includes(v.dest);
   },
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
+  /* 隨行物品（G134）：有隨行物品時再問「屬於隨身物品」（是／否）。
+     bulkCargo＝有物品且非隨身物品（需填貨物清單、走一般用車）；noCargoForShare＝沒有物品或只有隨身物品（可走差旅共乘）。 */
+  bulkCargo(v) { return v.hasCargo === 'yes' && v.personalItems === 'no'; },
+  noCargoForShare(v) { return v.hasCargo === 'no' || (v.hasCargo === 'yes' && v.personalItems === 'yes'); },
 
   /* ---- 卡片出現規則（規格 5.2）---- */
   visibleCards(v) {
@@ -40,7 +44,7 @@ const Guide = {
       out.push('K4');
       if (this.days(v.startDate, v.endDate) != null) {
         out.push('K6');
-        if (v.hasCargo === 'yes') out.push('K3');
+        if (this.bulkCargo(v)) out.push('K3');   // 非隨身物品才需貨物清單（G134）
       }
     }
     out.push('K7');
@@ -64,11 +68,14 @@ const Guide = {
     if (!this.inBizList(v)) {
       return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；地點不在共乘清單（${this.placeName(v.origin)} → ${this.placeName(v.dest)}），由調度人工確認資源後派車，可自駕。` };
     }
-    if (v.hasCargo === 'yes') {
-      return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；需攜帶物品，出差共乘不處理貨物，改由一般用車派車，可自駕。` };
+    if (v.hasCargo !== 'no' && v.hasCargo !== 'yes') return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內。請選擇是否有隨行物品。` };
+    if (v.hasCargo === 'yes' && v.personalItems !== 'yes' && v.personalItems !== 'no') {
+      return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內且有隨行物品。請選擇隨行物品是否屬於隨身物品。` };
     }
-    if (v.hasCargo !== 'no') return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內。請選擇是否有隨行物品。` };
-    return { unit: 'C', rule: 'R4', days: n, reason: `用車期間 ${n} 天；往返共乘清單內的地點（${v.origin} → ${v.dest}）且未攜帶物品，由系統自動併車共乘。` };
+    if (this.bulkCargo(v)) {
+      return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；隨行物品不屬於隨身物品，出差共乘不處理貨物，改由一般用車派車，可自駕。` };
+    }
+    return { unit: 'C', rule: 'R4', days: n, reason: `用車期間 ${n} 天；往返共乘清單內的地點（${v.origin} → ${v.dest}）且${v.hasCargo === 'yes' ? '隨行物品屬於隨身物品' : '未攜帶物品'}，由系統自動併車共乘。` };
   },
 
   /* ---- 判定後仍缺少的欄位（全部填齊才可「前往並帶入」）---- */
@@ -88,11 +95,12 @@ const Guide = {
       if (needBack && !v.backTime) out.push(u === 'C' ? '回程上車時間' : '結束時間');
       if (!(Number.isInteger(+v.pax) && +v.pax >= 1)) out.push('人數（至少 1 人）');
       if (!v.hasCargo) out.push('隨行物品');
+      else if (v.hasCargo === 'yes' && !v.personalItems) out.push('屬於隨身物品');
     }
     if (u === 'C' && v.tripType === 'oneway' && !this.canOneway(v)) out.push('行程型態（單程限目的地為交通轉運點）');
     if (u === 'D') {
       if ((v.origin === this.OTHER || v.dest === this.OTHER) && !(v.otherPlace || '').trim()) out.push('其他地點說明');
-      if (v.hasCargo === 'yes' && (!v.items || !v.items.length)) out.push('貨物清單（至少 1 項）');
+      if (this.bulkCargo(v) && (!v.items || !v.items.length)) out.push('貨物清單（至少 1 項）');
       if (typeof v.selfDrive !== 'boolean') out.push('沒有司機時可否自己開車');
       if (v.startDate === v.endDate && v.departTime && v.backTime && v.backTime <= v.departTime) out.push('結束時間（須晚於出發時間）');
     }
@@ -137,10 +145,11 @@ const Guide = {
       case 'D': {
         const place = `${this.placeName(v.origin)} → ${this.placeName(v.dest)}${(v.otherPlace || '').trim() ? '：' + v.otherPlace.trim() : ''}`;
         data = Object.assign({}, who, { startDate: v.startDate, startTime: v.departTime, endDate: v.endDate, endTime: v.backTime,
-          pax: +v.pax, selfDrive: v.selfDrive, purpose: place, items: v.hasCargo === 'yes' ? items : [] });
+          pax: +v.pax, selfDrive: v.selfDrive, purpose: place, items: this.bulkCargo(v) ? items : [] });
         labels.push('申請人', `用車 ${v.startDate} ${v.departTime} ～ ${v.endDate} ${v.backTime}`, `${v.pax} 人`,
           `自駕：${v.selfDrive ? '可以' : '不行'}`, '行程說明');
-        if (v.hasCargo === 'yes') labels.push(`隨行貨物 ${items.length} 項`);
+        if (this.bulkCargo(v)) labels.push(`隨行貨物 ${items.length} 項`);
+        else if (v.hasCargo === 'yes') labels.push('隨行物品屬隨身物品（不帶貨物清單）');
         break;
       }
     }

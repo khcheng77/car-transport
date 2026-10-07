@@ -4933,7 +4933,7 @@ function guideDefaults() {
     mode: '', fromSite: '', toSite: '', recvDate: Guide.todayStr(), recvTime: '', items: [],
     startDate: '', endDate: '',
     origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 1,
-    hasCargo: '', selfDrive: null };
+    hasCargo: '', personalItems: '', selfDrive: null };
 }
 const gEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 // 單選膠囊：opts = [[value, 文字], ...]；cur 為目前值（布林以 'yes'/'no' 表示）
@@ -5055,7 +5055,8 @@ function renderGuideDetail(p, id) {
     if (share) filled.push(fItem('行程型態', v.tripType === 'oneway' ? '單程（送到轉運點）' : '來回'));
     filled.push(fItem('出發時間', dash(v.departTime)));
     if (!(share && v.tripType === 'oneway')) filled.push(fItem(share ? '回程上車時間' : '結束時間', dash(v.backTime)));
-    filled.push(fItem('人數', `${v.pax} 人`), fItem('隨行物品', v.hasCargo === 'yes' ? '有' : '沒有'));
+    filled.push(fItem('人數', `${v.pax} 人`), fItem('隨行物品', v.hasCargo === 'yes'
+      ? (v.personalItems === 'yes' ? '有（屬於隨身物品）' : v.personalItems === 'no' ? '有（不屬於隨身物品）' : '有') : '沒有'));
     if (r.unit === 'D') filled.push(fItem('可否自己開車', yn(v.selfDrive, '可以', '不行')));
   }
   const acts = [];
@@ -5156,7 +5157,7 @@ function renderGuideNew(p) {
       fInput('迄日', `<input type="date" id="gf-endDate" value="${gEsc(v.endDate)}">`),
       fItem('天數', `<span id="gf-days">—</span>`),
     ].join('')))}
-    ${card('K6', '行程', '出發地／目的地都在共乘清單、且未攜帶物品時可自動併車共乘；其他地點選「其他」。', infoGrid('gg-K6', [
+    ${card('K6', '行程', '出發地／目的地都在共乘清單，且沒有隨行物品或只有隨身物品時可自動併車共乘；其他地點選「其他」。', infoGrid('gg-K6', [
       fInput('出發地', `<select id="gf-origin">${placeOpts(DB.bizOrigins, v.origin, '其他地點')}</select>`),
       fInput('目的地', `<select id="gf-dest">${placeOpts(DB.bizDests, v.dest, '其他地點／多點')}</select>`),
       fInput('其他地點說明', `<input type="text" id="gf-otherPlace" value="${gEsc(v.otherPlace)}" placeholder="例：新竹科學園區客戶（多點洽公）">`, { w2: true }),
@@ -5165,6 +5166,7 @@ function renderGuideNew(p) {
       fInput(`<span id="gf-backLabel">結束時間</span>`, `<input type="time" id="gf-backTime" value="${gEsc(v.backTime)}">`),
       fInput('人數', `<input type="number" id="gf-pax" min="1" step="1" value="${gEsc(v.pax)}">`),
       fInput('隨行物品', gPills('gf-hasCargo', v.hasCargo, [['no', '沒有'], ['yes', '有']]), { stack: true }),
+      fInput('屬於隨身物品 <span class="hint">隨身物品仍可共乘</span>', gPills('gf-personalItems', v.personalItems, [['yes', '是'], ['no', '否']]), { stack: true }),
       fInput('沒有司機時可否自己開車', gPills('gf-selfDrive', gYN(v.selfDrive), [['yes', '可以'], ['no', '不行']]), { stack: true, w2: true }),
     ].join('')))}
     ${card('K3', '貨物清單', '欄位比照物流申請（長寬高／類別／件數／重量），並標註是否為危險品。', `<div id="gf-items"></div>`,
@@ -5189,7 +5191,7 @@ function guideWire(p) {
     $('#gf-' + k, p).onchange = e => { v[k] = e.target.value; guideRefresh(p); };
   });
   const bools = { selfDrive: 1 };
-  ['mode', 'tripType', 'hasCargo', 'selfDrive'].forEach(k => {
+  ['mode', 'tripType', 'hasCargo', 'personalItems', 'selfDrive'].forEach(k => {
     $$(`input[name=gf-${k}]`, p).forEach(r => r.onchange = () => {
       v[k] = bools[k] ? r.value === 'yes' : r.value;
       $$(`#gf-${k}-wrap .radio-pill`, p).forEach(l => l.classList.toggle('sel', $('input', l).checked));
@@ -5219,7 +5221,8 @@ function guideRefresh(p, initial) {
   const showItem = (id, on) => { const gi = $('#' + id, p).closest('.grid-item'); gi.style.display = on ? '' : 'none'; };
   const other = v.origin === Guide.OTHER || v.dest === Guide.OTHER;
   showItem('gf-otherPlace', other);
-  const share = Guide.inBizList(v) && v.hasCargo !== 'yes'; // 可能走出差共乘：顯示行程型態、回程上車時間
+  showItem('gf-personalItems-wrap', v.hasCargo === 'yes');   // 有隨行物品才問是否屬於隨身物品（G134）
+  const share = Guide.inBizList(v) && !Guide.bulkCargo(v); // 可能走出差共乘：顯示行程型態、回程上車時間
   showItem('gf-tripType-wrap', share);
   showItem('gf-backTime', !(share && v.tripType === 'oneway'));
   showItem('gf-selfDrive-wrap', r.unit === 'D');
