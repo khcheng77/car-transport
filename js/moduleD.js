@@ -13,6 +13,8 @@ const ModuleD = {
   approveSeq: 1,
 
   CATEGORY: { general: '一般用車', routine: '例行用車' },
+  TRANSPORT_TYPES: ['一般', '自駕', '演訓', '演訓自駕', '院區接駁'],
+  showExercisePlan(data) { return (data.category || 'general') === 'general' && data.transportType === '演訓'; },
   MAX_DRIVERS: 2,   // 雙駕駛：同一筆派車紀錄掛 1～2 位司機（G84）
 
   /* ---- 時間工具：以 UTC 純算術換算，避免時區/日光節約影響比較 ---- */
@@ -42,10 +44,12 @@ const ModuleD = {
   canChooseRoutine(role) { return DB.routineRoles.includes(role); },
 
   /* ---- 申請單欄位驗證（G75/G81/G85）：回傳錯誤訊息陣列，空陣列＝通過 ---- */
-  validate(data) {
+  validate(data, opts = {}) {
     const errs = [];
     const cat = data.category || 'general';
     if (!this.CATEGORY[cat]) errs.push('用車類別不正確');
+    if (data.transportType && !this.TRANSPORT_TYPES.includes(data.transportType)) errs.push('運輸類別請選擇清單中的類別');
+    if ((data.selfDrivers || []).length > 8) errs.push('自駕人最多 8 筆');
     if (cat === 'routine' && !this.canChooseRoutine(data.role)) errs.push('「例行用車」類別僅限總經理／部長秘書等特定角色申請');
     if (!data.applicant) errs.push('請填寫申請人');
     if (!data.startDate || !data.startTime || !data.endDate || !data.endTime) {
@@ -55,6 +59,14 @@ const ModuleD = {
     }
     if (!(Number.isInteger(+data.pax) && +data.pax >= 1)) errs.push('人數至少 1 人（一般用車必有人隨行，純載貨請走運輸申請）');
     if (typeof data.selfDrive !== 'boolean') errs.push('請選擇是否自駕');
+    if (data.campus && !DB.sites.some(site => site.id === data.campus)) errs.push('車屬院區請選擇清單中的院區');
+    const prefs = data.vehiclePreferences || [];
+    if ((opts.requireFirstPreference || prefs.some(Boolean)) && !prefs[0]) errs.push('請選擇車種順位 1');
+    if (prefs.length > 3 || new Set(prefs.filter(Boolean)).size !== prefs.filter(Boolean).length) errs.push('車種順位最多 3 種，且不可重複');
+    if (prefs.some(type => type && !DB.vehicles.some(vehicle => vehicle.pool === 'BIZ' && vehicle.type === type))) errs.push('車種順位請選擇清單中的車種');
+    (data.locations || []).forEach((loc, i) => {
+      if (!String(loc.name || '').trim()) errs.push(`行程第 ${i + 1} 筆請填地點名稱，或刪除空白列`);
+    });
     const codes = DB.permitTypes.map(p => p.code);
     (data.permits || []).forEach(c => { if (!codes.includes(c)) errs.push(`未知的管制區通行證：${c}`); });
     (data.items || []).forEach((it, i) => {
@@ -66,21 +78,55 @@ const ModuleD = {
   },
 
   _fields(data) {
+    // 新表單的 K／P 選項沿用 G85 通行證交集篩選，並相容舊 permits 欄位。
+    const permits = new Set(data.permits || []);
+    const needZuoyingPermit = data.needZuoyingPermit == null ? permits.has('K') : !!data.needZuoyingPermit;
+    const needMndPermit = data.needMndPermit == null ? permits.has('P') : !!data.needMndPermit;
+    if (needZuoyingPermit) permits.add('K'); else permits.delete('K');
+    if (needMndPermit) permits.add('P'); else permits.delete('P');
     return {
       category: data.category || 'general',                  // 用車類別（G81）
+      transportType: data.transportType || '一般',
+      exercisePlanName: this.showExercisePlan(data) ? String(data.exercisePlanName || '').trim() : '',
+      oneWay: !!data.oneWay,
+      allowMerge: !!data.allowMerge,
+      continueMatching: !!(data.continueMatching == null ? data.waitDriver : data.continueMatching),
+      willingSelfDrive: !!data.willingSelfDrive,
+      qualifiedLicense: !!data.qualifiedLicense,
+      triplicateFormNo: String(data.triplicateFormNo || '').trim(),
+      escortOrderNo: String(data.escortOrderNo || '').trim(),
+      requestReview: data.requestReview !== false,
+      crossCampus: !!data.crossCampus,
+      hasCargo: !!data.hasCargo,
+      hazardousCargo: !!data.hazardousCargo,
+      pyrotechnicCargo: !!data.pyrotechnicCargo,
+      needsHoisting: !!data.needsHoisting,
+      selfDrivers: (data.selfDrivers || []).map(person => ({ name: String(person.name || '').trim(), ext: String(person.ext || '').trim(), phone: String(person.phone || '').trim() })),
       applicant: data.applicant,
       dept: data.dept || '',
       ext: data.ext || '',
+      planCode: String(data.planCode || '').trim(),
+      vehiclePreferences: (data.vehiclePreferences || []).map(type => String(type || '').trim()).slice(0, 3),
+      needZuoyingPermit,
+      needMndPermit,
+      changeReason: String(data.changeReason || '').trim(),
+      remarks: String(data.remarks || '').trim(),
+      campus: String(data.campus || '').trim(),
+      pickupLocation: String(data.pickupLocation || '').trim(),
+      leader: String(data.leader || '').trim(),
+      leaderExt: String(data.leaderExt || '').trim(),
+      leaderPhone: String(data.leaderPhone || '').trim(),
+      locations: (data.locations || []).map((loc, i) => ({ name: String(loc.name || '').trim(), order: i + 1 })),
       startDate: data.startDate, startTime: data.startTime,  // 用車起（必填；時長不分類別，數小時～數個月 G81）
       endDate: data.endDate, endTime: data.endTime,          // 用車迄
       pax: +data.pax,                                        // 人數 ≥ 1（人貨不互斥 G75）
       selfDrive: data.selfDrive,                             // 是否自駕（不做資格檢核 G78）
-      waitDriver: data.selfDrive === true && !!data.waitDriver, // 願意等待駕駛媒合（須同時勾自駕；補派司機前提 G84）
+      waitDriver: data.selfDrive === true && !!(data.continueMatching == null ? data.waitDriver : data.continueMatching), // 願意等待駕駛媒合（須同時勾自駕；補派司機前提 G84）
       holidayOT: !!data.holidayOT,                           // 假日加班需求（僅提示 G87）
       nightOT: !!data.nightOT,                               // 夜間加班需求（僅提示 G87）
-      permits: [...new Set(data.permits || [])],             // 所需管制區通行證（交集篩選 G85）
+      permits: [...permits],                                // 所需管制區通行證（交集篩選 G85）
       enterTaipei: !!data.enterTaipei,                       // 是否會進入台北市（噸位提示 G86）
-      purpose: data.purpose || '',                           // 行程說明（選填：上車地點／目的地／事由）
+      purpose: data.purpose || '',                           // 用車事由（舊版行程說明保留於此欄位）
       items: (data.items || []).map(it => Object.assign({ hazardous: false }, it)), // 隨行貨物（選填）
     };
   },
@@ -151,7 +197,7 @@ const ModuleD = {
     const wasReturned = app.status === 'rejected';
     Object.assign(app, this._fields(data));
     app.status = 'submitted';
-    this._log(app, '修改後重新送出', data.applicant, wasReturned ? `退回修編意見：${app.reviewNote || '—'}` : '');
+    this._log(app, '修改後重新送出', data.applicant, [wasReturned ? `退回修編意見：${app.reviewNote || '—'}` : '', app.changeReason ? `異動事由：${app.changeReason}` : ''].filter(Boolean).join('；'));
     app.reviewNote = '';
     return app;
   },

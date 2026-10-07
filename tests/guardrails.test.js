@@ -2341,7 +2341,9 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     eq(G.missing(dv).length, 0, '欄位齊全：' + G.missing(dv).join('、'));
     const d = G.prefill(dv);
     eq(d.unit, 'D'); eq(H.ModuleD.validate(d.data).length, 0, 'D 驗證：' + H.ModuleD.validate(d.data).join('、'));
-    ok(d.data.purpose.includes('新竹科學園區'), '其他地點寫入行程說明'); eq(d.data.items[0].hazardous, true);
+    eq(d.data.pickupLocation, '台北總部', '出發地帶入上車地點');
+    ok(d.data.locations[0].name.includes('新竹科學園區'), '目的地帶入行程地點');
+    eq(d.data.purpose, '', '引導不把目的地當成用車事由'); eq(d.data.items[0].hazardous, true);
     const mv = base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-03-03', origin: '台中辦公室', dest: G.OTHER, otherPlace: '彰化客戶',
       hasCargo: 'no', selfDrive: false });
     const m = G.prefill(mv);
@@ -2850,6 +2852,180 @@ group('差旅共乘申請：是否送審（G139）', () => {
     eq(a.status, 'draft'); eq(a.projectCode, 'P-1'); eq(a.revisions.length, 1);
     let err = ''; C.approve(C.createApp(form())); const b = C.applications[1];
     try { C.saveDraft(b, form()); } catch (e) { err = e.message; } ok(err, '待調度不可改');
+  });
+});
+
+group('一般用車計畫、車長及行程地點', () => {
+  const data = () => ({ applicant: '測試申請人', startDate: '2027-01-05', startTime: '09:00', endDate: '2027-01-05', endTime: '12:00', pax: 1, selfDrive: false, items: [],
+    planCode: ' PLAN-01 ', leader: ' 測試車長 ', leaderExt: ' 123 ', leaderPhone: ' 測試手機 ', locations: [{ name: ' 起點 ', order: 1 }, { name: '終點', order: 2 }] });
+  test('暫存複製行程，修改及重新送出保留計畫與車長聯絡資料', () => {
+    const D = fresh().ModuleD, input = data(), app = D.createApp(input, { draft: true });
+    eq(app.planCode, 'PLAN-01'); eq(app.leader, '測試車長'); eq(app.leaderExt, '123'); eq(app.leaderPhone, '測試手機');
+    input.locations[0].name = '變更地點'; eq(app.locations[0].name, '起點', '行程不共用輸入物件');
+    input.locations.reverse(); D.saveDraft(app, input);
+    eq(app.locations[0].name, '終點'); eq(app.locations[0].order, 1); eq(app.locations[1].order, 2);
+    D.resubmit(app, input); eq(app.status, 'submitted');
+    D.reject(app, '補充資料'); D.resubmit(app, Object.assign({}, input, { planCode: 'PLAN-02', leaderPhone: '新聯絡資料' }));
+    eq(app.planCode, 'PLAN-02'); eq(app.leaderPhone, '新聯絡資料'); eq(app.locations[0].name, '終點');
+  });
+  test('有行程列時要求地點名稱，刪除全部地點仍可申請', () => {
+    const D = fresh().ModuleD, input = data();
+    ok(D.validate(Object.assign({}, input, { locations: [{ name: ' ' }] })).some(e => e.includes('地點名稱')));
+    eq(D.validate(Object.assign({}, input, { locations: [] })).length, 0);
+  });
+  test('未填新欄位的舊申請仍可建立及暫存修改', () => {
+    const D = fresh().ModuleD, input = data();
+    for (const key of ['planCode', 'leader', 'leaderExt', 'leaderPhone', 'locations']) delete input[key];
+    const app = D.createApp(input, { draft: true }); D.saveDraft(app, input);
+    eq(app.planCode, ''); eq(app.leader, ''); eq(app.locations.length, 0);
+  });
+  test('上車地點、事由及車屬院區獨立儲存，修改時可分別更新或清空', () => {
+    const H = fresh(), D = H.ModuleD, input = Object.assign(data(), { campus: H.DB.sites[0].id, pickupLocation: ' 行政樓門口 ', purpose: '公務拜訪' });
+    const app = D.createApp(input, { draft: true });
+    eq(app.pickupLocation, '行政樓門口'); eq(app.purpose, '公務拜訪'); eq(app.campus, input.campus);
+    D.saveDraft(app, Object.assign({}, input, { pickupLocation: '側門', purpose: '設備維修' }));
+    eq(app.pickupLocation, '側門'); eq(app.purpose, '設備維修'); eq(app.campus, input.campus);
+    D.resubmit(app, Object.assign({}, input, { pickupLocation: '', campus: '' }));
+    eq(app.pickupLocation, ''); eq(app.campus, ''); eq(app.purpose, '公務拜訪');
+  });
+  test('車屬院區允許選填，已選值須存在於院區清單', () => {
+    const D = fresh().ModuleD;
+    eq(D.validate(Object.assign(data(), { campus: '' })).length, 0);
+    ok(D.validate(Object.assign(data(), { campus: '__unknown' })).some(e => e.includes('車屬院區')));
+  });
+});
+
+group('一般用車車種順位、證件需求及備註', () => {
+  const data = () => ({ applicant: '測試申請人', startDate: '2027-01-05', startTime: '09:00', endDate: '2027-01-05', endTime: '12:00', pax: 1, selfDrive: false, items: [] });
+  test('表單僅第一順位必填，第二及第三順位可留空', () => {
+    const H = fresh(), D = H.ModuleD, type = H.DB.vehicles.find(v => v.pool === 'BIZ').type;
+    ok(D.validate(data(), { requireFirstPreference: true }).some(e => e.includes('順位 1')));
+    eq(D.validate(Object.assign(data(), { vehiclePreferences: [type, '', ''] }), { requireFirstPreference: true }).length, 0);
+    ok(D.validate(Object.assign(data(), { vehiclePreferences: ['', type, ''] })).some(e => e.includes('順位 1')));
+  });
+  test('車種順位不接受重複車種或清單外的值', () => {
+    const H = fresh(), D = H.ModuleD, type = H.DB.vehicles.find(v => v.pool === 'BIZ').type;
+    ok(D.validate(Object.assign(data(), { vehiclePreferences: [type, type, ''] })).some(e => e.includes('不可重複')));
+    ok(D.validate(Object.assign(data(), { vehiclePreferences: ['未知車種', '', ''] })).some(e => e.includes('清單中的車種')));
+  });
+  test('順位及證件需求可回填修改，異動事由與備註獨立儲存並可清空', () => {
+    const H = fresh(), D = H.ModuleD, type = H.DB.vehicles.find(v => v.pool === 'BIZ').type;
+    const input = Object.assign(data(), { vehiclePreferences: [type, '', ''], needZuoyingPermit: true, needMndPermit: false, changeReason: ' 修改時間 ', remarks: ' 聯絡車長 ' });
+    const app = D.createApp(input, { draft: true });
+    input.vehiclePreferences[0] = '變更輸入';
+    eq(app.vehiclePreferences[0], type); eq(app.vehiclePreferences.length, 3); eq(app.vehiclePreferences[1], '');
+    eq(app.needZuoyingPermit, true); eq(app.needMndPermit, false); eq(app.changeReason, '修改時間'); eq(app.remarks, '聯絡車長');
+    D.resubmit(app, Object.assign(data(), { vehiclePreferences: [type, '', ''], needMndPermit: true, changeReason: '更新行程', remarks: '' }));
+    eq(app.needZuoyingPermit, false); eq(app.needMndPermit, true); eq(app.remarks, '');
+    ok(app.log.some(entry => entry.note.includes('更新行程')));
+  });
+  test('新表單 K／P 選項仍限制候選車，舊通行證可回填且修改時可取消', () => {
+    const D = fresh().ModuleD;
+    const app = D.createApp(Object.assign(data(), { needZuoyingPermit: true, needMndPermit: true, permits: [] }));
+    eq(app.permits.join(','), 'K,P');
+    eq(D.resources(app).vehicles.map(x => x.v.id).join(','), 'V-B03', '須同時持有 K 與 P');
+    const legacy = D.createApp(Object.assign(data(), { permits: ['K', 'P'] }), { draft: true });
+    eq(legacy.needZuoyingPermit, true); eq(legacy.needMndPermit, true);
+    D.saveDraft(legacy, Object.assign(data(), { permits: ['K', 'P'], needZuoyingPermit: false, needMndPermit: false }));
+    eq(legacy.permits.length, 0, '取消新表單選項時清除舊通行證需求');
+    eq(D.resources(legacy).vehicles.length, 4, '取消需求後恢復商務池候選車');
+  });
+});
+
+group('一般用車運輸類別及自駕人', () => {
+  const data = () => ({ applicant: '測試申請人', startDate: '2027-01-05', startTime: '09:00', endDate: '2027-01-05', endTime: '12:00', pax: 1, selfDrive: true, items: [] });
+  test('演訓計畫名稱僅一般用車且運輸類別為演訓時適用', () => {
+    const D = fresh().ModuleD;
+    for (const category of ['general', 'routine']) {
+      for (const transportType of D.TRANSPORT_TYPES) {
+        const input = Object.assign(data(), { category, transportType, exercisePlanName: ' 測試演訓 ' });
+        const applicable = category === 'general' && transportType === '演訓';
+        eq(D.showExercisePlan(input), applicable);
+        eq(D._fields(input).exercisePlanName, applicable ? '測試演訓' : '');
+      }
+    }
+    ok(D.validate(Object.assign(data(), { transportType: '未知類別' })).some(e => e.includes('運輸類別')));
+  });
+  test('自駕人最多 8 筆，模型擋住第 9 筆', () => {
+    const D = fresh().ModuleD, input = Object.assign(data(), { selfDrivers: Array.from({ length: 8 }, (_, i) => ({ name: '測試人' + i, ext: '', phone: '' })) });
+    eq(D.validate(input).length, 0);
+    input.selfDrivers.push({ name: '第九人' });
+    ok(D.validate(input).some(e => e.includes('最多 8 筆')));
+  });
+  test('七組需求及自駕人獨立儲存，修改後可清空且不共用輸入物件', () => {
+    const D = fresh().ModuleD, input = Object.assign(data(), { transportType: '演訓', exercisePlanName: '測試計畫',
+      oneWay: true, allowMerge: true, nightOT: true, holidayOT: true, continueMatching: true,
+      willingSelfDrive: true, qualifiedLicense: true, selfDrivers: [{ name: ' 測試姓名 ', ext: ' 123 ', phone: ' 測試手機 ' }] });
+    const app = D.createApp(input, { draft: true });
+    for (const key of ['oneWay', 'allowMerge', 'nightOT', 'holidayOT', 'continueMatching', 'willingSelfDrive', 'qualifiedLicense']) eq(app[key], true);
+    eq(app.waitDriver, true); eq(app.selfDrivers[0].name, '測試姓名'); eq(app.selfDrivers[0].ext, '123'); eq(app.selfDrivers[0].phone, '測試手機');
+    input.selfDrivers[0].name = '修改輸入'; eq(app.selfDrivers[0].name, '測試姓名');
+    D.saveDraft(app, Object.assign(data(), { transportType: '一般', selfDrivers: [] }));
+    eq(app.exercisePlanName, ''); eq(app.selfDrivers.length, 0);
+    for (const key of ['oneWay', 'allowMerge', 'nightOT', 'holidayOT', 'continueMatching', 'willingSelfDrive', 'qualifiedLicense']) eq(app[key], false);
+  });
+});
+
+group('一般用車單號、載運需求及外包裝', () => {
+  test('單號與載運需求暫存後可修改、清空，外包裝保留於貨物項目', () => {
+    const D = fresh().ModuleD;
+    const input = { applicant: '測試申請人', startDate: '2027-01-05', startTime: '09:00', endDate: '2027-01-05', endTime: '12:00', pax: 1, selfDrive: false,
+      triplicateFormNo: ' FORM-01 ', escortOrderNo: ' ESCORT-01 ', requestReview: false,
+      crossCampus: true, hasCargo: true, hazardousCargo: true, pyrotechnicCargo: true, needsHoisting: true, enterTaipei: true,
+      items: [{ name: '工件-01', l: 10, w: 20, h: 30, qty: 1, packaging: '木箱', hazardous: true }] };
+    const app = D.createApp(input, { draft: true });
+    eq(app.triplicateFormNo, 'FORM-01'); eq(app.escortOrderNo, 'ESCORT-01'); eq(app.requestReview, false); eq(app.status, 'draft');
+    for (const key of ['crossCampus', 'hasCargo', 'hazardousCargo', 'pyrotechnicCargo', 'needsHoisting', 'enterTaipei']) eq(app[key], true);
+    input.items[0].packaging = '紙箱'; eq(app.items[0].packaging, '木箱');
+    D.saveDraft(app, Object.assign({}, input, { triplicateFormNo: '', escortOrderNo: '', requestReview: true,
+      crossCampus: false, hasCargo: false, hazardousCargo: false, pyrotechnicCargo: false, needsHoisting: false, enterTaipei: false }));
+    eq(app.triplicateFormNo, ''); eq(app.escortOrderNo, ''); eq(app.requestReview, true); eq(app.items[0].packaging, '紙箱');
+    for (const key of ['crossCampus', 'hasCargo', 'hazardousCargo', 'pyrotechnicCargo', 'needsHoisting', 'enterTaipei']) eq(app[key], false);
+  });
+  test('一般用車貨物表格拆開尺寸且外包裝跳脫文字，其他模組保留原欄位', () => {
+    const fs = require('fs'), path = require('path'), vm = require('vm');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+    const gridSource = source.slice(source.indexOf('function renderCargoGrid('), source.indexOf('/* ---- 建物下拉'));
+    const escapeSource = source.slice(source.indexOf('const dTripEscape ='), source.indexOf('const dRequestOptions ='));
+    const gEscSource = source.match(/^const gEsc = .*;$/m)[0];
+    const box = { innerHTML: '' }, H = fresh();
+    const ctx = { DB: H.DB, $: () => box, $$: () => [] };
+    vm.createContext(ctx); vm.runInContext(escapeSource + gEscSource + '\n' + gridSource, ctx);
+    const items = [{ name: '工件<01>', l: 10, w: 20, h: 30, qty: 2, weight: 5, category: 'BOX', packaging: '<木箱>' }];
+    ctx.renderCargoGrid('#test', items, true, () => {}, { dCargo: true, hazard: true });
+    ok(box.innerHTML.includes('物品名稱(工件序號)')); ok(box.innerHTML.includes('<th>長(cm)</th><th>寬(cm)</th><th>高(cm)</th>'));
+    ok(box.innerHTML.includes('<td>10</td><td>20</td><td>30</td>')); ok(box.innerHTML.includes('&lt;木箱&gt;')); ok(!box.innerHTML.includes('<th>危險品</th>'));
+    ctx.renderCargoGrid('#test', [], true, () => {}, { dCargo: true }); ok(box.innerHTML.includes('colspan="9"'));
+    ctx.renderCargoGrid('#test', items, false, null, {});
+    ok(box.innerHTML.includes('<th>品名</th><th>長×寬×高(cm)</th>')); ok(!box.innerHTML.includes('物品外包裝'));
+    ctx.renderCargoGrid('#test', [{ ...items[0], plan: '計畫甲', workNo: 'W-01', pack: '<木箱>' }], true, () => {}, { aCols: true });
+    ok(box.innerHTML.includes('<th>計畫名稱</th><th>工命號碼</th><th>物品名稱</th>'));
+    ok(box.innerHTML.includes('<td>計畫甲</td><td>W-01</td>')); ok(box.innerHTML.includes('&lt;木箱>'));
+    ctx.renderCargoGrid('#test', [], true, () => {}, { aCols: true }); ok(box.innerHTML.includes('colspan="9"'));
+  });
+  test('共用貨物編輯仍保存巡迴轉運欄位與引導危險品，一般用車保留舊危險品標記', () => {
+    const fs = require('fs'), path = require('path'), vm = require('vm');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+    const editor = source.slice(source.indexOf('function openCargoEditor('), source.indexOf('function renderCargoGrid('));
+    const escapeSource = source.slice(source.indexOf('const dTripEscape ='), source.indexOf('const dRequestOptions ='));
+    const gEscSource = source.match(/^const gEsc = .*;$/m)[0];
+    const inputs = Object.fromEntries(Object.entries({ name: '測試物品', l: '10', w: '20', h: '30', qty: '1', wt: '5',
+      cat: 'BOX', plan: '計畫甲', workno: 'W-01', pack: '木箱', packaging: '紙箱' }).map(([id, value]) => ['#ce-' + id, { value }]));
+    inputs['#ce-ok'] = {}; inputs['#ce-cancel'] = {};
+    inputs['#modal-body input[name=ce-hz][value=yes]'] = { checked: true };
+    let html, saved;
+    const ctx = { DB: fresh().DB, $: sel => inputs[sel], $$: () => [], infoGrid: (id, body) => body,
+      fInput: (label, control) => label + control, openModal: (title, body) => { html = body; }, closeModal: () => {},
+      toast: message => { throw new Error(message); } };
+    vm.createContext(ctx); vm.runInContext(escapeSource + gEscSource + '\n' + editor, ctx);
+    const save = row => { saved = row; };
+    ctx.openCargoEditor(null, save, { aCols: true }); inputs['#ce-ok'].onclick();
+    eq(saved.plan, '計畫甲'); eq(saved.workNo, 'W-01'); eq(saved.pack, '木箱');
+    ctx.openCargoEditor(null, save, { hazard: true });
+    ok(html.includes('name="ce-hz"'), '引導仍可選危險品'); inputs['#ce-ok'].onclick(); eq(saved.hazardous, true);
+    ctx.openCargoEditor({ name: '舊貨物', hazardous: true }, save, { dCargo: true, hazard: true });
+    ok(!html.includes('name="ce-hz"'), '一般用車依新版表單顯示'); inputs['#ce-ok'].onclick();
+    eq(saved.packaging, '紙箱'); eq(saved.hazardous, true, '編輯外包裝不清除舊危險品標記');
   });
 });
 
