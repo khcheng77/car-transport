@@ -152,7 +152,11 @@
   <section class="block" id="s0">
     <h2 class="sec-title"><span class="num">00</span>本版更新摘要</h2>
     <div class="changelog">
-      <p><b>2026-10-07 更新：報到地點與隨身貨物（G136）</b></p>
+      <p><b>2026-10-07 更新：車輛起迄地點改為 grid（G137）</b></p>
+      <ul>
+        <li><b>04 節</b>：「車輛起迄地點」改為獨立卡片的 grid，放在基本資料下方：欄位為功能（編輯／刪除）、地點（下拉）、順序（可改數字排序）；inline 編輯，儲存與刪除皆跳確認視窗；右上「＋ 新增」。申請明細與單位主管審核以唯讀 grid 顯示。</li>
+      </ul>
+      <p style="margin-top:12px;padding-top:10px;border-top:1px dashed #d5d2c8"><b>2026-10-07 更新：報到地點與隨身貨物（G136）</b></p>
       <ul>
         <li><b>04 節</b>：申請表單新增「報到地點」（必填）與「隨身貨物」grid（選填，7 欄：物品名稱、數量、長、寬、高、重量(KG)、物品外包裝）；僅記錄，不參與媒合，申請明細與單位主管審核畫面顯示。</li>
       </ul>
@@ -268,7 +272,7 @@
       <tr><td>車屬據點</td><td>下拉</td><td><code>homeBase</code></td><td>新增；選項<b>待業務提供</b>，暫用據點主檔</td></tr>
       <tr><td>是否單程運輸</td><td>是／否</td><td><code>isOneway</code></td><td>原「任務型態」；是＝單程（終點須為交通轉運點），隱藏用車結束日期時間</td></tr>
       <tr><td>乘客數</td><td>數字</td><td><code>passengers</code></td><td>原「人數」，至少 1 人</td></tr>
-      <tr><td>車輛起迄地點 <b style="color:#c0392b">*</b></td><td>下拉逐一加入</td><td><code>route</code></td><td>原「出發地＋目的地」；依序加入，最多 <b>8</b> 點，至少起點、終點兩點；第一點＝起點、最後一點＝終點，起訖不可相同、相鄰不可重複</td></tr>
+      <tr><td>車輛起迄地點 <b style="color:#c0392b">*</b></td><td>grid（見下方說明，G137）</td><td><code>route</code></td><td>原「出發地＋目的地」；最多 <b>8</b> 點，至少起點、終點兩點；順序 1＝起點、最後一個＝終點，起訖不可相同、相鄰不可重複</td></tr>
       <tr><td>車輛報到日期時間 <b style="color:#c0392b">*</b></td><td>日期時間</td><td><code>reportAt</code></td><td>原「出發日期＋最早上車時間」</td></tr>
       <tr><td>報到地點 <b style="color:#c0392b">*</b></td><td>文字</td><td><code>reportPlace</code></td><td>2026-10-07 新增（G136）；車輛報到的確切位置，例：台北總部 B1 車道口</td></tr>
       <tr><td>用車結束日期時間 <b style="color:#c0392b">*</b></td><td>日期時間</td><td><code>endAt</code></td><td>原「回程日期＋回程上車時間」；不可早於報到日期時間；單程不填</td></tr>
@@ -284,6 +288,16 @@
       <tr><td>備註</td><td>多行文字</td><td><code>remark</code></td><td>新增</td></tr>
       <tr><td>異動事由</td><td>多行文字</td><td><code>changeReason</code></td><td>僅修改（申請中／退回修編）或取消時出現，必填；每次異動記入異動紀錄</td></tr>
     </table>
+    <h3 class="sub">車輛起迄地點 grid（2026-10-07 · G137）</h3>
+    <ul class="plain">
+      <li><b>位置</b>　獨立一張卡片，放在「基本資料」下方；「＋ 新增」在卡片標題列右上角。</li>
+      <li><b>欄位</b>　功能（編輯／刪除）、地點（下拉，選項＝共乘出發地與目的地清單）、順序（1 起算）。順序 1 標「起點」、最後一個標「終點」。</li>
+      <li><b>編輯（inline mode）</b>　按「編輯」該列就地變成地點下拉與順序數字欄，按鈕換成「儲存／取消」；儲存前跳確認視窗，確認後依新順序重排（例：把第 3 列改成 1 即移到最前，其餘依序後移）。同時只能編輯一列。</li>
+      <li><b>新增</b>　於最後加一列並直接進入編輯，儲存時同樣確認；取消則移除該列。已達 8 點不可再新增。</li>
+      <li><b>刪除</b>　跳確認視窗，確認後刪除，其後地點順序往前遞補。</li>
+      <li><b>送出檢核</b>　有編輯中的列不可送出；其餘檢核同上表。</li>
+      <li><b>明細／審核</b>　以唯讀 grid（順序、地點、起點／終點標記）顯示於基本資料下方。</li>
+    </ul>
     <h3 class="sub">隨身貨物 grid（2026-10-07 · G136）</h3>
     <table class="dtable">
       <tr><th>欄位</th><th>輸入方式</th><th>存檔欄位</th><th>檢核（有填列時）</th></tr>
@@ -633,7 +647,7 @@
       <div class="term"><div class="t-name">用車結束日期時間</div><div class="t-def">原「回程日期＋回程上車時間」（單程不適用），是自動媒合的判斷依據之一</div></div>
       <div class="term"><div class="t-name">最晚抵達時間</div><div class="t-def">系統依車程表算出的預計抵達時間，僅供參考顯示，不參與媒合判斷</div></div>
       <div class="term"><div class="t-name">自動媒合</div><div class="t-def">起點、終點、報到與結束日期時間皆完全相同且雙方都同意併車，人數未超容量，且不超工時上限時，系統自動合併為同一車次</div></div>
-      <div class="term"><div class="t-name">車輛起迄地點</div><div class="t-def">申請表單依序加入的地點清單（最多 8 點）；第一點為起點、最後一點為終點，媒合只看起點與終點</div></div>
+      <div class="term"><div class="t-name">車輛起迄地點</div><div class="t-def">申請表單以 grid 維護的地點清單（最多 8 點，可編輯順序）；順序 1 為起點、最後一個為終點，媒合只看起點與終點</div></div>
       <div class="term"><div class="t-name">不同意併車</div><div class="t-def">申請單一單一車，不與他人合併；批次媒合無車可派即直接無車退回並告知申請人</div></div>
       <div class="term"><div class="t-name">特殊證 p／k</div><div class="t-def">申請單勾選後只派車輛主檔通行證含 P／K 的車</div></div>
       <div class="term"><div class="t-name">異動事由</div><div class="t-def">申請人修改或取消申請時必填的原因，記入異動紀錄</div></div>
