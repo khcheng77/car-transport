@@ -495,13 +495,13 @@ function itemsSummary(items) {
   return items.map(it => `${it.name || '貨物'}×${it.qty || 1}`).join('、');
 }
 // 依車輛推定物流駕駛（示意：LOGI 車輛與 LOGI 司機依序對應）
-function logiDriverName(vehId) {
+function logiDriverOf(vehId) {
   const logiV = DB.vehicles.filter(v => v.pool === 'LOGI');
   const logiD = DB.drivers.filter(d => d.pool === 'LOGI');
   const idx = logiV.findIndex(v => v.id === vehId);
-  const d = idx >= 0 && logiD.length ? logiD[idx % logiD.length] : null;
-  return d ? d.name : '待指派';
+  return idx >= 0 && logiD.length ? logiD[idx % logiD.length] : null;
 }
+function logiDriverName(vehId) { const d = logiDriverOf(vehId); return d ? d.name : '待指派'; }
 
 /* ============================================================
    模組 A · 申請端（使用者）
@@ -3206,199 +3206,219 @@ RENDER.master = function () {
 };
 
 /* ============================================================
-   司機任務單（駕駛端）— A/B/C 各一單元，讀取既有派車/媒合結果
+   司機任務單（駕駛端）— A/B/C/D 各一單元，讀取既有派車/媒合結果
+   G141（C）→ G142（A/B/D 比照）：第一頁為查詢頁（查詢條件：日期起迄、司機；grid：細節、日期、出發時間、司機名稱），
+   點「細節」跳轉該趟任務的詳細資料。一列＝一位司機的一趟任務；只列已排定／簽審通過（待出車以後）的任務。
    ============================================================ */
-
-/* 模組 A · 司機任務單：以「班次（車輛）」為單位，沿固定 10 站路線的收送任務 */
-RENDER.a_driver = function () {
-  const p = $('#page-a_driver');
-  const rows = ModuleA.applications.filter(a => a.status === 'matched' && a.assignedShift);
-  // 以「日期＋班次」為一張任務單（不同日期不可混在同一張）
-  const byKey = {};
-  rows.forEach(a => { const k = (a.serviceDate || '—') + '|' + a.assignedShift; (byKey[k] = byKey[k] || []).push(a); });
-  const keys = Object.keys(byKey).sort((x, y) => {
-    const [dx, sx] = x.split('|'), [dy, sy] = y.split('|');
-    return dx.localeCompare(dy) || DB.regionalShifts.findIndex(s => s.id === sx) - DB.regionalShifts.findIndex(s => s.id === sy);
-  });
-  let cards = keys.map(k => {
-    const [date, shiftId] = k.split('|');
-    const sh = DB.regionalShifts.find(s => s.id === shiftId);
-    const veh = DB.vehicles.find(v => v.id === sh.vehicle);
-    const list = byKey[k];
-    const totalVol = list.reduce((s, a) => s + a.items.reduce((t, it) => t + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0), 0);
-    // 沿固定 10 站路線「一次通過」：為每張單建立取貨（收貨站）與卸貨（送貨站）兩個停靠事件，
-    // 再依站序彙整成停靠站清單——同一站的收貨/送貨自動集中在一起（先卸後裝，比照佔用模型）
-    const stops = {}; // order -> { order, name, picks:[], drops:[] }
-    const ensure = (order, name) => (stops[order] = stops[order] || { order, name, picks: [], drops: [] });
-    list.forEach(a => {
-      const dropSt = DB.stations.find(s => s.id === a.station);
-      const pickSt = a.pickStation ? DB.stations.find(s => s.id === a.pickStation) : null;
-      ensure(pickSt ? pickSt.order : 0, pickSt ? pickSt.name : '路線起點').picks.push(a); // 取貨（起）
-      ensure(dropSt.order, dropSt.name).drops.push(a);                                     // 卸貨（迄）
-    });
-    const ordered = Object.values(stops).sort((x, y) => x.order - y.order);
-    const body = ordered.map((stp, i) => {
-      const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order, date === '—' ? null : date));   // 含前面各站停站時間（G131）
-      const dropLines = stp.drops.map(a => {
-        const del = ['departed', 'logged'].includes(Flow.of(a)) ? ' ' + Flow.badge(a) : '';
-        return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${aDestText(a)}｜接收：${personDisplay(a.recipient)}${del}</div>`;
-      }).join('');
-      const pickLines = stp.picks.map(a =>
-        `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${a.id}｜${a.pickupLoc || stp.name}｜${itemsSummary(a.items)}</div>`).join('');
-      return `<tr><td>${i + 1}</td><td><b>${stp.name}</b></td>
-        <td><b style="color:var(--navy);">${t}</b></td>
-        <td style="text-align:left;">${dropLines}${pickLines}</td></tr>`;
-    }).join('');
-    return `<div class="card">
-      <div class="card-title" style="justify-content:space-between;">
-        <span>🚚 <b>${brName(sh.branch)}</b>｜<b>${date}</b>${date === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}｜${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
-        <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
-      <div class="card-desc">沿分公司固定 9 站路線<b>一次通過</b>，於 <b>${ordered.length}</b> 個停靠站依序<b>卸貨／取貨</b>；本班 <b>${list.length}</b> 筆、總貨量約 <b>${totalVol.toFixed(0)}L</b>。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>順序</th><th>停靠站</th><th>抵達</th><th>作業（卸貨／取貨）</th>
-      </tr></thead><tbody>${body}</tbody></table></div></div>`;
-  }).join('');
-  if (!cards) cards = `<div class="card"><div class="empty">今日尚無已排定的班次任務。使用者送出巡迴物品轉運申請並自動媒合成功後，這裡會依班次（車輛）顯示司機任務單。</div></div>`;
-  p.innerHTML = `
-    <div class="section-h">巡迴物品轉運作業 · 司機任務單（駕駛）</div>
-    <div class="section-sub">以「日期＋班次（車輛）」為單位，沿據點固定 9 站路線<b>一次通過</b>：每個停靠站依站序列出要<b>卸貨</b>與<b>取貨</b>的單、抵達時間、貨物與接收人（同一站的收貨自動彙整在一起）。</div>
-    ${cards}`;
-};
-
-/* 模組 B · 司機任務單：以「車輛」為單位，這一趟停靠哪些據點、各站取貨／卸貨 */
-RENDER.b_driver = function () {
-  const p = $('#page-b_driver');
-  const rows = ModuleB.orders.filter(o => o.status === 'loaded' && o.dispatchVehicle && Signoff.effective(o)); // 調度主管同意（待出車）才列入
-  // 一張任務單＝一趟「車輛×方向」：去程（南下）與回程（北返）是兩段不同的實體行程，
-  // 各有獨立時間軸，不可併在同一條路線上排序（否則同一車會「同時」出現在南北兩地）。
-  const byTrip = {};
-  rows.forEach(o => {
-    const dir = o.dispatchDir || 'south';
-    const key = o.dispatchVehicle + '\u0001' + dir;
-    (byTrip[key] = byTrip[key] || { vid: o.dispatchVehicle, dir, list: [] }).list.push(o);
-  });
-  // 去程排前、回程排後；同方向依車號
-  const tripKeys = Object.keys(byTrip).sort((ka, kb) => {
-    const A = byTrip[ka], B = byTrip[kb];
-    return ((A.dir === 'south' ? 0 : 1) - (B.dir === 'south' ? 0 : 1)) || (A.vid < B.vid ? -1 : A.vid > B.vid ? 1 : 0);
-  });
-  let cards = tripKeys.map(key => {
-    const { vid, dir, list } = byTrip[key];
-    const veh = DB.vehicles.find(v => v.id === vid);
-    const south = dir === 'south';
-    const events = [];
-    list.forEach(o => {
-      events.push({ siteId: o.pickSite, type: 'pick', time: o.pickupTime, day: o.dispatchDay || 1, o });
-      events.push({ siteId: o.dropSite, type: 'drop', time: o.dispatchDropTime, day: o.dispatchDay || 1, o });
-    });
-    const bySite = {};
-    events.forEach(e => { (bySite[e.siteId] = bySite[e.siteId] || []).push(e); });
-    const minTime = sid => Math.min(...bySite[sid].map(e => e.time ? hhmmToMin(e.time) : 9999));
-    const dayOf = sid => Math.min(...bySite[sid].map(e => e.day || 1));
-    const siteIds = Object.keys(bySite).sort((a, b) => {
-      // 先依趟次日、再依當日到站時間；同時間才以「路線行進方向」的據點順序打破平手。
-      // 據點序北大南小（屏東1…台北10）：南下先北後南（序遞減）、北返先南後北（序遞增）。
-      const geo = south ? (ModuleB.siteById(b).order - ModuleB.siteById(a).order)
-                        : (ModuleB.siteById(a).order - ModuleB.siteById(b).order);
-      return (dayOf(a) - dayOf(b)) || (minTime(a) - minTime(b)) || geo;
-    });
-    const multiDay = siteIds.some(sid => dayOf(sid) > 1);
-    const stopRows = siteIds.map((sid, idx) => {
-      const site = ModuleB.siteById(sid);
-      const evs = bySite[sid];
-      const arrive = evs.map(e => e.time).filter(Boolean).sort()[0] || '—';
-      const dayTag = multiDay ? `<span class="hint">D${dayOf(sid)} </span>` : '';
-      const detail = [
-        ...evs.filter(e => e.type === 'pick').map(e => `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${e.time || ''} ${e.o.id}｜${e.o.pickupLoc || '—'}｜${itemsSummary(e.o.items)}</div>`),
-        ...evs.filter(e => e.type === 'drop').map(e => `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${e.time || ''} ${e.o.id}｜${e.o.deliverLoc || '—'}｜接收：${recipientDisplay(e.o.recipient)}</div>`),
-      ].join('');
-      return `<tr><td>${idx + 1}</td><td>${dayTag}<b>${site.name}</b></td><td>${arrive}</td><td style="text-align:left;">${detail}</td></tr>`;
-    }).join('');
-    const modeLabel = list.every(o => o.dispatchMode === '直達') ? '直達' : (list.every(o => o.dispatchMode === '非直達') ? '非直達（沿線收送）' : '混合');
-    const legLabel = south ? '去程（南下）' : '回程（北返）';
-    return `<div class="card">
-      <div class="card-title" style="justify-content:space-between;">
-        <span>🚛 車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）<span class="badge ${south ? 'b-navy' : 'b-green'}" style="margin-left:6px;">${legLabel}</span><span class="hint" style="margin-left:6px;">${modeLabel}</span>${(() => { const ds = [...new Set(list.flatMap(o => ModuleB.driversOf(o)))]; return ds.length ? `<span class="hint" style="margin-left:6px;">駕駛 ${ds.map(drvNm).join('＋')}</span>` : ''; })()}</span>
-        <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
-      <div class="card-desc">本趟共 <b>${list.length}</b> 張託運單、<b>${siteIds.length}</b> 個停靠據點；依派車決策沿線<b>取貨／卸貨</b>。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>順序</th><th>停靠據點</th><th>抵達</th><th>作業（取貨／卸貨）</th>
-      </tr></thead><tbody>${stopRows}</tbody></table></div></div>`;
-  }).join('');
-  if (!cards) cards = `<div class="card"><div class="empty">今日尚無已派車的幹線任務。於「B｜派車調度」執行派車後，這裡會依車輛顯示沿線取貨／卸貨的司機任務單。</div></div>`;
-  p.innerHTML = `
-    <div class="section-h">院區物品轉運作業 · 司機任務單（駕駛）</div>
-    <div class="section-sub">以「車輛×趟次（去程南下／回程北返）」為單位，各為一張任務單；同一趟沿線依<b>到站時間＋路線方向</b>排序停靠據點。去程與回程是兩段獨立行程、時間軸<b>不混疊</b>，避免同一車在南北兩地同時出現。</div>
-    ${cards}`;
-};
-
-/* 模組 C · 司機任務單：以「駕駛」為單位，今日整個行程要接誰、去哪裡 */
-/* 差旅共乘 · 司機任務單（G141）：查詢頁（查詢條件＋grid：細節、日期、出發時間、司機名稱）→ 細節頁（該趟詳細資料）
-   一列＝一位駕駛的一趟任務（同一併車群組／派車單）；只列運輸主管簽審通過（待出車以後）的任務，駕駛人1／2 各自一列。 */
-let cDriver = { view: 'list', key: null, query: null };
-function cDriverTrips() {
-  const rows = ModuleC.applications.filter(a => a.status === 'matched' && a.driver && a.vehicle && Signoff.effective(a));
-  const map = {};
-  rows.forEach(a => ModuleC.driversOf(a).forEach(did => {
-    const key = `${a.groupId || a.id}|${did}`;
-    (map[key] = map[key] || { key, driver: did, apps: [] }).apps.push(a);
-  }));
-  return Object.values(map).map(t => Object.assign(t, { head: t.apps[0], date: t.apps[0].departDate, time: t.apps[0].earliestPickup }))
-    .sort((x, y) => (x.date + x.time).localeCompare(y.date + y.time) || drvName(x.driver).localeCompare(drvName(y.driver)));
-}
-RENDER.c_driver = function () {
-  const p = $('#page-c_driver');
-  if (cDriver.view === 'detail') {
-    const t = cDriverTrips().find(x => x.key === cDriver.key);
-    if (t) return renderCDriverDetail(p, t);
-    cDriver.view = 'list';
+const drvSheetState = {};
+// cfg：{ page, pfx, title, sub, empty, trips() → [{ key, date, time, driver, driverName }], drivers: [[值, 名稱]], detail(t) → html }
+function renderDriverSheet(cfg) {
+  const p = $('#page-' + cfg.page), pfx = cfg.pfx;
+  const st = drvSheetState[cfg.page] = drvSheetState[cfg.page] || { view: 'list', key: null, query: null };
+  const rerender = () => RENDER[cfg.page]();
+  if (st.view === 'detail') {
+    const t = cfg.trips().find(x => x.key === st.key);
+    if (t) {
+      p.innerHTML = `<div class="section-h">司機任務單細節 · ${t.driverName}｜${t.date} ${t.time}</div>${cfg.detail(t)}${backBar(pfx + 'd-back')}`;
+      $(`#${pfx}d-back`).onclick = () => { st.view = 'list'; rerender(); };
+      initMasonry(p);
+      return;
+    }
+    st.view = 'list';
   }
-  renderCDriverList(p);
-};
-function renderCDriverList(p) {
-  const q = cDriver.query = cDriver.query || { from: bDayStr(0), to: bDayStr(14), driver: '' };
-  const drvOpts = ['<option value="">全部司機</option>'].concat(DB.drivers.filter(d => d.pool === 'BIZ')
-    .map(d => `<option value="${d.id}"${q.driver === d.id ? ' selected' : ''}>${d.name}</option>`)).join('');
+  const q = st.query = st.query || { from: bDayStr(0), to: bDayStr(14), driver: '' };
+  const drvOpts = ['<option value="">全部司機</option>'].concat(cfg.drivers
+    .map(([v, n]) => `<option value="${v}"${q.driver === v ? ' selected' : ''}>${n}</option>`)).join('');
   p.innerHTML = `
-    <div class="section-h">差旅共乘作業 · 司機任務單（駕駛）</div>
-    <div class="section-sub">查詢運輸主管簽審通過的共乘任務；點「細節」檢視該趟行程、車輛與要接送的乘客。</div>
+    <div class="section-h">${cfg.title}</div>
+    <div class="section-sub">${cfg.sub}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>查詢條件</span>
-        <span><button class="btn btn-primary btn-sm" id="cdq-search">🔍 查詢</button></span></div>
-      ${infoGrid('cdq-fields', [
-        fInput('日期（起）', `<input type="date" id="cdq-from" value="${q.from}">`),
-        fInput('日期（迄）', `<input type="date" id="cdq-to" value="${q.to}">`),
-        fInput('司機', `<select id="cdq-driver">${drvOpts}</select>`),
+        <span><button class="btn btn-primary btn-sm" id="${pfx}q-search">🔍 查詢</button></span></div>
+      ${infoGrid(pfx + 'q-fields', [
+        fInput('日期（起）', `<input type="date" id="${pfx}q-from" value="${q.from}">`),
+        fInput('日期（迄）', `<input type="date" id="${pfx}q-to" value="${q.to}">`),
+        fInput('司機', `<select id="${pfx}q-driver">${drvOpts}</select>`),
       ].join(''))}
     </div>
     <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>司機任務</span><span class="muted" id="cdq-count"></span></div>
-      <div id="cdq-grid"></div>
+      <div class="card-title" style="justify-content:space-between;"><span>司機任務</span><span class="muted" id="${pfx}q-count"></span></div>
+      <div id="${pfx}q-grid"></div>
     </div>`;
   const draw = () => {
-    const list = cDriverTrips().filter(t => (!q.from || t.date >= q.from) && (!q.to || t.date <= q.to) && (!q.driver || t.driver === q.driver));
-    $('#cdq-count').textContent = `${list.length} 筆`;
-    $('#cdq-grid').innerHTML = list.length ? `<div class="table-wrap"><table class="dt"><thead><tr><th></th><th>日期</th><th>出發時間</th><th>司機名稱</th></tr></thead><tbody>
-      ${list.map(t => `<tr><td><button class="btn btn-ghost btn-sm" data-cdtrip="${t.key}">細節</button></td>
-        <td>${t.date}</td><td><b style="color:var(--navy);">${t.time}</b></td><td>${drvName(t.driver)}</td></tr>`).join('')}
+    const list = cfg.trips().filter(t => (!q.from || t.date >= q.from) && (!q.to || t.date <= q.to) && (!q.driver || t.driver === q.driver))
+      .sort((x, y) => (x.date + x.time).localeCompare(y.date + y.time) || x.driverName.localeCompare(y.driverName));
+    $(`#${pfx}q-count`).textContent = `${list.length} 筆`;
+    $(`#${pfx}q-grid`).innerHTML = list.length ? `<div class="table-wrap"><table class="dt"><thead><tr><th></th><th>日期</th><th>出發時間</th><th>司機名稱</th></tr></thead><tbody>
+      ${list.map(t => `<tr><td><button class="btn btn-ghost btn-sm" data-${pfx}trip="${t.key}">細節</button></td>
+        <td>${t.date}</td><td><b style="color:var(--navy);">${t.time}</b></td><td>${t.driverName}</td></tr>`).join('')}
       </tbody></table></div>`
-      : `<div class="empty">查詢區間內沒有司機任務。於「C｜派車調度」批次媒合並送審、經運輸主管簽審通過後，這裡會列出每位司機的任務。</div>`;
-    $$('#cdq-grid [data-cdtrip]').forEach(b => b.onclick = () => { cDriver.view = 'detail'; cDriver.key = b.dataset.cdtrip; RENDER.c_driver(); });
+      : `<div class="empty">${cfg.empty}</div>`;
+    $$(`#${pfx}q-grid [data-${pfx}trip]`).forEach(b => b.onclick = () => { st.view = 'detail'; st.key = b.getAttribute(`data-${pfx}trip`); rerender(); });
     initMasonry(p);
   };
-  $('#cdq-search').onclick = () => {
-    Object.assign(q, { from: $('#cdq-from').value, to: $('#cdq-to').value, driver: $('#cdq-driver').value });
+  $(`#${pfx}q-search`).onclick = () => {
+    Object.assign(q, { from: $(`#${pfx}q-from`).value, to: $(`#${pfx}q-to`).value, driver: $(`#${pfx}q-driver`).value });
     if (q.from && q.to && q.to < q.from) return toast('日期（迄）不可早於日期（起）', 'err');
     draw(); toast('查詢完成', 'ok');
   };
   draw();
 }
-function renderCDriverDetail(p, t) {
+const poolDriverOpts = pool => DB.drivers.filter(d => d.pool === pool).map(d => [d.id, d.name]);
+
+/* 模組 A · 司機任務單：一趟＝「日期＋班次（車輛）」，沿固定 9 站路線的收送任務；駕駛依車輛推定（示意） */
+function aDriverTrips() {
+  const byKey = {};
+  ModuleA.applications.filter(a => a.status === 'matched' && a.assignedShift)
+    .forEach(a => { const k = (a.serviceDate || '—') + '|' + a.assignedShift; (byKey[k] = byKey[k] || []).push(a); });
+  return Object.keys(byKey).map(key => {
+    const [date, shiftId] = key.split('|');
+    const sh = DB.regionalShifts.find(s => s.id === shiftId);
+    const d = sh ? logiDriverOf(sh.vehicle) : null;
+    return { key, date, shiftId, list: byKey[key], time: sh ? sh.depart : '—', driver: d ? d.id : '', driverName: d ? d.name : '待指派' };
+  });
+}
+function aDriverCard(date, shiftId, list) {
+  const sh = DB.regionalShifts.find(s => s.id === shiftId);
+  const veh = DB.vehicles.find(v => v.id === sh.vehicle);
+  const totalVol = list.reduce((s, a) => s + a.items.reduce((t, it) => t + (it.l * it.w * it.h / 1000) * (it.qty || 1), 0), 0);
+  // 沿固定 10 站路線「一次通過」：為每張單建立取貨（收貨站）與卸貨（送貨站）兩個停靠事件，
+  // 再依站序彙整成停靠站清單——同一站的收貨/送貨自動集中在一起（先卸後裝，比照佔用模型）
+  const stops = {}; // order -> { order, name, picks:[], drops:[] }
+  const ensure = (order, name) => (stops[order] = stops[order] || { order, name, picks: [], drops: [] });
+  list.forEach(a => {
+    const dropSt = DB.stations.find(s => s.id === a.station);
+    const pickSt = a.pickStation ? DB.stations.find(s => s.id === a.pickStation) : null;
+    ensure(pickSt ? pickSt.order : 0, pickSt ? pickSt.name : '路線起點').picks.push(a); // 取貨（起）
+    ensure(dropSt.order, dropSt.name).drops.push(a);                                     // 卸貨（迄）
+  });
+  const ordered = Object.values(stops).sort((x, y) => x.order - y.order);
+  const body = ordered.map((stp, i) => {
+    const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order, date === '—' ? null : date));   // 含前面各站停站時間（G131）
+    const dropLines = stp.drops.map(a => {
+      const del = ['departed', 'logged'].includes(Flow.of(a)) ? ' ' + Flow.badge(a) : '';
+      return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${aDestText(a)}｜接收：${personDisplay(a.recipient)}${del}</div>`;
+    }).join('');
+    const pickLines = stp.picks.map(a =>
+      `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${a.id}｜${a.pickupLoc || stp.name}｜${itemsSummary(a.items)}</div>`).join('');
+    return `<tr><td>${i + 1}</td><td><b>${stp.name}</b></td>
+      <td><b style="color:var(--navy);">${t}</b></td>
+      <td style="text-align:left;">${dropLines}${pickLines}</td></tr>`;
+  }).join('');
+  return `<div class="card">
+    <div class="card-title" style="justify-content:space-between;">
+      <span>🚚 <b>${brName(sh.branch)}</b>｜<b>${date}</b>${date === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}｜${sh.label}｜車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）</span>
+      <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
+    <div class="card-desc">沿分公司固定 9 站路線<b>一次通過</b>，於 <b>${ordered.length}</b> 個停靠站依序<b>卸貨／取貨</b>；本班 <b>${list.length}</b> 筆、總貨量約 <b>${totalVol.toFixed(0)}L</b>。</div>
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>順序</th><th>停靠站</th><th>抵達</th><th>作業（卸貨／取貨）</th>
+    </tr></thead><tbody>${body}</tbody></table></div></div>`;
+}
+RENDER.a_driver = function () {
+  renderDriverSheet({
+    page: 'a_driver', pfx: 'ad', title: '巡迴物品轉運作業 · 司機任務單（駕駛）',
+    sub: '查詢已排定班次的收送任務（一列＝一個日期＋班次）；點「細節」檢視該班沿據點固定 9 站路線<b>一次通過</b>的停靠站、抵達時間與各站卸貨／取貨。',
+    empty: '查詢區間內沒有司機任務。使用者送出巡迴物品轉運申請並自動媒合成功後，這裡會依班次（車輛）列出司機任務。',
+    trips: aDriverTrips, drivers: poolDriverOpts('LOGI'),
+    detail: t => aDriverCard(t.date, t.shiftId, t.list),
+  });
+};
+
+/* 模組 B · 司機任務單：一趟＝「派車單（車輛×日期）×方向（去程南下／回程北返）」；駕駛人1／2 各自一列 */
+function bDriverTrips() {
+  const byTrip = {};
+  ModuleB.orders.filter(o => o.status === 'loaded' && o.dispatchVehicle && Signoff.effective(o)).forEach(o => { // 調度主管同意（待出車）才列入
+    const dir = o.dispatchDir || 'south';
+    const disp = o.dispatchId ? ModuleB.dispatches.find(d => d.id === o.dispatchId) : null;
+    const date = (disp && disp.date) || o.wantReceiveDate || bDayStr(0);
+    const k = `${o.dispatchId || o.dispatchVehicle + '@' + date}|${dir}`;
+    (byTrip[k] = byTrip[k] || { k, vid: o.dispatchVehicle, dir, date, dispatchId: o.dispatchId || '', list: [] }).list.push(o);
+  });
+  const out = [];
+  Object.values(byTrip).forEach(tr => {
+    const times = tr.list.map(o => o.pickupTime).filter(Boolean).sort();
+    let ds = [...new Set(tr.list.flatMap(o => ModuleB.driversOf(o)))];
+    if (!ds.length) { const d = logiDriverOf(tr.vid); ds = d ? [d.id] : ['']; }
+    ds.forEach(did => out.push(Object.assign({}, tr, { key: `${tr.k}|${did}`, time: times[0] || '—', driver: did, driverName: did ? drvNm(did) : '待指派', mates: ds.filter(x => x && x !== did) })));
+  });
+  return out;
+}
+function bDriverCard(t) {
+  const { vid, dir, list } = t;
+  const veh = DB.vehicles.find(v => v.id === vid);
+  const south = dir === 'south';
+  const events = [];
+  list.forEach(o => {
+    events.push({ siteId: o.pickSite, type: 'pick', time: o.pickupTime, day: o.dispatchDay || 1, o });
+    events.push({ siteId: o.dropSite, type: 'drop', time: o.dispatchDropTime, day: o.dispatchDay || 1, o });
+  });
+  const bySite = {};
+  events.forEach(e => { (bySite[e.siteId] = bySite[e.siteId] || []).push(e); });
+  const minTime = sid => Math.min(...bySite[sid].map(e => e.time ? hhmmToMin(e.time) : 9999));
+  const dayOf = sid => Math.min(...bySite[sid].map(e => e.day || 1));
+  const siteIds = Object.keys(bySite).sort((a, b) => {
+    // 先依趟次日、再依當日到站時間；同時間才以「路線行進方向」的據點順序打破平手。
+    // 據點序北大南小（屏東1…台北10）：南下先北後南（序遞減）、北返先南後北（序遞增）。
+    const geo = south ? (ModuleB.siteById(b).order - ModuleB.siteById(a).order)
+                      : (ModuleB.siteById(a).order - ModuleB.siteById(b).order);
+    return (dayOf(a) - dayOf(b)) || (minTime(a) - minTime(b)) || geo;
+  });
+  const multiDay = siteIds.some(sid => dayOf(sid) > 1);
+  const stopRows = siteIds.map((sid, idx) => {
+    const site = ModuleB.siteById(sid);
+    const evs = bySite[sid];
+    const arrive = evs.map(e => e.time).filter(Boolean).sort()[0] || '—';
+    const dayTag = multiDay ? `<span class="hint">D${dayOf(sid)} </span>` : '';
+    const detail = [
+      ...evs.filter(e => e.type === 'pick').map(e => `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${e.time || ''} ${e.o.id}｜${e.o.pickupLoc || '—'}｜${itemsSummary(e.o.items)}</div>`),
+      ...evs.filter(e => e.type === 'drop').map(e => `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${e.time || ''} ${e.o.id}｜${e.o.deliverLoc || '—'}｜接收：${recipientDisplay(e.o.recipient)}</div>`),
+    ].join('');
+    return `<tr><td>${idx + 1}</td><td>${dayTag}<b>${site.name}</b></td><td>${arrive}</td><td style="text-align:left;">${detail}</td></tr>`;
+  }).join('');
+  const modeLabel = list.every(o => o.dispatchMode === '直達') ? '直達' : (list.every(o => o.dispatchMode === '非直達') ? '非直達（沿線收送）' : '混合');
+  const legLabel = south ? '去程（南下）' : '回程（北返）';
+  return `<div class="card">
+    <div class="card-title" style="justify-content:space-between;">
+      <span>🚛 車 <b style="color:var(--navy);">${veh.id}</b>（${veh.name}）<span class="badge ${south ? 'b-navy' : 'b-green'}" style="margin-left:6px;">${legLabel}</span><span class="hint" style="margin-left:6px;">${modeLabel}</span>${t.date ? `<span class="hint" style="margin-left:6px;">${t.date}${t.dispatchId ? '｜派車單 ' + t.dispatchId : ''}</span>` : ''}</span>
+      <span class="badge b-navy">駕駛：${t.driverName}</span></div>
+    <div class="card-desc">本趟共 <b>${list.length}</b> 張託運單、<b>${siteIds.length}</b> 個停靠據點；依派車決策沿線<b>取貨／卸貨</b>。</div>
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th>順序</th><th>停靠據點</th><th>抵達</th><th>作業（取貨／卸貨）</th>
+    </tr></thead><tbody>${stopRows}</tbody></table></div></div>`;
+}
+RENDER.b_driver = function () {
+  renderDriverSheet({
+    page: 'b_driver', pfx: 'bd', title: '院區物品轉運作業 · 司機任務單（駕駛）',
+    sub: '查詢調度主管同意後的幹線任務（一列＝一位司機的一趟：車輛×去程南下／回程北返）；點「細節」檢視沿線停靠據點、到站時間與取貨／卸貨。',
+    empty: '查詢區間內沒有司機任務。於「B｜派車調度」執行派車並經運輸主管簽審通過後，這裡會列出每位司機的任務。',
+    trips: bDriverTrips, drivers: poolDriverOpts('LOGI'),
+    detail: t => (t.mates.length ? `<div class="callout info" style="margin-bottom:10px;">同車駕駛：${t.mates.map(drvNm).join('、')}</div>` : '') + bDriverCard(t),
+  });
+};
+
+/* 模組 C · 司機任務單（G141）：一列＝一位駕駛的一趟任務（同一併車群組／派車單）；只列運輸主管簽審通過（待出車以後）的任務，駕駛人1／2 各自一列 */
+function cDriverTrips() {
+  const rows = ModuleC.applications.filter(a => a.status === 'matched' && a.driver && a.vehicle && Signoff.effective(a));
+  const map = {};
+  rows.forEach(a => ModuleC.driversOf(a).forEach(did => {
+    const key = `${a.groupId || a.id}|${did}`;
+    (map[key] = map[key] || { key, driver: did, driverName: drvName(did), apps: [] }).apps.push(a);
+  }));
+  return Object.values(map).map(t => Object.assign(t, { head: t.apps[0], date: t.apps[0].departDate, time: t.apps[0].earliestPickup }));
+}
+RENDER.c_driver = function () {
+  renderDriverSheet({
+    page: 'c_driver', pfx: 'cd', title: '差旅共乘作業 · 司機任務單（駕駛）',
+    sub: '查詢運輸主管簽審通過的共乘任務；點「細節」檢視該趟行程、車輛與要接送的乘客。',
+    empty: '查詢區間內沒有司機任務。於「C｜派車調度」批次媒合並送審、經運輸主管簽審通過後，這裡會列出每位司機的任務。',
+    trips: cDriverTrips, drivers: poolDriverOpts('BIZ'), detail: cDriverDetail,
+  });
+};
+function cDriverDetail(t) {
   const h = t.head, veh = DB.vehicles.find(v => v.id === h.vehicle);
   const pax = t.apps.reduce((s, a) => s + a.pax, 0);
   const mates = ModuleC.driversOf(h).filter(d => d !== t.driver).map(drvName);
-  p.innerHTML = `
-    <div class="section-h">司機任務單細節 · ${drvName(t.driver)}｜${t.date} ${t.time}</div>
+  return `
     <div class="card">
       <div class="card-title">任務資訊</div>
       ${infoGrid('cdd-basic', [
@@ -3419,10 +3439,7 @@ function renderCDriverDetail(p, t) {
         ${t.apps.map(a => `<tr><td>${a.id}</td><td>${a.applicant}</td><td>${a.dept || '—'}</td><td>${a.applicantPhone || a.ext || '—'}</td><td>${a.pax}</td>
           <td>${gEsc(a.reportPlace || '—')}</td><td>${cRouteStr(a)}</td></tr>`).join('')}
       </tbody></table></div>
-    </div>
-    ${backBar('cdd-back')}`;
-  $('#cdd-back').onclick = () => { cDriver.view = 'list'; RENDER.c_driver(); };
-  initMasonry(p);
+    </div>`;
 }
 
 /* ============================================================
@@ -4383,49 +4400,45 @@ function dDriverCargo(a) {
   return a.items.map(i => `${i.hazardous ? '<span class="badge b-red">⚠ 危險品</span> ' : ''}${i.name}×${i.qty || 1}`
     + `<span class="hint">（${i.l}×${i.w}×${i.h}cm${i.weight ? '｜' + i.weight + 'kg' : ''}）</span>`).join('<br>');
 }
-RENDER.d_driver = function () {
-  const p = $('#page-d_driver');
-  const apps = ModuleD.applications.filter(a => a.status === 'dispatched' && Signoff.effective(a)); // 調度主管同意（待出車）才列入
-  const byDriver = {}, selfRows = [];
-  apps.forEach(a => ModuleD.liveSegs(a).forEach(s => {
-    if (!s.drivers.length) { selfRows.push({ a, s }); return; }
-    s.drivers.forEach(d => (byDriver[d] = byDriver[d] || []).push({ a, s, co: s.drivers.filter(x => x !== d) }));
-  }));
-  const range = s => `${ModuleD.fmtAbs(s.from)}<br><span class="hint">至 ${ModuleD.fmtAbs(s.to)}</span>`;
-  let cards = Object.keys(byDriver).sort().map(did => {
-    const list = byDriver[did].sort((x, y) => x.s.from - y.s.from);
-    const trs = list.map(({ a, s, co }, i) => `<tr>
-      <td>${i + 1}</td>
-      <td>${range(s)}${s.kind !== '原始指派' ? `<br><span class="badge b-navy">${s.kind}</span>` : ''}</td>
-      <td>${dVehName(s.vehicle)}${co.length ? `<br><span class="badge b-navy">雙駕駛・搭檔 ${dDrvList(co)}</span>` : ''}</td>
-      <td style="text-align:left;">${dCatBadge(a)} ${a.applicant}${a.ext ? `（分機 ${a.ext}）` : ''}｜${a.pax} 人${a.purpose ? `<br><span class="hint">${a.purpose}</span>` : ''}</td>
-      <td style="text-align:left;">${dDriverCargo(a)}</td>
-      <td style="white-space:nowrap;">${Flow.badge(a)}</td></tr>`).join('');
-    return `<div class="card">
-      <div class="card-title" style="justify-content:space-between;">
-        <span>🚗 駕駛 <b style="color:var(--navy);">${dDrvName(did)}</b></span>
-        <span class="badge b-green">共 ${list.length} 段</span></div>
-      <div class="card-desc">該駕駛被指派的用車區間（依指派區間歷史，換車／換司機後自動切換）：車輛、<b>使用人</b>與<b>隨行貨物</b>（危險品特別標示）。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr>
-        <th>順序</th><th>指派區間</th><th>車輛</th><th>使用人／行程</th><th>隨行貨物</th><th>操作</th>
-      </tr></thead><tbody>${trs}</tbody></table></div></div>`;
-  }).join('');
-  if (!cards) cards = `<div class="card"><div class="empty">目前尚無派司機的用車任務。於「D｜派車調度」做出「派車＋派司機」判斷後，這裡會依駕駛顯示任務單。</div></div>`;
-  const selfCard = selfRows.length === 0 ? '' : `
+function dDriverTrips() {
+  const out = [];
+  ModuleD.applications.filter(a => a.status === 'dispatched' && Signoff.effective(a)) // 調度主管同意（待出車）才列入
+    .forEach(a => ModuleD.liveSegs(a).forEach((s, i) => {
+      const f = ModuleD.fromAbs(s.from), base = { a, s, date: f.date, time: f.time };
+      if (!s.drivers.length) out.push(Object.assign({ key: `${a.id}|${i}|`, driver: '__self', driverName: `自駕（${a.applicant}）`, co: [] }, base));
+      else s.drivers.forEach(d => out.push(Object.assign({ key: `${a.id}|${i}|${d}`, driver: d, driverName: dDrvName(d), co: s.drivers.filter(x => x !== d) }, base)));
+    }));
+  return out;
+}
+function dDriverDetail(t) {
+  const { a, s, co } = t;
+  return `
     <div class="card">
-      <div class="card-title">自駕用車（無派司機）· 車輛交接參考</div>
-      <div class="card-desc">「有車沒司機＋使用者勾選自駕」派出的區間，由使用者自行駕駛（系統不做駕駛資格檢核 G78）；勾選「願意等待駕駛媒合」者，調度可於出發前補派司機。</div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>單號</th><th>區間</th><th>車輛</th><th>使用人</th><th>隨行貨物</th><th>狀態</th></tr></thead><tbody>
-        ${selfRows.map(({ a, s }) => `<tr><td>${a.id}</td><td>${range(s)}</td><td>${dVehName(s.vehicle)}</td>
-          <td style="text-align:left;">${a.applicant}${a.ext ? `（分機 ${a.ext}）` : ''}｜${a.pax} 人${a.waitDriver ? ' <span class="badge b-navy">等待駕駛媒合</span>' : ''}</td>
-          <td style="text-align:left;">${dDriverCargo(a)}</td><td>${Flow.badge(a)}</td></tr>`).join('')}
-      </tbody></table></div>
+      <div class="card-title">任務資訊</div>
+      ${infoGrid('ddd-basic', [
+        fItem('日期', t.date), fItem('出發時間', `<b style="color:var(--navy);">${t.time}</b>`),
+        fItem('司機名稱', t.driver === '__self' ? '使用者自駕<span class="hint">（無派司機，系統不做駕駛資格檢核 G78）</span>'
+          : t.driverName + (co.length ? `<span class="hint">（雙駕駛・搭檔 ${dDrvList(co)}）</span>` : '')),
+        fItem('車輛', dVehName(s.vehicle)),
+        fItem('申請單號', a.id), fItem('用車類別', dCatBadge(a)),
+        fItem('指派區間', `${ModuleD.fmtAbs(s.from)} 至 ${ModuleD.fmtAbs(s.to)}${s.kind !== '原始指派' ? ` <span class="badge b-navy">${s.kind}</span>` : ''}`, { full: true }),
+        fItem('使用人', `${a.applicant}${a.ext ? `（分機 ${a.ext}）` : ''}`), fItem('人數', `${a.pax} 人`),
+        fItem('用車事由／行程', a.purpose ? gEsc(a.purpose) : '—', { full: true }),
+        fItem('狀態', Flow.badge(a) + (a.waitDriver && t.driver === '__self' ? ' <span class="badge b-navy">等待駕駛媒合</span>' : '')),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">隨行貨物</div>
+      <div style="font-size:13px;">${dDriverCargo(a)}</div>
     </div>`;
-  p.innerHTML = `
-    <div class="section-h">一般用車申請作業 · 司機任務單（駕駛）</div>
-    <div class="section-sub">以「駕駛」為單位，依指派區間列出每段任務：車輛、使用人（分機／人數）、行程說明與隨行貨物；雙駕駛兩位各自列出並標示搭檔。只列調度主管同意後（待出車以後）的任務；狀態欄顯示待出車／已出車／已回登。</div>
-    ${cards}
-    ${selfCard}`;
+}
+RENDER.d_driver = function () {
+  renderDriverSheet({
+    page: 'd_driver', pfx: 'dd', title: '一般用車申請作業 · 司機任務單（駕駛）',
+    sub: '查詢調度主管同意後的用車任務（一列＝一位司機的一段指派區間；雙駕駛各自一列，自駕區間列為「自駕」）；點「細節」檢視車輛、使用人與隨行貨物（危險品特別標示）。',
+    empty: '查詢區間內沒有司機任務。於「D｜派車調度」做出派車判斷並經運輸主管簽審通過後，這裡會列出每位司機的任務。',
+    trips: dDriverTrips, drivers: poolDriverOpts('BIZ').concat([['__self', '自駕（無派司機）']]), detail: dDriverDetail,
+  });
 };
 
 /* ============================================================
