@@ -162,7 +162,8 @@ const Guide = {
         break;
       }
       case 'B':
-        data = { applicant: v.applicant, site: v.fromSite, destSite: v.toSite, wantReceiveDate: v.recvDate || '', wantReceiveTime: v.recvTime || '', items };
+        data = { applicant: v.applicant, site: v.fromSite, destSite: v.toSite, wantReceiveDate: v.recvDate || '', wantReceiveTime: v.recvTime || '', items,
+          hazardTransport: v.hazardTransport === 'yes' || items.some(it => it.hazardous) ? 'yes' : 'no' };
         labels.push(`收貨據點 ${this.siteName(v.fromSite)}`, `送貨據點 ${this.siteName(v.toSite)}`);
         if (v.recvDate) labels.push(`希望收貨日期 ${v.recvDate}`);
         if (v.recvTime) labels.push(`希望收貨時間 ${v.recvTime}`);

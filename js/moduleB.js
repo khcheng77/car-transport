@@ -78,6 +78,8 @@ const ModuleB = {
     const err = this.routeError(data);
     if (err) throw new Error(err);
     const o = Object.assign({ id: 'LB' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
+      transportStatus: '開單',                       // 物品運輸單狀態（G143）
+      applyDate: data.applyDate || this.rocDate(),   // 申請日期（民國年，G143）
       approvedAt: null,
       status: opts && opts.draft ? 'draft' : 'submitted',  // draft（申請中）→ submitted（待二級審）→ approved（待調度）/rejected（退回修編）/noCar（無車退回）→（媒合派車）loaded；顯示狀態由 Flow 推導
       createdAt: new Date(),
@@ -96,14 +98,32 @@ const ModuleB = {
     this.recompute(o);
     return o;
   },
-  /* 暫存（申請中）：修改後仍維持申請中 */
+  /* 暫存（申請中）：「是否送審」選否時儲存為申請中；退回修編的單選否也回到申請中（比照差旅共乘 G139） */
   saveDraft(o, data) {
-    if (o.status !== 'draft') throw new Error('僅「申請中」的申請可暫存修改');
-    Object.assign(o, this._fields(data));
+    if (!['draft', 'rejected'].includes(o.status)) throw new Error('僅「申請中」或「退回修編」的申請可暫存修改');
+    if (o.status === 'rejected') {
+      (o.revisions = o.revisions || []).push({ at: new Date(), returnNote: o.reviewNote || '' });
+      Object.assign(o, { reviewNote: '', returnedBy: null });
+    }
+    Object.assign(o, this._fields(data), { status: 'draft' });
     this.recompute(o);
     return o;
   },
   canEdit(o) { return ['draft', 'rejected'].includes(o.status); },
+  rocDate(d) { d = d || new Date(); return `${d.getFullYear() - 1911}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; },
+  /* 申請表單必填檢核（G143）：＊欄位、希望收貨日期、不同意併車須填事由、修改時須填異動事由，最後檢核起迄 */
+  formError(data, opts) {
+    const c = data.consignor || {}, r = data.recipient || {};
+    const need = [[data.applyUnit, '申請單位/委運單位'], [data.applyExt, '申請人分機'], [c.name, '委運人姓名'], [c.ext, '委運人分機/手機'],
+      [data.deliverLoc, '接收人館別'], [r.name, '接收人姓名'], [r.phone, '接收人分機/手機'],
+      [r.agentName, '接收代理人姓名'], [r.agentPhone, '接收代理人分機/手機'], [r.agentCampus, '接收代理人院區'], [r.agentHall, '接收代理人館別']];
+    const miss = need.find(([v]) => !String(v || '').trim());
+    if (miss) return `請填寫「${miss[1]}」`;
+    if (!data.wantReceiveDate) return '請填寫「希望收貨日期」';
+    if (data.agreeCarpool === false && !String(data.carpoolRejectReason || '').trim()) return '不同意併車時請填寫「拒絕併車事由」';
+    if (opts && opts.editing && !String(data.changeReason || '').trim()) return '請填寫「異動事由」';
+    return this.routeError(data);
+  },
   _fields(data) {
     const items = (data.items && data.items.length)
       ? data.items.map(x => ({ ...x, name: x.name || '貨物', qty: x.qty || 1, category: x.category || 'BOX', weight: +x.weight || 0 }))
@@ -126,7 +146,22 @@ const ModuleB = {
       wantReceiveTime: data.wantReceiveTime || data.deliverTime || '',
       // 希望收貨日期（G129）：與派車日對應——派車調度依收貨日期列在該派車日，媒合派車只取收貨日期＝派車日者
       wantReceiveDate: data.wantReceiveDate || '',
-      recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, agentName, agentPhone }
+      recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, campus, agentName, agentPhone, agentCampus, agentHall }
+      // ---- G143 新增欄位（未另指定屬性者為文字欄位；目前僅記錄，不影響媒合派車）----
+      tripleFormNo: data.tripleFormNo || '',            // 三聯單表單編號
+      applyUnit: data.applyUnit || '',                  // 申請單位/委運單位＊
+      applyExt: data.applyExt || '',                    // 申請人分機＊
+      consignor: data.consignor || {},                  // 委運人：{ name＊, campus, ext＊（分機/手機） }；館別＝pickupLoc
+      unloadReadyTime: data.unloadReadyTime || '',      // 可卸貨時間
+      delayReceiveTime: data.delayReceiveTime != null ? data.delayReceiveTime : (data.unloadReadyTime || ''), // 調整延後收貨時間（預設＝可卸貨時間）
+      nightOT: data.nightOT || '', holidayOT: data.holidayOT || '',   // 是否需要夜間／假日加班
+      keepMatchDriver: data.keepMatchDriver || '',      // 願意持續媒合駕駛
+      hazardTransport: data.hazardTransport || 'no',    // 危險品運輸（是 yes／否 no）
+      agreeCarpool: data.agreeCarpool !== false,        // 是否同意併車（預設同意）
+      carpoolRejectReason: data.agreeCarpool === false ? (data.carpoolRejectReason || '') : '',   // 拒絕併車事由
+      oneway: data.oneway || '',                        // 是否單程運輸
+      remark: data.remark || '', changeReason: data.changeReason || '',   // 備註、異動事由
+      captain: data.captain || '', captainPhone: data.captainPhone || '', // 車長、車長分機/手機
       direct: !!data.direct,   // 3.2 急件直達（申請人指定）＝派車輸入條件，觸發獨立派車與回程鎖定
       items,                 // 貨物項目清單
       loadMin, unloadMin,    // 上貨/下貨時間（分）

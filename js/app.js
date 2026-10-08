@@ -360,29 +360,32 @@ function renderItemEditor(boxSel, arr, onChange) {
 }
 
 /* ---- 貨物編輯彈窗（新增/編輯共用）：送出 → onSave(新項目)，取消 → 關閉 ----
-   opts.hazard：顯示「是否為危險品」（模組 D 隨行貨物 G75/G78；A/B 不帶則不顯示） */
+   opts.hazard：顯示「是否為危險品」（模組 D 隨行貨物 G75/G78；A/B 不帶則不顯示）
+   opts.aCols：巡迴物品轉運（G138）；opts.bCols：院區物品轉運（G143：計畫名稱、工令號碼、物品外型、物品外包裝，長寬高重量不帶單位） */
 function openCargoEditor(item, onSave, opts) {
   opts = opts || {};
-  const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '', hazardous: false, plan: '', workNo: '', pack: '' }, item || {});
-  const nameLbl = opts.aCols ? '物品名稱' : '品名';
+  const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '', hazardous: false, plan: '', workNo: '', shape: '', pack: '' }, item || {});
+  const bc = !!opts.bCols, ext = opts.aCols || bc;
+  const nameLbl = ext ? '物品名稱' : '品名';
   const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
   openModal(item ? '編輯貨物內容' : '新增貨物', `
     ${infoGrid('ce-fields', [
-      opts.aCols ? fInput('計畫名稱', `<input type="text" id="ce-plan" value="${gEsc(it.plan)}">`) : '',
-      opts.aCols ? fInput('工命號碼', `<input type="text" id="ce-workno" value="${gEsc(it.workNo)}">`) : '',
-      fInput(nameLbl, `<input type="text" id="ce-name" value="${it.name}">`, { full: true }),
-      fInput('長 (cm)', `<input type="number" id="ce-l" value="${it.l}">`),
-      fInput('寬 (cm)', `<input type="number" id="ce-w" value="${it.w}">`),
-      fInput('高 (cm)', `<input type="number" id="ce-h" value="${it.h}">`),
+      ext ? fInput('計畫名稱', `<input type="text" id="ce-plan" value="${gEsc(it.plan)}">`) : '',
+      ext ? fInput(bc ? '工令號碼' : '工命號碼', `<input type="text" id="ce-workno" value="${gEsc(it.workNo)}">`) : '',
+      fInput(nameLbl, `<input type="text" id="ce-name" value="${it.name}">`, { full: !bc }),
+      bc ? fInput('物品外型', `<input type="text" id="ce-shape" value="${gEsc(it.shape)}">`) : '',
+      fInput(bc ? '長' : '長 (cm)', `<input type="number" id="ce-l" value="${it.l}"${bc ? ' placeholder="cm"' : ''}>`),
+      fInput(bc ? '寬' : '寬 (cm)', `<input type="number" id="ce-w" value="${it.w}"${bc ? ' placeholder="cm"' : ''}>`),
+      fInput(bc ? '高' : '高 (cm)', `<input type="number" id="ce-h" value="${it.h}"${bc ? ' placeholder="cm"' : ''}>`),
       fInput('類別 <span class="hint">浪費係數查表 G03</span>', `<select id="ce-cat">${catOpts}</select>`),
       fInput('數量', `<input type="number" id="ce-qty" value="${it.qty}">`),
-      fInput('單件重 (kg)', `<input type="number" id="ce-wt" value="${it.weight}">`),
+      fInput(bc ? '重量' : '單件重 (kg)', `<input type="number" id="ce-wt" value="${it.weight}"${bc ? ' placeholder="kg（單件）"' : ''}>`),
       opts.hazard ? fInput('是否為危險品 <span class="hint">僅供調度判斷，系統不自動限制（G78）</span>', `
         <div class="radio-group">
           <label class="radio-pill${it.hazardous ? '' : ' sel'}" id="ce-hz-no-pill"><input type="radio" name="ce-hz" value="no"${it.hazardous ? '' : ' checked'}>否</label>
           <label class="radio-pill${it.hazardous ? ' sel' : ''}" id="ce-hz-yes-pill"><input type="radio" name="ce-hz" value="yes"${it.hazardous ? ' checked' : ''}>是</label>
         </div>`, { stack: true, full: true }) : '',
-      opts.aCols ? fInput('物品外包裝', `<input type="text" id="ce-pack" value="${gEsc(it.pack)}" placeholder="例：紙箱">`) : '',
+      ext ? fInput('物品外包裝', `<input type="text" id="ce-pack" value="${gEsc(it.pack)}" placeholder="例：紙箱">`) : '',
     ].join(''))}
     <div style="text-align:center;margin-top:20px;">
       <button class="btn btn-primary" id="ce-ok">▶ 送出</button>
@@ -402,7 +405,8 @@ function openCargoEditor(item, onSave, opts) {
     if (!(qty > 0)) { toast('數量需為正整數', 'err'); return; }
     const out = { name, l, w, h, qty, category: $('#ce-cat').value, weight: weight > 0 ? weight : 0 };
     if (opts.hazard) out.hazardous = $('#modal-body input[name=ce-hz][value=yes]').checked;
-    if (opts.aCols) Object.assign(out, { plan: $('#ce-plan').value.trim(), workNo: $('#ce-workno').value.trim(), pack: $('#ce-pack').value.trim() });
+    if (ext) Object.assign(out, { plan: $('#ce-plan').value.trim(), workNo: $('#ce-workno').value.trim(), pack: $('#ce-pack').value.trim() });
+    if (bc) out.shape = $('#ce-shape').value.trim();
     onSave(out);
     closeModal();
   };
@@ -416,6 +420,19 @@ function renderCargoGrid(sel, items, editable, onChange, opts) {
   const catName = (c) => (DB.wasteFactors.find(f => f.code === c) || {}).name || c;
   const hz = !!opts.hazard; // 模組 D：多一欄「危險品」
   const ac = !!opts.aCols; // 巡迴物品轉運（G138）：首兩欄計畫名稱、工命號碼，最後一欄物品外包裝
+  const bc = !!opts.bCols; // 院區物品轉運（G143）：計畫名稱、工令號碼、物品名稱、物品外型、長、寬、高、類別、數量、重量、物品外包裝
+  const g = v => gEsc(v || '—');
+  if (bc) {
+    const head = `${editable ? '<th></th>' : ''}<th>計畫名稱</th><th>工令號碼</th><th>物品名稱</th><th>物品外型</th><th>長</th><th>寬</th><th>高</th><th>類別</th><th>數量</th><th>重量</th><th>物品外包裝</th>`;
+    const body = items.length === 0
+      ? `<tr><td colspan="${11 + (editable ? 1 : 0)}" class="muted" style="text-align:center;padding:16px;">${opts.emptyText || `尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。`}</td></tr>`
+      : items.map((it, i) => `<tr>
+        ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-cedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-cdel="${i}">刪除</button></td>` : ''}
+        <td>${g(it.plan)}</td><td>${g(it.workNo)}</td><td>${gEsc(it.name)}</td><td>${g(it.shape)}</td><td>${it.l}</td><td>${it.w}</td><td>${it.h}</td>
+        <td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td><td>${g(it.pack)}</td></tr>`).join('');
+    box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+      <div class="muted" style="font-size:12px;margin-top:6px;">長／寬／高單位 cm；重量為單件重（kg）。</div>`;
+  } else {
   const head = `${editable ? '<th></th>' : ''}${ac ? '<th>計畫名稱</th><th>工命號碼</th>' : ''}<th>${ac ? '物品名稱' : '品名'}</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>${hz ? '<th>危險品</th>' : ''}${ac ? '<th>物品外包裝</th>' : ''}`;
   const cols = 5 + (editable ? 1 : 0) + (hz ? 1 : 0) + (ac ? 3 : 0);
   const body = items.length === 0
@@ -424,6 +441,7 @@ function renderCargoGrid(sel, items, editable, onChange, opts) {
         ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-cedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-cdel="${i}">刪除</button></td>` : ''}
         ${ac ? `<td>${gEsc(it.plan || '—')}</td><td>${gEsc(it.workNo || '—')}</td>` : ''}<td>${it.name}</td><td>${it.l}×${it.w}×${it.h}</td><td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td>${hz ? `<td>${it.hazardous ? '<span class="badge b-red">⚠ 是</span>' : '<span class="muted">否</span>'}</td>` : ''}${ac ? `<td>${gEsc(it.pack || '—')}</td>` : ''}</tr>`).join('');
   box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  }
   if (editable) {
     $$(sel + ' [data-cedit]').forEach(b => b.onclick = () => openCargoEditor(items[+b.dataset.cedit], upd => { items[+b.dataset.cedit] = upd; onChange(); }, opts));
     $$(sel + ' [data-cdel]').forEach(b => b.onclick = () => { items.splice(+b.dataset.cdel, 1); onChange(); });
@@ -482,9 +500,9 @@ function recipientVal(prefix) {
 // 明細顯示：回傳 HTML（無資料時顯示 —）
 function recipientDisplay(r) {
   if (!r || (!r.unit && !r.name && !r.phone && !r.agentName && !r.agentPhone)) return '<span class="muted">—</span>';
-  const main = [r.unit, r.name, r.phone].filter(Boolean).join('　·　') || '—';
+  const main = [r.unit, r.name, r.phone, r.campus].filter(Boolean).map(gEsc).join('　·　') || '—';
   const agent = (r.agentName || r.agentPhone)
-    ? `<br><span class="hint">代理人：${[r.agentName, r.agentPhone].filter(Boolean).join('　·　')}</span>` : '';
+    ? `<br><span class="hint">代理人：${[r.agentName, r.agentPhone, r.agentCampus, r.agentHall].filter(Boolean).map(gEsc).join('　·　')}</span>` : '';
   return main + agent;
 }
 
@@ -1402,7 +1420,7 @@ function renderBApplyList(p) {
      ['D6', 'D1', true, 40, [{ name: '桶裝', l: 60, w: 60, h: 90, qty: 4, category: 'DRUM', weight: 80 }], { unit: '屏東廠', name: '潘俊傑', phone: '08-7778899#33' }],
      ['D9', 'D5', false, 30, [{ name: '長料', l: 480, w: 25, h: 25, qty: 3, category: 'LONG', weight: 30 }], { unit: '雲林倉儲', name: '簡淑芬', phone: '05-5556677#14', agentName: '許志偉', agentPhone: '0966-345-678' }]
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '研發部-吳承恩', site: pick, destSite: drop, direct, items, recipient,
+      ModuleB.createOrder({ applicant: '研發部-吳承恩', site: pick, destSite: drop, direct, items, recipient: bDemoRecipient(recipient), ...bDemoExtra('研發部', '4102', '吳承恩'),
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
         wantReceiveDate: bDayStr(3), wantReceiveTime: '09:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 5 筆去程範例（含 1 直達）', 'ok');
@@ -1413,13 +1431,22 @@ function renderBApplyList(p) {
      ['D3', DB.homeSite, false, 20, [{ name: '易碎件', l: 60, w: 50, h: 50, qty: 3, category: 'FRAG', weight: 20 }], { unit: '研發部', name: '吳承恩', phone: '02-27005678#412' }],
      ['D5', DB.homeSite, false, 15, [{ name: '小箱', l: 40, w: 30, h: 25, qty: 6, category: 'BOX', weight: 8 }], { unit: '中央倉', name: '林曉琪', phone: '02-27009999#601', agentName: '陳柏宇', agentPhone: '0988-567-890' }]
     ].forEach(([pick, drop, direct, handleMin, items, recipient]) => { const lm = Math.round(handleMin * 0.6);
-      ModuleB.createOrder({ applicant: '業務部-周雅婷', site: pick, destSite: drop, direct, items, recipient,
+      ModuleB.createOrder({ applicant: '業務部-周雅婷', site: pick, destSite: drop, direct, items, recipient: bDemoRecipient(recipient), ...bDemoExtra('業務部', '2201', '周雅婷'),
         pickupLoc: (ModuleB.siteById(pick).buildings || [''])[0], deliverLoc: (ModuleB.siteById(drop).buildings || [''])[0],
         wantReceiveDate: bDayStr(3), wantReceiveTime: '09:00', loadMin: lm, unloadMin: handleMin - lm }); });
     bApply.resultIds = null; renderBGrid(); toast('已載入 3 筆回程範例（含 1 直達）', 'ok');
   };
   renderBGrid();
   initMasonry(p);
+}
+// 範例資料補齊 G143 必填欄位（申請單位／分機、委運人、接收代理人院區／館別）
+let bDemoNo = 0;
+function bDemoExtra(unit, ext, consignor) {
+  bDemoNo++;
+  return { applyUnit: unit, applyExt: ext, consignor: { name: consignor, campus: '', ext }, tripleFormNo: `3F-${String(bDemoNo).padStart(4, '0')}` };
+}
+function bDemoRecipient(r) {
+  return Object.assign({ agentName: r.name, agentPhone: r.phone, agentCampus: '同接收人', agentHall: '收發室' }, r);
 }
 function runBQuery() {
   bApply.query = {
@@ -1460,6 +1487,71 @@ function renderBGrid() {
   });
 }
 
+/* ---------- 院區物品轉運單內容卡片（G143）：申請明細／單位主管審核共用 ---------- */
+function bOrderCards(o, pfx, head, extra) {
+  const d = v => (v == null || v === '') ? '<span class="muted">—</span>' : gEsc(v);
+  const c = o.consignor || {}, r = o.recipient || {};
+  const wantWin = o.wantReceiveTime ? `${o.wantReceiveTime}<span class="hint" style="margin-left:6px;">～${minToHHMM(hhmmToMin(o.wantReceiveTime) + DB.receiveWindowMin)}</span>` : '<span class="muted">—</span>';
+  return `
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>基本資訊</span><span>${Flow.badge(o)}${signBadge(o)}</span></div>
+      ${infoGrid(pfx + '-basic', [
+        fItem('物品運輸單狀態', d(o.transportStatus || '開單')),
+        fItem('物品運輸單號', `<b style="color:var(--navy);">${o.id}</b>`),
+        fItem('申請人', d(o.applicant)), fItem('申請日期', d(o.applyDate)),
+        fItem('三聯單表單編號', d(o.tripleFormNo)),
+        fItem('申請單位/委運單位', d(o.applyUnit)), fItem('申請人分機', d(o.applyExt)),
+        fItem('委運人姓名', d(c.name)), fItem('委運人院區', d(c.campus)), fItem('委運人分機/手機', d(c.ext)),
+        ...(head || []),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">收送站點與派送條件</div>
+      ${infoGrid(pfx + '-route', [
+        fItem('收貨站點', `${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span>`),
+        fItem('委運人館別', d(o.pickupLoc)),
+        fItem('送貨站點', `${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span>`),
+        fItem('接收人館別', d(o.deliverLoc)),
+        fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
+        fItem('願意持續媒合駕駛', d(o.keepMatchDriver)),
+        fItem('危險品運輸', o.hazardTransport === 'yes' ? '<span class="badge b-red">⚠ 是</span>' : '否'),
+        fItem('是否同意併車', o.agreeCarpool === false ? '<span class="badge b-amber">不同意</span>' : '同意'),
+        o.agreeCarpool === false ? fItem('拒絕併車事由', d(o.carpoolRejectReason)) : '',
+        fItem('是否單程運輸', d(o.oneway)),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">時間與作業</div>
+      ${infoGrid(pfx + '-time', [
+        fItem('希望收貨日期', d(o.wantReceiveDate)),
+        fItem('可裝貨時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', wantWin),
+        fItem('可卸貨時間', d(o.unloadReadyTime)), fItem('調整延後收貨時間', d(o.delayReceiveTime)),
+        fItem('裝貨／卸貨所需時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
+        fItem('是否需要夜間加班', d(o.nightOT)), fItem('是否需要假日加班', d(o.holidayOT)),
+        fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
+        fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">接收人資訊</div>
+      ${infoGrid(pfx + '-recv', [
+        fItem('單位', d(r.unit)), fItem('接收人姓名', d(r.name)), fItem('接收人分機/手機', d(r.phone)), fItem('接收人院區', d(r.campus)),
+        fItem('接收代理人姓名', d(r.agentName)), fItem('接收代理人分機/手機', d(r.agentPhone)),
+        fItem('接收代理人院區', d(r.agentCampus)), fItem('接收代理人館別', d(r.agentHall)),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">其他</div>
+      ${infoGrid(pfx + '-other', [
+        fItem('備註', d(o.remark), { full: true }),
+        o.changeReason ? fItem('異動事由', d(o.changeReason), { full: true }) : '',
+        fItem('車長', d(o.captain)), fItem('車長分機/手機', d(o.captainPhone)),
+        fItem('建立時間', fmtTime(o.createdAt)),
+        ...(extra || []),
+      ].join(''))}
+    </div>`;
+}
+
 /* ---------- 明細畫面 ---------- */
 function renderBApplyDetail(p, id) {
   const o = ModuleB.orders.find(x => x.id === id);
@@ -1469,27 +1561,7 @@ function renderBApplyDetail(p, id) {
   const action = '';
   p.innerHTML = `
     <div class="section-h">院區物品轉運申請明細 · ${o.id}</div>
-    <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${Flow.badge(o)}${signBadge(o)}</span></div>
-      ${infoGrid('bd-basic', [
-        fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
-        fItem('申請人', o.applicant),
-        fItem('收貨據點（起）', `${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span>`),
-        fItem('送貨據點（迄）', `${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span>`),
-        fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
-        fItem('送貨地點（建物）', o.deliverLoc || '<span class="muted">—</span>'),
-        fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
-        fItem('希望收貨日期／時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', o.wantReceiveTime || o.wantReceiveDate ? `${o.wantReceiveDate || ''} ${o.wantReceiveTime || ''}${o.wantReceiveTime ? `<span class="hint" style="margin-left:6px;">～${minToHHMM(hhmmToMin(o.wantReceiveTime) + DB.receiveWindowMin)}</span>` : ''}` : '<span class="muted">—</span>'),
-        fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
-        fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
-        fItem('上貨 / 下貨時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
-        fItem('建立時間', fmtTime(o.createdAt)),
-      ].join(''))}
-    </div>
-    <div class="card">
-      <div class="card-title">接收人資訊</div>
-      ${infoGrid('bd-recv', fItem('接收人', recipientDisplay(o.recipient), { full: true, tall: true }))}
-    </div>
+    ${bOrderCards(o, 'bd')}
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         ${bCanEdit ? `<button class="btn btn-accent btn-sm" id="bd-add">＋ 新增</button>` : ''}</div>
@@ -1508,145 +1580,219 @@ function renderBApplyDetail(p, id) {
     ${backBar('bd-back')}`;
   const bed = $('#bd-edit');
   if (bed) bed.onclick = () => { bApply.editId = o.id; bApply.view = 'new'; RENDER.b_apply(); };
-  renderCargoGrid('#bd-items', o.items, bCanEdit, () => { ModuleB.recompute(o); RENDER.b_apply(); });
+  renderCargoGrid('#bd-items', o.items, bCanEdit, () => { ModuleB.recompute(o); RENDER.b_apply(); }, B_CARGO_OPTS);
   if (bCanEdit) {
     const add = $('#bd-add');
-    if (add) add.onclick = () => openCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); });
+    if (add) add.onclick = () => openCargoEditor(null, it => { o.items.push(it); ModuleB.recompute(o); RENDER.b_apply(); }, B_CARGO_OPTS);
   }
   $('#bd-back').onclick = () => { bApply.view = 'list'; RENDER.b_apply(); };
   initMasonry(p);
 }
 
-/* ---------- 新增畫面 ---------- */
+/* ---------- 新增畫面（G143 表單改版）---------- */
 let baItems = []; // 幹線新增表單的貨物項目暫存（每筆含獨立尺寸與重量，比照 A）
-function renderBaCargo() { renderCargoGrid('#ba-items', baItems, true, renderBaCargo); }
+const B_CARGO_OPTS = { bCols: true };   // 貨物 grid：計畫名稱、工令號碼、物品名稱、物品外型、長、寬、高、類別、數量、重量、物品外包裝
+function renderBaCargo() { renderCargoGrid('#ba-items', baItems, true, renderBaCargo, B_CARGO_OPTS); }
+// 是／否單選膠囊
+function bYesNo(name, val) {
+  return `<div class="radio-group" id="${name}-wrap">
+    <label class="radio-pill${val === 'yes' ? ' sel' : ''}"><input type="radio" name="${name}" value="yes"${val === 'yes' ? ' checked' : ''}>是</label>
+    <label class="radio-pill${val !== 'yes' ? ' sel' : ''}"><input type="radio" name="${name}" value="no"${val !== 'yes' ? ' checked' : ''}>否</label></div>`;
+}
 function renderBApplyNew(p) {
   const editing = bApply.editId ? ModuleB.orders.find(x => x.id === bApply.editId && ModuleB.canEdit(x)) : null;
   const siteOpts = DB.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const req = '<span style="color:#c0392b;">＊</span>';
+  const txt = (id, ph) => `<input type="text" id="${id}"${ph ? ` placeholder="${ph}"` : ''}>`;
   p.innerHTML = `
     <div class="section-h">${editing ? `修改院區物品轉運申請 · ${editing.id}` : '新增院區物品轉運申請單'}</div>
     ${editing ? editBanner(editing) : ''}
     <div class="card">
-      <div class="card-title">建立院區物品轉運申請單 <span class="g-tag">G38/G40</span></div>
-      ${infoGrid('ba-fields0', fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`))}
-      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨據點（起）／送貨據點（迄）</b>自動判斷（送貨據點較南＝南下、較北＝北上），無需自行勾選。起迄可為<b>同一據點</b>（院區內建物間轉運），但收貨建物與送貨建物不可相同。<br>
+      <div class="card-title">基本資訊 <span class="g-tag">G38/G40/G143</span></div>
+      ${infoGrid('ba-fields0', [
+        fItem('物品運輸單狀態', editing ? (editing.transportStatus || '開單') : '開單'),
+        fItem('物品運輸單號', editing ? `<b style="color:var(--navy);">${editing.id}</b>` : `LB${String(ModuleB.seq).padStart(3, '0')} <span class="hint">（儲存後產生）</span>`),
+        fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`),
+        fItem('申請日期', editing ? (editing.applyDate || '—') : ModuleB.rocDate()),
+        fInput('三聯單表單編號', txt('ba-tripleno')),
+        fInput(`申請單位/委運單位${req}`, `<input type="text" id="ba-unit" value="${gEsc(DB.currentUser.unit)}">`),
+        fInput(`申請人分機${req}`, `<input type="text" id="ba-ext" value="${gEsc(DB.currentUser.ext)}">`),
+        fInput(`委運人姓名${req}`, txt('ba-cname')),
+        fInput('委運人院區', txt('ba-ccampus')),
+        fInput(`委運人分機${req}/手機`, txt('ba-cext', '分機或手機')),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">收送站點</div>
+      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨站點／送貨站點</b>自動判斷（送貨站點較南＝南下、較北＝北上），無需自行勾選。起迄可為<b>同一據點</b>（院區內建物間轉運），但委運人館別與接收人館別不可相同。<br>
         目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；現行車次模型為「自基地南下、折返北上回基地」，<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
       ${infoGrid('ba-fields', [
-        fInput('收貨據點（起）', `<select id="ba-site">${siteOpts}</select>`),
-        fInput('收貨建物', `<select id="ba-pickbldg"></select><input type="text" id="ba-pickother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
-        fInput('送貨據點（迄）', `<select id="ba-dest">${siteOpts}</select>`),
-        fInput('送貨建物', `<select id="ba-dropbldg"></select><input type="text" id="ba-dropother" placeholder="請輸入建物/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput('收貨站點', `<select id="ba-site">${siteOpts}</select>`),
+        fInput('委運人館別', `<select id="ba-pickbldg"></select><input type="text" id="ba-pickother" placeholder="請輸入館別/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput('送貨站點', `<select id="ba-dest">${siteOpts}</select>`),
+        fInput(`接收人館別${req}`, `<select id="ba-dropbldg"></select><input type="text" id="ba-dropother" placeholder="請輸入館別/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">派送條件與需求</div>
+      ${infoGrid('ba-cond', [
         fInput('派送型態 <span class="hint">直達不湊單、單一目的地 G38</span>', `
           <div class="radio-group">
             <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
             <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
           </div>`, { stack: true, full: true }),
+        fInput('願意持續媒合駕駛', txt('ba-keepdrv')),
+        fInput('危險品運輸', bYesNo('ba-hz', 'no')),
+        fInput('是否同意併車', `<label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="ba-carpool" checked> 同意併車</label>`),
+        fInput('拒絕併車事由 <span class="hint">不同意併車時必填</span>', txt('ba-rejreason')),
+        fInput('是否單程運輸', txt('ba-oneway')),
       ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">時間與作業</div>
       ${infoGrid('ba-fields2', [
-        fInput('希望收貨日期 <span style="color:#c0392b;">*</span> <span class="hint">對應派車日（G129）</span>', `<input type="date" id="ba-wantdate" min="${bDayStr(0)}" value="${bDayStr(0)}">`),
-        fInput('希望收貨時間 <span class="hint">收貨時間窗起點，＋4h 為窗尾（2.19）</span>', `<input type="time" id="ba-want" value="10:00">`),
-        fInput('上貨時間 (分，G35)', `<input type="number" id="ba-load" value="20">`),
-        fInput('下貨時間 (分，G35)', `<input type="number" id="ba-unload" value="10">`),
+        fInput(`希望收貨日期${req} <span class="hint">對應派車日（G129）</span>`, `<input type="date" id="ba-wantdate" min="${bDayStr(0)}" value="${bDayStr(0)}">`),
+        fInput('可裝貨時間 <span class="hint">收貨時間窗起點，＋4h 為窗尾（2.19）</span>', `<input type="time" id="ba-want" value="10:00">`, { full: true }),
+        fInput('可卸貨時間', txt('ba-unloadready')),
+        fInput('調整延後收貨時間 <span class="hint">預設同可卸貨時間</span>', txt('ba-delayrecv')),
+        fInput('裝貨所需時間 <span class="hint">分（G35）</span>', `<input type="number" id="ba-load" value="20">`),
+        fInput('卸貨所需時間 <span class="hint">分（G35）</span>', `<input type="number" id="ba-unload" value="10">`),
+        fInput('是否需要夜間加班', txt('ba-nightot')),
+        fInput('是否需要假日加班', txt('ba-holidayot')),
       ].join(''))}
-      <div class="divider"></div>
+    </div>
+    <div class="card">
       <div class="card-title">接收人資訊</div>
       ${infoGrid('ba-recv', [
         fInput('單位', `<input type="text" id="ba-runit" placeholder="收貨單位／部門">`),
-        fInput('姓名', `<input type="text" id="ba-rname" placeholder="接收人姓名">`),
-        fInput('電話', `<input type="text" id="ba-rphone" placeholder="聯絡電話">`),
-        fInput('代理人姓名 <span class="hint">選填</span>', `<input type="text" id="ba-aname" placeholder="代理人姓名">`),
-        fInput('代理人電話 <span class="hint">選填</span>', `<input type="text" id="ba-aphone" placeholder="代理人電話">`),
+        fInput(`接收人姓名${req}`, txt('ba-rname')),
+        fInput(`接收人分機${req}/手機`, txt('ba-rphone', '分機或手機')),
+        fInput('接收人院區', txt('ba-rcampus')),
+        fInput(`接收代理人姓名${req}`, txt('ba-aname')),
+        fInput(`接收代理人分機/手機${req}`, txt('ba-aphone', '分機或手機')),
+        fInput(`接收代理人院區${req}`, txt('ba-acampus')),
+        fInput(`接收代理人館別${req}`, txt('ba-ahall')),
       ].join(''))}
-      <div class="divider"></div>
+    </div>
+    <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="ba-add">＋ 新增</button></div>
       <div id="ba-items"></div>
-      <div class="divider"></div>
-      <button class="btn btn-primary" id="ba-submit">▶ 送出申請（待二級審）</button>
-      <button class="btn btn-ghost" id="ba-draft">💾 暫存（申請中）</button>
-      <button class="btn btn-ghost" id="ba-cancel">取消</button>
     </div>
-    ${backBar('bn-back')}`;
-  const bBack = () => { if (editing) { bApply.view = 'detail'; bApply.detailId = editing.id; } else bApply.view = 'list'; bApply.editId = null; RENDER.b_apply(); };
-  $('#bn-back').onclick = bBack;
+    <div class="card">
+      <div class="card-title">其他</div>
+      ${infoGrid('ba-other', [
+        fInput('備註', txt('ba-remark'), { full: true }),
+        editing ? fInput(`異動事由${req}`, txt('ba-chg', '請說明本次修改原因'), { full: true }) : '',
+        fInput('車長', txt('ba-captain')),
+        fInput('車長分機/手機', txt('ba-capphone', '分機或手機')),
+      ].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">是否送審</div>
+      ${infoGrid('ba-sendg', fInput('是否送審', bYesNo('ba-send', 'no'), { full: true }))}
+      <div class="muted" style="font-size:12px;">選<b>否</b>：儲存為「申請中」，之後可再修改；選<b>是</b>：儲存並送出，狀態改為「待二級審」（單位主管審核）。</div>
+    </div>
+    <div style="text-align:center;margin-top:22px;">
+      <button class="btn btn-primary" id="ba-submit">▶ 送出</button>
+      ${editing ? '<button class="btn btn-ghost" id="bn-back">← 回上一頁</button>' : '<button class="btn btn-ghost" id="ba-cancel">取消</button>'}
+    </div>`;
+  const bBack = () => { if (editing) { bApply.view = 'detail'; bApply.detailId = editing.id; } else bApply.view = 'list'; bApply.editId = null; baItems = []; RENDER.b_apply(); };
+  if (editing) $('#bn-back').onclick = bBack; else $('#ba-cancel').onclick = bBack;
   const setDirect = () => {
-    $('#ba-nd').classList.toggle('sel', $('#page-b_apply input[value="0"]').checked);
-    $('#ba-d').classList.toggle('sel', $('#page-b_apply input[value="1"]').checked);
+    $('#ba-nd').classList.toggle('sel', $('#page-b_apply input[name=ba-direct][value="0"]').checked);
+    $('#ba-d').classList.toggle('sel', $('#page-b_apply input[name=ba-direct][value="1"]').checked);
   };
   $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
-  wireBldg('ba-site', 'ba-pickbldg', 'ba-pickother', siteBuildings); // 收貨建物
-  wireBldg('ba-dest', 'ba-dropbldg', 'ba-dropother', siteBuildings); // 送貨建物
-  // 建物下拉切換「其他」會改變區塊高度 → 重排 Masonry
+  ['ba-hz', 'ba-send'].forEach(n => $$(`#page-b_apply input[name=${n}]`).forEach(r => r.onchange = () =>
+    $$(`#${n}-wrap .radio-pill`).forEach(l => l.classList.toggle('sel', $('input', l).checked))));
+  // 調整延後收貨時間：預設連動可卸貨時間；使用者自行修改後即不再跟隨
+  let delayTouched = false;
+  $('#ba-delayrecv').oninput = () => { delayTouched = true; };
+  $('#ba-unloadready').oninput = () => { if (!delayTouched) $('#ba-delayrecv').value = $('#ba-unloadready').value; };
+  wireBldg('ba-site', 'ba-pickbldg', 'ba-pickother', siteBuildings); // 委運人館別
+  wireBldg('ba-dest', 'ba-dropbldg', 'ba-dropother', siteBuildings); // 接收人館別
+  // 館別下拉切換「其他」會改變區塊高度 → 重排 Masonry
   ['ba-site', 'ba-pickbldg', 'ba-dest', 'ba-dropbldg'].forEach(id => {
     const el = $('#' + id); if (el) el.addEventListener('change', () => initMasonry(p));
   });
   // 預設：自基地北端收貨、送往南部（可自行改；方向由起迄自動判斷 B-2）
   $('#ba-site').value = 'D6'; $('#ba-dest').value = 'D3';
-  $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填建物選單
+  $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填館別選單
   renderBaCargo(); // 一開始顯示空白清單
   initMasonry(p);
   guideApply('B', bApply, p); // 申請引導帶入（若有）
-  if (editing) { // 退回修編：帶入原單內容
-    $('#ba-applicant').value = editing.applicant;
-    $('#ba-site').value = editing.pickSite; $('#ba-site').onchange();
-    $('#ba-dest').value = editing.dropSite; $('#ba-dest').onchange();
-    setBldgVal('ba-pickbldg', 'ba-pickother', editing.pickupLoc);
-    setBldgVal('ba-dropbldg', 'ba-dropother', editing.deliverLoc);
-    const dr = $(`#page-b_apply input[name=ba-direct][value="${editing.direct ? 1 : 0}"]`); dr.checked = true; dr.onchange();
-    $('#ba-want').value = editing.wantReceiveTime || '';
-    $('#ba-wantdate').value = editing.wantReceiveDate || '';
-    $('#ba-load').value = editing.loadMin || 0; $('#ba-unload').value = editing.unloadMin || 0;
-    const r = editing.recipient || {};
-    [['runit', r.unit], ['rname', r.name], ['rphone', r.phone], ['aname', r.agentName], ['aphone', r.agentPhone]]
-      .forEach(([k, v]) => { $('#ba-' + k).value = v || ''; });
-    baItems = editing.items.map(x => ({ ...x })); renderBaCargo();
-    $('#ba-submit').textContent = '▶ 送出（待二級審）';
-    if (editing.status !== 'draft') $('#ba-draft').style.display = 'none';   // 退回修編只能修改後送出
+  if (editing) { // 修改：帶入原單內容
+    const e = editing, set = (id, v) => { $('#' + id).value = v == null ? '' : v; };
+    set('ba-applicant', e.applicant); set('ba-tripleno', e.tripleFormNo);
+    if (e.applyUnit) set('ba-unit', e.applyUnit);
+    if (e.applyExt) set('ba-ext', e.applyExt);
+    const c = e.consignor || {};
+    set('ba-cname', c.name); set('ba-ccampus', c.campus); set('ba-cext', c.ext);
+    $('#ba-site').value = e.pickSite; $('#ba-site').onchange();
+    $('#ba-dest').value = e.dropSite; $('#ba-dest').onchange();
+    setBldgVal('ba-pickbldg', 'ba-pickother', e.pickupLoc);
+    setBldgVal('ba-dropbldg', 'ba-dropother', e.deliverLoc);
+    const dr = $(`#page-b_apply input[name=ba-direct][value="${e.direct ? 1 : 0}"]`); dr.checked = true; dr.onchange();
+    const hz = $(`#page-b_apply input[name=ba-hz][value="${e.hazardTransport === 'yes' ? 'yes' : 'no'}"]`); hz.checked = true; hz.onchange();
+    set('ba-keepdrv', e.keepMatchDriver); $('#ba-carpool').checked = e.agreeCarpool !== false;
+    set('ba-rejreason', e.carpoolRejectReason); set('ba-oneway', e.oneway);
+    set('ba-want', e.wantReceiveTime); set('ba-wantdate', e.wantReceiveDate);
+    set('ba-unloadready', e.unloadReadyTime); set('ba-delayrecv', e.delayReceiveTime);
+    if ((e.delayReceiveTime || '') !== (e.unloadReadyTime || '')) delayTouched = true;
+    set('ba-load', e.loadMin || 0); set('ba-unload', e.unloadMin || 0);
+    set('ba-nightot', e.nightOT); set('ba-holidayot', e.holidayOT);
+    const r = e.recipient || {};
+    [['runit', r.unit], ['rname', r.name], ['rphone', r.phone], ['rcampus', r.campus],
+     ['aname', r.agentName], ['aphone', r.agentPhone], ['acampus', r.agentCampus], ['ahall', r.agentHall]].forEach(([k, v]) => set('ba-' + k, v));
+    set('ba-remark', e.remark); set('ba-captain', e.captain); set('ba-capphone', e.captainPhone);
+    baItems = e.items.map(x => ({ ...x })); renderBaCargo();
     initMasonry(p);
   }
-  $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); });
-  $('#ba-cancel').onclick = bBack;
+  $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); }, B_CARGO_OPTS);
+  const v = id => $('#' + id).value.trim();
   const formData = () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return null; }
-    const routeErr = ModuleB.routeError({ site: $('#ba-site').value, destSite: $('#ba-dest').value,
-      pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'), deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother') });
-    if (routeErr) { toast(routeErr, 'err'); return null; }
-    const wantDate = $('#ba-wantdate').value;
-    if (!wantDate) { toast('請填寫「希望收貨日期」', 'err'); return null; }
-    if (wantDate < bDayStr(0)) { toast('「希望收貨日期」不可早於今天', 'err'); return null; }
-    return {
+    const data = {
       applicant: $('#ba-applicant').value,
+      tripleFormNo: v('ba-tripleno'), applyUnit: v('ba-unit'), applyExt: v('ba-ext'),
+      consignor: { name: v('ba-cname'), campus: v('ba-ccampus'), ext: v('ba-cext') },
       site: $('#ba-site').value,
       destSite: $('#ba-dest').value,
-      pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),
-      deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),
-      wantReceiveDate: wantDate,
-      wantReceiveTime: $('#ba-want').value,
-      recipient: recipientVal('ba'),
-      direct: $('#page-b_apply input[value="1"]').checked,
+      pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),     // 委運人館別
+      deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),    // 接收人館別
+      direct: $('#page-b_apply input[name=ba-direct][value="1"]').checked,
+      keepMatchDriver: v('ba-keepdrv'), hazardTransport: $('#page-b_apply input[name=ba-hz]:checked').value,
+      agreeCarpool: $('#ba-carpool').checked, carpoolRejectReason: v('ba-rejreason'), oneway: v('ba-oneway'),
+      wantReceiveDate: $('#ba-wantdate').value,
+      wantReceiveTime: $('#ba-want').value,                   // 可裝貨時間
+      unloadReadyTime: v('ba-unloadready'), delayReceiveTime: v('ba-delayrecv'),
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
+      nightOT: v('ba-nightot'), holidayOT: v('ba-holidayot'),
+      recipient: Object.assign(recipientVal('ba'), { campus: v('ba-rcampus'), agentCampus: v('ba-acampus'), agentHall: v('ba-ahall') }),
+      remark: v('ba-remark'), changeReason: editing ? v('ba-chg') : '',
+      captain: v('ba-captain'), captainPhone: v('ba-capphone'),
       items: baItems.map(x => ({ ...x })),
     };
+    const err = ModuleB.formError(data, { editing: !!editing });
+    if (err) { toast(err, 'err'); return null; }
+    if (data.wantReceiveDate < bDayStr(0)) { toast('「希望收貨日期」不可早於今天', 'err'); return null; }
+    return data;
   };
-  const done = (o, msg) => {
-    baItems = []; toast(msg, 'ok');
-    bApply.resultIds = null; bApply.editId = null; bApply.view = 'detail'; bApply.detailId = o.id;
-    RENDER.b_apply();
-  };
-  $('#ba-draft').onclick = async () => {
-    const data = formData(); if (!data) return;
-    if (!(await confirmDialog({ title: '確認暫存？', text: '將儲存為「申請中」，尚未送出；之後可於明細頁編輯並送出。' }))) return;
-    const o = editing ? ModuleB.saveDraft(editing, data) : ModuleB.createOrder(data, { draft: true });
-    if (!editing) guideDrafted(bApply, o.id);
-    done(o, `${o.id} 已暫存（申請中）`);
-  };
+  // 送出：依「是否送審」— 是＝送出（待二級審）、否＝儲存為申請中（比照差旅共乘 G139）
   $('#ba-submit').onclick = async () => {
     const data = formData(); if (!data) return;
-    const ok = await confirmDialog({ title: '確認送出院區物品轉運申請單？', text: '送出後進入「待二級審」（單位主管審核），通過後由調度派車。' });
+    const send = $('#page-b_apply input[name=ba-send]:checked').value === 'yes';
+    const ok = await confirmDialog(send
+      ? { title: '確認送出院區物品轉運申請單？', text: '「是否送審」為是：儲存後狀態改為「待二級審」（單位主管審核），通過後由調度派車。' }
+      : { title: '確認儲存？', text: '「是否送審」為否：將儲存為「申請中」，尚未送審；之後可於明細頁修改並送審。' });
     if (!ok) return;
-    const o = editing ? ModuleB.resubmit(editing, data) : ModuleB.createOrder(data);
-    guideSubmitted(editing ? null : bApply, o.id);
-    done(o, `${o.id} 已送出，待二級審`);
+    let o;
+    if (send) { o = editing ? ModuleB.resubmit(editing, data) : ModuleB.createOrder(data); guideSubmitted(editing ? null : bApply, o.id); }
+    else { o = editing ? ModuleB.saveDraft(editing, data) : ModuleB.createOrder(data, { draft: true }); if (!editing) guideDrafted(bApply, o.id); }
+    baItems = []; toast(send ? `${o.id} 已送出，待二級審` : `${o.id} 已儲存（申請中）`, 'ok');
+    bApply.resultIds = null; bApply.editId = null; bApply.view = 'detail'; bApply.detailId = o.id;
+    RENDER.b_apply();
   };
 }
 // 相容：審核端動作呼叫此函式刷新申請端 grid
@@ -1728,29 +1874,8 @@ function renderBApproveDetail(p, id) {
   const pending = o.status === 'submitted';
   p.innerHTML = `
     <div class="section-h">託運單審核 · ${o.id}</div>
-    <div class="card">
-      <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${Flow.badge(o)}${signBadge(o)}</span></div>
-      ${infoGrid('bap-basic', [
-        fItem('單號', `<b style="color:var(--navy);">${o.id}</b>`),
-        fItem('申請人', o.applicant),
-        fItem('行程方向 <span class="hint">由起迄自動判斷</span>', ModuleB.isIntraSite(o) || ModuleB.isSouthbound(o) ? ModuleB.dirLabel(o) : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`),
-        fItem('收貨據點（起）', ModuleB.siteById(o.pickSite).name),
-        fItem('送貨據點（迄）', ModuleB.siteById(o.dropSite).name),
-        fItem('收貨地點（建物）', o.pickupLoc || '<span class="muted">—</span>'),
-        fItem('送貨地點（建物）', o.deliverLoc || '<span class="muted">—</span>'),
-        fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
-        fItem('希望收貨日期／時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', o.wantReceiveTime || o.wantReceiveDate ? `${o.wantReceiveDate || ''} ${o.wantReceiveTime || ''}${o.wantReceiveTime ? `<span class="hint" style="margin-left:6px;">～${minToHHMM(hhmmToMin(o.wantReceiveTime) + DB.receiveWindowMin)}</span>` : ''}` : '<span class="muted">—</span>'),
-        fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
-        fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
-        fItem('上貨 / 下貨時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
-        fItem('建立時間', fmtTime(o.createdAt)),
-        o.reviewNote ? fItem('審核備註', o.reviewNote) : '',
-      ].join(''))}
-    </div>
-    <div class="card">
-      <div class="card-title">接收人資訊</div>
-      ${infoGrid('bap-recv', fItem('接收人', recipientDisplay(o.recipient), { full: true, tall: true }))}
-    </div>
+    ${bOrderCards(o, 'bap', [fItem('行程方向 <span class="hint">由起迄自動判斷</span>', ModuleB.isIntraSite(o) || ModuleB.isSouthbound(o) ? ModuleB.dirLabel(o) : `回程（北上回 ${ModuleB.siteById(DB.homeSite).name}）`)],
+      o.reviewNote ? [fItem('審核備註', o.reviewNote)] : [])}
     <div class="card">
       <div class="card-title">貨物項目</div>
       <div id="bap-detail-items"></div>
@@ -1771,7 +1896,7 @@ function renderBApproveDetail(p, id) {
         <button class="btn btn-ghost" id="bsv-cancel">取消</button>
       </div>
     </div>` : backBar('bsv-back')}`;
-  renderCargoGrid('#bap-detail-items', o.items, false); // 審核端唯讀
+  renderCargoGrid('#bap-detail-items', o.items, false, null, B_CARGO_OPTS); // 審核端唯讀
   if (pending) {
     const syncReq = () => {
       const no = $('#page-b_approve input[name=bsv-agree][value=no]').checked;
@@ -5551,6 +5676,7 @@ function guideApply(unit, state, p) {
     set('ba-dest', d.destSite); $('#ba-dest', p).onchange();
     set('ba-want', d.wantReceiveTime);
     if (d.wantReceiveDate) set('ba-wantdate', d.wantReceiveDate);
+    if (d.hazardTransport) pick('ba-hz', d.hazardTransport);   // 危險品運輸（G143）
     baItems = d.items.map(i => Object.assign({}, i)); renderBaCargo();
   } else if (unit === 'C') {
     set('ca-applicant', d.applicant); set('ca-dept', d.dept); set('ca-phone', d.ext);

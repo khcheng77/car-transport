@@ -2853,6 +2853,50 @@ group('差旅共乘申請：是否送審（G139）', () => {
   });
 });
 
+group('院區物品轉運申請表單改版（G143）', () => {
+  const form = o => Object.assign({ applicant: '研發部-吳承恩', site: 'D6', destSite: 'D3', pickupLoc: 'A 棟', deliverLoc: '主倉',
+    wantReceiveDate: '2026-10-20', wantReceiveTime: '10:00', loadMin: 20, unloadMin: 10,
+    applyUnit: '研發部', applyExt: '4102', consignor: { name: '吳承恩', campus: '', ext: '4102' },
+    recipient: { unit: '台南營業所', name: '鄭文彬', phone: '#12', agentName: '周雅琳', agentPhone: '0933', agentCampus: '台南', agentHall: '收發室' },
+    items: [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 2, category: 'BOX', weight: 10 }] }, o);
+  test('新單帶出物品運輸單狀態「開單」與民國申請日期；新欄位寫入、預設值', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = B.createOrder(form({ unloadReadyTime: '15:00', tripleFormNo: '3F-1', captain: '王車長' }));
+    eq(o.transportStatus, '開單'); ok(/^\d{3}\/\d{2}\/\d{2}$/.test(o.applyDate), '民國日期 ' + o.applyDate);
+    eq(o.delayReceiveTime, '15:00', '調整延後收貨時間預設＝可卸貨時間');
+    eq(o.agreeCarpool, true); eq(o.hazardTransport, 'no'); eq(o.tripleFormNo, '3F-1'); eq(o.captain, '王車長');
+    eq(o.consignor.name, '吳承恩'); eq(o.recipient.agentHall, '收發室');
+    const o2 = B.createOrder(form({ unloadReadyTime: '15:00', delayReceiveTime: '16:30', agreeCarpool: true, carpoolRejectReason: '不需要' }));
+    eq(o2.delayReceiveTime, '16:30', '可自行調整'); eq(o2.carpoolRejectReason, '', '同意併車不保留拒絕事由');
+  });
+  test('必填檢核：＊欄位、不同意併車須填事由、修改須填異動事由', () => {
+    const H = fresh(), B = H.ModuleB;
+    eq(B.formError(form()), null);
+    ok(/申請單位/.test(B.formError(form({ applyUnit: ' ' }))));
+    ok(/申請人分機/.test(B.formError(form({ applyExt: '' }))));
+    ok(/委運人姓名/.test(B.formError(form({ consignor: { ext: '1' } }))));
+    ok(/委運人分機/.test(B.formError(form({ consignor: { name: 'X' } }))));
+    ok(/接收人館別/.test(B.formError(form({ deliverLoc: '' }))));
+    ok(/接收代理人院區/.test(B.formError(form({ recipient: Object.assign({}, form().recipient, { agentCampus: '' }) }))));
+    ok(/接收代理人館別/.test(B.formError(form({ recipient: Object.assign({}, form().recipient, { agentHall: '' }) }))));
+    ok(/拒絕併車事由/.test(B.formError(form({ agreeCarpool: false }))));
+    eq(B.formError(form({ agreeCarpool: false, carpoolRejectReason: '機密物品' })), null);
+    ok(/異動事由/.test(B.formError(form(), { editing: true })));
+    eq(B.formError(form({ changeReason: '改日期' }), { editing: true }), null);
+  });
+  test('是否送審：否＝申請中、是＝待二級審；退回修編選否回到申請中', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = B.createOrder(form(), { draft: true }); eq(H.Flow.of(o), 'draft');
+    B.saveDraft(o, form({ remark: '改備註', changeReason: 'x' })); eq(o.status, 'draft'); eq(o.remark, '改備註');
+    B.resubmit(o, form({ changeReason: '送審' })); eq(H.Flow.of(o), 'review');
+    const r = B.createOrder(form()); B.reject(r, '請補三聯單');
+    B.saveDraft(r, form({ tripleFormNo: '3F-9', changeReason: '補三聯單' }));
+    eq(r.status, 'draft'); eq(r.tripleFormNo, '3F-9'); eq(r.revisions.length, 1);
+    const a = B.createOrder(form()); B.approve(a);
+    let err = ''; try { B.saveDraft(a, form()); } catch (e) { err = e.message; } ok(err, '待調度不可改');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')
