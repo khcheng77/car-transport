@@ -50,12 +50,29 @@ group('共用裝載判定引擎（G01–G05 / T1-2〜T1-6）', () => {
     ok(res.reasons.some(r => r.code === 'L2_DIM'), '需含 L2_DIM 原因碼');
   });
 
-  test('G01 Level 2：旋轉後才放得下 → 通過', () => {
+  test('G145 不堆疊只能水平轉向：底面長寬互換後放得下 → 通過', () => {
     const H = fresh();
-    const veh = { dims: { l: 300, w: 50, h: 50 }, volume: 1e9, weight: 1e9 };
-    // 件為 40×40×250：需旋轉讓 250 對到車廂長 300
-    const res = H.checkLoad([item({ l: 40, w: 40, h: 250, category: 'BOX' })], veh, null);
-    ok(res.ok, '六方向旋轉後應可放入：' + JSON.stringify(res.reasons));
+    const veh = { dims: { l: 50, w: 300, h: 100 }, weight: 1e9 };
+    // 件為 250×40×40：長寬互換讓 250 對到車廂寬 300
+    const res = H.checkLoad([item({ l: 250, w: 40, h: 40, category: 'BOX' })], veh, null);
+    ok(res.ok, '水平轉向後應可放入：' + JSON.stringify(res.reasons));
+  });
+
+  test('G145 高度固定：比車廂高的貨即使躺下放得下也不行（不可直立／側倒轉向）', () => {
+    const H = fresh();
+    const veh = { dims: { l: 300, w: 200, h: 100 }, weight: 1e9 };
+    const res = H.checkLoad([item({ name: '直立櫃', l: 40, w: 40, h: 150, category: 'BOX' })], veh, null);
+    ok(!res.ok && res.reasons.some(r => r.code === 'L2_DIM' && r.msg.includes('車廂高')), JSON.stringify(res.reasons));
+  });
+
+  test('G145 有效地板面積＝底面積×件數×類別浪費係數，加總不可超過車廂地板（不看體積）', () => {
+    const H = fresh();
+    const veh = { dims: { l: 200, w: 100, h: 100 }, weight: 1e9 };   // 地板 20000cm²
+    // 50×40 底面 × 9 件 × 1.10 = 19800 ≤ 20000；再多 1 件 = 22000 > 20000
+    ok(H.checkLoad([item({ l: 50, w: 40, h: 90, qty: 9, category: 'BOX' })], veh, null).ok, '9 件放得下');
+    const r = H.checkLoad([item({ l: 50, w: 40, h: 90, qty: 10, category: 'BOX' })], veh, null);
+    ok(!r.ok && r.reasons.some(x => x.code === 'FLOOR'), '10 件超過地板');
+    approx(r.metrics.addFloor, 22000, 1);
   });
 
   test('G05 重量為第二維度：含既有負載累計超限 → WEIGHT 失敗', () => {
@@ -65,13 +82,13 @@ group('共用裝載判定引擎（G01–G05 / T1-2〜T1-6）', () => {
     ok(!res.ok && res.reasons.some(r => r.code === 'WEIGHT'), '800+300>1000 應觸發 WEIGHT');
   });
 
-  test('G01/G05 既有負載（startLoad）確實計入體積累計', () => {
+  test('G05/G145 既有負載（startLoad）確實計入地板累計', () => {
     const H = fresh();
-    const veh = { dims: { l: 500, w: 500, h: 500 }, volume: 1000 /*L*/, weight: 1e9 };
-    // 單件有效體積 ~ 1000L 上下；先塞 900L 既有，再加一件應超容
-    const res = H.checkLoad([item({ l: 100, w: 100, h: 200, category: 'BOX' })], veh, { volume: 900, weight: 0 });
-    ok(res.metrics.usedVol > res.metrics.effVol, 'usedVol 應含既有負載 900L');
-    ok(!res.ok && res.reasons.some(r => r.code === 'L1_VOLUME'), '累計後應超容');
+    const veh = { dims: { l: 100, w: 100, h: 100 }, weight: 1e9 };   // 地板 10000cm²
+    // 本件 60×60×1.10＝3960cm²；既有 7000cm² → 10960 > 10000
+    const res = H.checkLoad([item({ l: 60, w: 60, h: 50, category: 'BOX' })], veh, { floor: 7000, weight: 0 });
+    ok(res.metrics.usedFloor > res.metrics.addFloor, 'usedFloor 應含既有負載');
+    ok(!res.ok && res.reasons.some(r => r.code === 'FLOOR'), '累計後應超過地板');
   });
 });
 
@@ -386,8 +403,9 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('G01/G03 幹線容量套用共用浪費係數（A/B 共用，非繞過）', () => {
     const H = fresh();
-    const o = mkOrder(H, { volume: 1000, category: 'IRREG' }); // 1.65
-    approx(H.ModuleB.effVolume(o), 1650, 1, '1000L × 1.65 = 1650L');
+    const o = mkOrder(H, { volume: 1000, category: 'IRREG' }); // 1.65；舊資料只有申報體積 → 依車廂高換算地板
+    const veh = H.DB.vehicles.find(v => v.id === 'V-T02');
+    approx(H.ModuleB.effFloor(o, veh), 1650 * 1000 / veh.dims.h, 1, '1000L × 1.65 ÷ 車廂高 210cm');
   });
 
   test('多筆貨物項目（各填獨立尺寸/重量）：raw 體積與有效體積逐項加總（G13/G34）', () => {
@@ -397,11 +415,11 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
                { name: 'b', l: 200, w: 100, h: 100, qty: 1, category: 'IRREG', weight: 300 } ] }); // 2000L×1.65=3300
     eq(o.volume, 3000, 'raw 體積應為各項尺寸加總');
     eq(o.weight, 400, 'weight 應為各項加總');
-    approx(H.ModuleB.effVolume(o), 1100 + 3300, 1, '有效體積＝逐項（體積×類別係數×形狀）加總');
+    approx(H.ModuleB.effFloor(o), 100 * 100 * 1.10 + 200 * 100 * 1.65, 1, '有效地板面積＝逐項（底面積×類別係數）加總（G145）');
     // 編輯：改成單件小箱後 recompute
     o.items = [{ name: 'a', l: 50, w: 50, h: 40, qty: 1, category: 'BOX', weight: 20 }]; // 100L×1.10=110
     H.ModuleB.recompute(o);
-    eq(o.volume, 100, '編輯後 recompute 應更新加總'); approx(H.ModuleB.effVolume(o), 110, 1);
+    eq(o.volume, 100, '編輯後 recompute 應更新加總'); approx(H.ModuleB.effFloor(o), 50 * 50 * 1.10, 1);
   });
 
   test('起迄兩點：pickSite（起）/dropSite（迄）皆記錄；直達以送貨據點分流（G38）', () => {
@@ -434,8 +452,8 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('G33 到送貨據點卸貨釋出容量：接力兩單皆可載（否則會爆容量）', () => {
     const H = fresh();
-    // V-T02 容量 20160L。兩單各 ≈13200L 有效，同時在車上會爆（26400>20160）
-    const big = () => [{ name: '大箱', l: 200, w: 200, h: 300, qty: 1, category: 'BOX', weight: 100 }]; // 12000L×1.1=13200
+    // V-T02 地板 480×200＝9.6m²。兩單各 300×200×1.1＝6.6m² 有效，同時在車上會爆（13.2>9.6）
+    const big = () => [{ name: '大箱', l: 300, w: 200, h: 200, qty: 1, category: 'BOX', weight: 100 }];
     const o1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D6', direct: false, handleMin: 20, items: big() });
     const o2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D3', direct: false, handleMin: 20, items: big() });
     [o1, o2].forEach(o => H.ModuleB.approve(o));
@@ -684,7 +702,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     const dec = H.ModuleB.decideSizeClass('greedy', null, null, 'south');
     eq(dec.sizeClass, 'big', '總貨量超過小車容量上限 → 大車');
     eq(dec.vehicle, H.ModuleB.trunkVehicle('big').id, '代表車＝主檔大車');
-    ok(dec.totalVol > dec.threshVol, 'totalVol 應大於小車門檻');
+    ok(dec.totalVol > dec.threshFloor, '有效地板面積應大於小車地板門檻');
   });
 
   test('2.17 車型決定：重量超過小車載重上限亦派大車', () => {
@@ -714,7 +732,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 
   test('2.21 媒合以「當趟送得到」為準：simulateSouthbound 同時回傳 served 與 delivered', () => {
     const H = fresh();
-    const big = () => [{ name: '大箱', l: 200, w: 200, h: 300, qty: 1, category: 'BOX', weight: 100 }];
+    const big = () => [{ name: '大箱', l: 300, w: 200, h: 200, qty: 1, category: 'BOX', weight: 100 }];
     const o1 = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D6', direct: false, handleMin: 20, items: big() });
     const o2 = H.ModuleB.createOrder({ applicant: 'B', site: 'D6', destSite: 'D3', direct: false, handleMin: 20, items: big() });
     [o1, o2].forEach(o => H.ModuleB.approve(o));
@@ -1782,7 +1800,7 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     ok(B.manualAssign(o2, DD, { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: 'DR2' }, 'x').error.includes('已由派車單'), '同日同車不可重複');
     ok(B.manualAssign(o2, DD, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR1' }, 'x').error.includes('已有派車單'), '同日同駕駛不可重複');
     eq(B.manualTargets(DD).map(x => x.id).join(), d.id);
-    ok(B.manualMerge(o3, d, 'x').error.includes('容積'), '併入超出容積不可');
+    ok(B.manualMerge(o3, d, 'x').error.includes('地板'), '併入超出車廂地板不可');
     ok(B.manualMerge(o2, d, '調度室').ok); eq(d.apps.join(), [o1.id, o2.id].join()); eq(o2.dispatchVehicle, 'V-T02');
     ok(!B.manualAssign(o2, DD, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: 'DR2' }, 'x').ok, '已指派者不可再指派');
     B.submitDispatch(d);
@@ -2754,16 +2772,16 @@ group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
   });
   test('合計體積或合計重量超過上限 → 院區物品轉運（R7）', () => {
     const H = fresh(), G = H.Guide;
-    const cap = G.patrolVehicles('D6', FUT).reduce((a, x) => (x.volume > a.volume ? x : a));
-    // 單件不超過，但件數合計體積超過
-    const vol = g({ hazardTransport: 'no', items: [it({ l: 100, w: 100, h: 100, qty: Math.ceil(cap.volume / 1000) + 1, weight: 1 })] });
-    eq(G.route(vol).unit, 'B'); eq(G.route(vol).rule, 'R7'); ok(G.route(vol).reason.includes('合計'));
+    const cap = G.patrolVehicles('D6', FUT).reduce((a, x) => (H.floorCap(x) > H.floorCap(a) ? x : a));
+    // 單件放得進，但件數合計有效地板面積（100×100×1.1 每件）超過（G145 不堆疊）
+    const vol = g({ hazardTransport: 'no', items: [it({ l: 100, w: 100, h: 100, qty: Math.ceil(H.floorCap(cap) / 11000) + 1, weight: 1 })] });
+    eq(G.route(vol).unit, 'B'); eq(G.route(vol).rule, 'R7'); ok(G.route(vol).reason.includes('地板'));
     // 合計重量超過
     const wt = g({ hazardTransport: 'no', items: [it({ weight: 1000 }), it({ name: '箱2', weight: 1000 })] });
     eq(G.route(wt).unit, 'B', '4000kg 超過所有巡迴車重量上限');
-    // 剛好等於上限 → 非「小於」→ 院區物品轉運
+    // 剛好等於上限仍裝得下（G145 與巡迴物品轉運一致：≤ 上限）
     const eqW = g({ hazardTransport: 'no', items: [it({ qty: 1, weight: Math.max(...G.patrolVehicles('D6', FUT).map(x => x.weight)) })] });
-    eq(G.route(eqW).unit, 'B', '等於上限不算小於');
+    eq(G.route(eqW).unit, 'A', '等於上限仍可裝');
   });
   test('單件體積或重量超過上限 → 院區物品轉運並指出物品', () => {
     const G = fresh().Guide;
@@ -2774,8 +2792,8 @@ group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
     const H = fresh(), G = H.Guide;
     H.DB.regionalShifts.filter(s => s.branch === 'D6').forEach(s => H.ModuleA.setShiftPlan(FUT, s.id, { vehicle: 'V-L02', driver: null }));
     const small = H.DB.vehicles.find(x => x.id === 'V-L02');
-    const v = g({ hazardTransport: 'no', items: [it({ l: 100, w: 100, h: 100, qty: Math.floor(small.volume / 1000) + 1, weight: 1 })] });
-    eq(G.route(v).unit, 'B', '超過當日小車容量');
+    const v = g({ hazardTransport: 'no', items: [it({ l: 100, w: 100, h: 100, qty: Math.floor(H.floorCap(small) / 11000) + 1, weight: 1 })] });
+    eq(G.route(v).unit, 'B', '超過當日小車地板');
     eq(G.route(Object.assign({}, v, { recvDate: '2099-03-02' })).unit, 'A', '隔日仍為預設車輛（含大車）可放');
   });
   test('貨物清單含危險品卻選否 → 列為缺漏', () => {
@@ -2942,6 +2960,42 @@ group('院區物品轉運：危險品運輸限車與是非欄位（G144）', () 
     const o = mk(H, { agreeCarpool: false, carpoolRejectReason: '機密' });
     eq(o.nightOT, 'no'); eq(o.holidayOT, 'no'); eq(o.oneway, 'no'); eq(o.keepMatchDriver, 'no');
     eq(o.direct, false, '不同意併車仍為非直達');
+  });
+});
+
+group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', () => {
+  const sets = {
+    '超長單件 450×30×30': [{ name: '長管', l: 450, w: 30, h: 30, qty: 1, category: 'LONG', weight: 20 }],
+    '1m³ 紙箱 13 箱': [{ name: '紙箱', l: 100, w: 100, h: 100, qty: 13, category: 'BOX', weight: 50 }],
+    '扁平板材 6 片': [{ name: '板材', l: 200, w: 150, h: 5, qty: 6, category: 'IRREG', weight: 30 }],
+    '高櫃 230cm': [{ name: '高櫃', l: 60, w: 60, h: 230, qty: 1, category: 'BOX', weight: 80 }],
+    '小箱 5 件': [{ name: '小箱', l: 40, w: 30, h: 30, qty: 5, category: 'BOX', weight: 5 }],
+  };
+  test('院區物品轉運的派車判斷與共用 checkLoad 結果相同（每台幹線車）', () => {
+    const H = fresh(), B = H.ModuleB;
+    H.DB.vehicles.filter(v => v.pool === 'LOGI' && v.sizeClass).forEach(veh => Object.entries(sets).forEach(([k, items]) => {
+      const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', handleMin: 10, items: items.map(x => Object.assign({}, x)) });
+      const bOk = B.fitsVehicle(o, veh) && B.effFloor(o, veh) <= H.floorCap(veh) && o.weight <= veh.weight;
+      eq(bOk, H.checkLoad(items, veh, { floor: 0, weight: 0 }).ok, `${veh.id}｜${k}`);
+    }));
+  });
+  test('申請引導判給巡迴物品轉運 ⇔ 巡迴空車裝得下；裝不下改判院區物品轉運', () => {
+    const H = fresh(), G = H.Guide, D = '2099-03-01';
+    Object.entries(sets).forEach(([k, items]) => {
+      const v = { mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: D, hazardTransport: 'no', items };
+      const anyFit = G.patrolVehicles('D6', D).some(x => H.checkLoad(items, x, { floor: 0, weight: 0 }).ok);
+      eq(G.route(v).unit, anyFit ? 'A' : 'B', k);
+    });
+    const pipe = { mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: D, hazardTransport: 'no', items: sets['超長單件 450×30×30'] };
+    ok(G.route(pipe).reason.includes('長管'), '指出放不進的物品');
+  });
+  test('巡迴物品轉運：放不進任何巡迴車的單判為「貨物太大」，院區物品轉運幹線車可承運', () => {
+    const H = fresh();
+    const r = H.ModuleA.submit({ applicant: 'X', branch: 'D6', station: 'D6-300', pickStation: 'D6-100', recvMode: 'asap',
+      serviceDate: H.ModuleA.todayStr(), items: sets['超長單件 450×30×30'].map(x => Object.assign({}, x)), loadMin: 5, unloadMin: 5 });
+    eq(r.result.reason, 'toobig');
+    const big = H.DB.vehicles.find(v => v.id === 'V-T01');
+    ok(H.checkLoad(sets['超長單件 450×30×30'], big, null).ok, '幹線聯結車 600cm 長放得下');
   });
 });
 

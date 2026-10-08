@@ -284,10 +284,10 @@ const ModuleA = {
         const seg = this.segmentOf(a);
         if (s >= seg.from && s < seg.to) {
           const e = effectiveLoad(a.items);
-          acc.volume += e.volume; acc.weight += e.weight; acc.floor += e.floor;
+          acc.floor += e.floor; acc.weight += e.weight;
         }
         return acc;
-      }, { volume: 0, weight: 0, floor: 0 });
+      }, { floor: 0, weight: 0 });
   },
 
   /* 某班次（同日）已排各單的站內處理時間合計（上貨＋下貨＝handleMin 累加） */
@@ -301,7 +301,7 @@ const ModuleA = {
   /* 媒合迴圈（G10/G11/G12/G19）— 回傳 trace 與結果
      A-1：期望收貨時間只影響班次排序（|到站−期望| 最小優先，早晚都比），非硬性截止；
           失敗原因只分 toobig（空車都放不下）與 full（容量或站內額度皆滿）。
-     A-2：容量採站區間淨值——先卸後裝，體積/重量/地板到送貨站即釋放。
+     A-2：容量採站區間淨值——先卸後裝，有效地板面積／重量到送貨站即釋放（G145 不堆疊）。
      日期：僅同 serviceDate 的單互相競用容量與額度；當天已過的班次不可媒合。 */
   match(app) {
     const trace = [];
@@ -364,7 +364,7 @@ const ModuleA = {
       anyUsable = true;
 
       // --- 尺寸/容量可行性：空車是否根本放不下（與其他訂單無關 → 判斷「太大」）---
-      const emptyRes = checkLoad(app.items, veh, { volume: 0, weight: 0 });
+      const emptyRes = checkLoad(app.items, veh, { floor: 0, weight: 0 });
       if (emptyRes.ok) fitsSomeEmpty = true;
       else trace.push(`  <span class="no">✗ 本班車即使空車也放不下（尺寸／容量太大）</span>`);
 
@@ -378,17 +378,17 @@ const ModuleA = {
 
       // --- 裝載判定（LoadFeasibilityService）：站區間逐站淨值檢查（A-2）---
       // 貨物佔用區間 [seg.from, seg.to) 內每一站，車上淨負載（僅涵蓋該站的單）＋本單須通過 checkLoad
-      let res = null, failStation = null, peak = { volume: -1 };
+      let res = null, failStation = null, peak = { floor: -1 };
       for (let s = seg.from; s < seg.to; s++) {
         const base = this.netLoadAt(sh.id, s, date);
         const r = checkLoad(app.items, veh, base);
-        if (base.volume > peak.volume) { peak = base; peak.at = s; res = r; }
+        if (base.floor > peak.floor) { peak = base; peak.at = s; res = r; }
         if (!r.ok) { res = r; failStation = s; break; }
       }
       if (res == null) { // 退化區間（理論上不會發生）：以空車判定
         res = emptyRes;
       }
-      trace.push(`  <span class="dim">區間內峰值淨負載 ${Math.max(peak.volume, 0).toFixed(0)}L / ${(peak.weight || 0).toFixed(0)}kg（站序 ${peak.at != null ? peak.at : '—'}，卸貨後即釋放）</span>`);
+      trace.push(`  <span class="dim">區間內峰值淨負載 地板 ${m2(Math.max(peak.floor, 0))}m² / ${(peak.weight || 0).toFixed(0)}kg（站序 ${peak.at != null ? peak.at : '—'}，卸貨後即釋放）</span>`);
       res.trace.forEach(t => trace.push('  ' + t));
 
       if (res.ok) {

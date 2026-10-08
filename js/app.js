@@ -247,17 +247,17 @@ let engineItems = [];
 RENDER.engine = function () {
   const p = $('#page-engine');
   const vehOpts = DB.vehicles.filter(v => v.pool === 'LOGI')
-    .map(v => `<option value="${v.id}">${v.name}（${v.dims.l}×${v.dims.w}×${v.dims.h}cm｜${v.volume.toFixed(0)}L｜${v.weight}kg）</option>`).join('');
+    .map(v => `<option value="${v.id}">${v.name}（${v.dims.l}×${v.dims.w}×${v.dims.h}cm｜地板 ${m2(floorCap(v))}m²｜${v.weight}kg）</option>`).join('');
   p.innerHTML = `
     <div class="section-h">裝載判定引擎</div>
-    <div class="section-sub">輸入貨物與車輛，執行 Level 1 + 地板面積 + Level 2 + 重量累計判定。回傳含失敗原因碼與逐步 trace。</div>
+    <div class="section-sub">輸入貨物與車輛，依「物品不堆疊、能夠裝入的最大量」判定（G145，巡迴物品轉運、院區物品轉運、申請引導共用）：單件平放（只能水平轉向、高度不超過車廂）＋有效地板面積（底面積×類別浪費係數）加總＋重量累計。回傳含失敗原因碼與逐步 trace。</div>
     <div class="grid-2">
       <div class="card">
         <div class="card-title">① 選擇車輛</div>
         <div class="field"><select id="eng-veh">${vehOpts}</select></div>
         <div class="card-title" style="margin-top:14px;">② 既有負載（逐站累計用 G05）</div>
         <div class="row">
-          <div class="field"><label>既有體積 (L)</label><input type="number" id="eng-startvol" value="0"></div>
+          <div class="field"><label>既有地板占用 (m²)</label><input type="number" id="eng-startvol" value="0" step="0.1"></div>
           <div class="field"><label>既有重量 (kg)</label><input type="number" id="eng-startwt" value="0"></div>
         </div>
         <div class="card-title" style="margin-top:14px;">③ 貨物項目</div>
@@ -318,7 +318,7 @@ function renderEngineItems() {
 }
 function runEngine() {
   const veh = DB.vehicles.find(v => v.id === $('#eng-veh').value);
-  const startLoad = { volume: +$('#eng-startvol').value || 0, weight: +$('#eng-startwt').value || 0 };
+  const startLoad = { floor: (+$('#eng-startvol').value || 0) * 10000, weight: +$('#eng-startwt').value || 0 };
   const res = checkLoad(engineItems, veh, startLoad);
   $('#eng-dbhits').textContent = WasteFactorProvider.dbHitCount();
   const cls = res.ok ? 'ok' : 'fail';
@@ -332,7 +332,7 @@ function runEngine() {
   $('#eng-result').innerHTML = `
     <div class="result ${cls}">
       <div class="r-head">${head}</div>
-      <div>有效體積 <b>${m.usedVol.toFixed(0)}L</b> / ${m.capVol.toFixed(0)}L｜地板占用 <b>${m.floorUsePct.toFixed(0)}%</b>｜重量 <b>${m.usedWt}kg</b> / ${m.capWt}kg</div>
+      <div>有效地板 <b>${m2(m.usedFloor)}m²</b> / ${m2(m.capFloor)}m²（<b>${m.floorUsePct.toFixed(0)}%</b>）｜重量 <b>${m.usedWt}kg</b> / ${m.capWt}kg｜原始體積 ${m.rawVol.toFixed(0)}L（僅供參考）</div>
       ${reasonsHtml}
     </div>
     <div class="trace">${res.trace.join('\n')}</div>`;
@@ -986,9 +986,9 @@ RENDER.a_route = function () {
       <div class="card-desc">固定地理順序（站點 100→900）、無貨跳過、不重排。同站先卸後裝、多單時間加總。</div>
       <div class="route">${sts.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">建物 ${s.buildings[0]}–${s.buildings[s.buildings.length - 1]}</div></div>`).join('')}</div>
       <div class="card-title" style="font-size:14px;margin-top:14px;">今日班次 · 車輛對應 <span class="g-tag">G18</span></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>出發</th><th>車輛</th><th>容量</th><th>重量上限</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>出發</th><th>車輛</th><th>車廂（長×寬×高）</th><th>地板面積</th><th>重量上限</th></tr></thead><tbody>
         ${shs.map(sh => { const v = DB.vehicles.find(x => x.id === sh.vehicle);
-          return `<tr><td>${sh.label}</td><td>${sh.depart}</td><td>${v.name}</td><td>${v.volume.toFixed(0)}L</td><td>${v.weight}kg</td></tr>`; }).join('')}
+          return `<tr><td>${sh.label}</td><td>${sh.depart}</td><td>${v.name}</td><td>${v.dims.l}×${v.dims.w}×${v.dims.h}cm</td><td>${m2(floorCap(v))}m²</td><td>${v.weight}kg</td></tr>`; }).join('')}
       </tbody></table></div>
     </div>`;
   }).join('');
@@ -1530,7 +1530,7 @@ function bOrderCards(o, pfx, head, extra) {
         fItem('裝貨／卸貨所需時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
         fItem('是否需要夜間加班', yn(o.nightOT)), fItem('是否需要假日加班', yn(o.holidayOT)),
         fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
-        fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
+        fItem('有效地板面積（容量計算用）', `<b>${m2(ModuleB.effFloor(o))}m²</b><span class="hint" style="margin-left:6px;">不堆疊：底面積×類別係數</span>`),
       ].join(''))}
     </div>
     <div class="card">
@@ -2017,13 +2017,16 @@ function bOrderBadge(d) {
 // 派車調度明細（G127）：待調度申請單（媒合派車／手動指派／無車退回）＋派車單 grid（「明細」開視窗異動與送審）
 const bOpt = (v, t, cur, dis) => `<option value="${v}" ${v === cur ? 'selected' : ''}${dis ? ' disabled' : ''}>${t}</option>`;
 const bDrvOpts = (cur, blank) => bOpt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'LOGI').map(d => bOpt(d.id, `${d.name}（${d.id}）`, cur)).join('');
-const bLoadOf = os => ({ vol: os.reduce((s, o) => s + ModuleB.effVolume(o), 0), wt: os.reduce((s, o) => s + (+o.weight || 0), 0), hz: os.some(o => ModuleB.isHazard(o)) });
+// 派車單／申請單的裝載量（G145 不堆疊：有效地板面積 cm²＋重量）；v 省略時以預設車廂高換算舊資料申報體積
+const bLoadOf = (os, v) => ({ os, floor: os.reduce((s, o) => s + ModuleB.effFloor(o, v), 0), wt: os.reduce((s, o) => s + (+o.weight || 0), 0),
+  hz: os.some(o => ModuleB.isHazard(o)), fit: x => os.every(o => ModuleB.fitsVehicle(o, x)) });
 // 車號下拉（依車種類型）：容積／載重不足者停用
 function bFillVehicles(typeSel, vehSel, cur, load) {
   const t = $(typeSel).value;
   $(vehSel).innerHTML = bOpt('', t ? '請選擇' : '請先選車種類型', cur) + (t ? Usage.vehiclesOf('LOGI', t).map(v => {
-    const short = v.volume < load.vol || v.weight < load.wt, noHz = load.hz && !v.hazmat;   // 危險品運輸限可載危險品車（G144）
-    return bOpt(v.id, `${v.id}（${v.name}｜${Math.round(v.volume)}L／${v.weight}kg${v.hazmat ? '・可載危險品' : ''}${short ? '・容量不足' : ''}${noHz ? '・不可載危險品' : ''}）`, cur, short || noHz); }).join('') : '');
+    const lv = bLoadOf(load.os, v), noFit = !load.fit(v);   // 不堆疊（G145）：地板面積／重量不足或有貨放不進者停用
+    const short = floorCap(v) < lv.floor || v.weight < lv.wt, noHz = load.hz && !v.hazmat;   // 危險品運輸限可載危險品車（G144）
+    return bOpt(v.id, `${v.id}（${v.name}｜地板 ${m2(floorCap(v))}m²／${v.weight}kg${v.hazmat ? '・可載危險品' : ''}${noFit ? '・貨物放不進' : short ? '・容量不足' : ''}${noHz ? '・不可載危險品' : ''}）`, cur, short || noHz || noFit); }).join('') : '');
 }
 // 派車單區塊（原明細頁的派車單卡片）：表單＋申請單 grid＋異動紀錄；於視窗內顯示
 // 送審前可異動車種類型／車號／駕駛人1／駕駛人2／是否送審與刪除申請單；送審後（或已出車）即鎖定（G129）
@@ -2036,7 +2039,7 @@ function bOrderCardHtml(d) {
       fItem('派遣人', d.dispatcher),
       fItem('派遣時間', fmtTime(d.dispatchedAt)),
       fInput('車種類型', `<select id="${k}-type" ${locked ? 'disabled' : ''}>${Usage.types('LOGI').map(t => bOpt(t, t, d.vehicleType)).join('')}</select>`),
-      fInput(`車號 <span class="hint">有效體積 ${Math.round(ld.vol)}L／${ld.wt}kg</span>`, `<select id="${k}-veh" ${locked ? 'disabled' : ''}></select>`),
+      fInput(`車號 <span class="hint">有效地板 ${m2(ld.floor)}m²／${ld.wt}kg</span>`, `<select id="${k}-veh" ${locked ? 'disabled' : ''}></select>`),
       fInput('駕駛人1', `<select id="${k}-d1" ${locked ? 'disabled' : ''}>${bDrvOpts(d.driver1, '請選擇')}</select>`),
       fInput('駕駛人2', `<select id="${k}-d2" ${locked ? 'disabled' : ''}>${bDrvOpts(d.driver2, '（無）')}</select>`),
       fInput('是否送審', `<select id="${k}-sub" ${locked ? 'disabled' : ''}>${bOpt('no', '否（未送審）', d.submitted ? 'yes' : 'no')}${bOpt('yes', '是（送運輸主管簽審）', d.submitted ? 'yes' : 'no')}</select>`),
@@ -2100,10 +2103,10 @@ function openBOrderModal(d, by, rerender, keep) {
 function openBManualAssign(o, date, by, rerender) {
   const targets = ModuleB.manualTargets(date), ld = bLoadOf([o]);
   const tgtText = d => { const os = ModuleB.dispatchOrders(d), l = bLoadOf(os), v = DB.vehicles.find(x => x.id === d.vehicle);
-    return `${d.id}｜${d.vehicle}（${d.vehicleType}）｜${[d.driver1, d.driver2].filter(Boolean).map(drvName).join('＋') || '未指定駕駛'}｜${os.length} 張｜剩餘 ${v ? Math.round(v.volume - l.vol) : '—'}L／${v ? v.weight - l.wt : '—'}kg`; };
-  const veh0 = DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass && v.volume >= ld.vol && v.weight >= ld.wt && (!ld.hz || v.hazmat));
+    return `${d.id}｜${d.vehicle}（${d.vehicleType}）｜${[d.driver1, d.driver2].filter(Boolean).map(drvName).join('＋') || '未指定駕駛'}｜${os.length} 張｜剩餘地板 ${v ? m2(floorCap(v) - bLoadOf(os, v).floor) : '—'}m²／${v ? v.weight - l.wt : '—'}kg`; };
+  const veh0 = DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass && floorCap(v) >= bLoadOf([o], v).floor && v.weight >= ld.wt && ld.fit(v) && (!ld.hz || v.hazmat));
   openModal(`手動指派 · ${o.id}`, `
-    <div class="card-desc">${o.applicant}｜${bRoute(o)}｜${o.direct ? '直達' : '非直達'}｜申報 ${o.volume}L（有效 ${Math.round(ld.vol)}L）／${o.weight || 0}kg｜希望收貨 ${[o.wantReceiveDate, o.wantReceiveTime].filter(Boolean).join(' ') || '—'}｜派車日 <b>${date}</b></div>
+    <div class="card-desc">${o.applicant}｜${bRoute(o)}｜${o.direct ? '直達' : '非直達'}｜有效地板 ${m2(ld.floor)}m²／${o.weight || 0}kg｜希望收貨 ${[o.wantReceiveDate, o.wantReceiveTime].filter(Boolean).join(' ') || '—'}｜派車日 <b>${date}</b></div>
     ${infoGrid('bma-mode', [fInput('指派方式', gPills('bma-mode', 'new', [['new', '新派車單（暫存未送審）'], ['merge', `併入既有派車單（${targets.length} 張可併）`]]), { full: true, stack: true })].join(''))}
     <div id="bma-new">${infoGrid('bma-new-f', [
       fInput('車種類型 <span style="color:#c0392b;">*</span>', `<select id="bma-type">${bOpt('', '請選擇', veh0 ? veh0.type : '')}${Usage.types('LOGI').map(t => bOpt(t, t, veh0 ? veh0.type : '')).join('')}</select>`),
@@ -3281,7 +3284,7 @@ RENDER.master = function () {
         ${DB.vehicles.map(v => `<tr><td>${v.id}</td><td>${v.name}</td>
           <td>${v.pool === 'LOGI' ? '<span class="badge b-navy">物流</span>' : '<span class="badge b-green">商務（C/D 共用）</span>'}</td>
           <td>${v.homeSite}</td><td>${v.currentSite}${v.currentSite !== v.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td>
-          <td>${v.pool === 'BIZ' ? v.seats + ' 座' : v.volume.toFixed(0) + 'L/' + v.weight + 'kg'}</td>
+          <td>${v.pool === 'BIZ' ? v.seats + ' 座' : `地板 ${m2(floorCap(v))}m²（${v.dims.l}×${v.dims.w}×高 ${v.dims.h}cm）／${v.weight}kg`}</td>
           <td>${v.pool === 'LOGI' && v.sizeClass ? (v.hazmat ? '<span class="badge b-red">⚠ 可</span>' : '否') : '<span class="muted">—</span>'}</td></tr>`).join('')}
         </tbody></table></div></div>
       <div class="card"><div class="card-title">司機主檔（獨立資源）<span class="g-tag">C-2</span></div>

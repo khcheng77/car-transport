@@ -37,18 +37,25 @@
 - 由 `DB.wasteFactors` 建快取（static 單例）；查無類別 → 回**保底值** `DB.wasteDefault = 1.30`，不擲例外。
 - 係數示意：標準紙箱 1.10、棧板貨 1.20、長條/管材 1.45、不規則件 1.65、桶裝/圓形 1.35、易碎/需空隙 1.55。
 
-### 單品有效值 `itemEffective(it)`
-- 體積 `vol = l×w×h / 1000`（公升）。
-- **形狀懲罰** `shapePenalty`：長寬比（最長邊/最短邊）> 3 → ×1.10；> 2 → ×1.05；否則 ×1.0。
-- **有效體積** `eff = vol × 類別係數 × 形狀懲罰 × 數量`。
-- **地板投影** `floor = 次長邊 × 最短邊 × 數量`。
-- **重量** `weight = 單件重 × 數量`。
+### 不堆疊裝載（G145，2026-10-08 與業務單位確認：A、B、申請引導**同一套演算法**）
+條件＝「**物品不堆疊、能夠裝入的最大量**」。取代原 Level 1 體積加總、形狀懲罰與 Level 2 六方向旋轉（不堆疊時體積必然 ≤ 地板×高，不另檢查）。
+
+- **單件擺放** `itemFitsFloor(it, dims)`：每件平放地板、不堆疊，**只能水平轉向**（高度固定為申請填的「高」）→ `高 ≤ 車廂高` 且底面 `(長,寬)` 或 `(寬,長)` 放得進車廂地板 `(長,寬)`。
+- **單品有效值** `itemEffective(it)`：底面積 `base = l×w`；**有效地板面積** `floor = base × 數量 × 類別浪費係數`（cm²）；重量 `weight = 單件重 × 數量`；`vol` 僅供顯示。
+- 車廂地板 `floorCap(v) = dims.l × dims.w`；顯示一律 m²（`m2()`）。
 
 ### 主判定 `checkLoad(items, vehicle, startLoad)`
-四道關卡，**任一不過即失敗**並回原因碼；`startLoad` 為車上既有負載（逐站累計用）：
+三道關卡，**任一不過即失敗**並回原因碼；`startLoad = {floor, weight}` 為車上既有負載（逐站累計用）：
 
 | 關卡 | 條件 | 原因碼 |
 |---|---|---|
+| 單件擺放 | 每件 `itemFitsFloor` | `L2_DIM` |
+| 有效地板面積 | `既有 floor + Σfloor ≤ floorCap(車)` | `FLOOR` |
+| 重量累計 | `既有重量 + Σweight ≤ 車輛載重上限(kg)` | `WEIGHT` |
+
+> **A** 以 `checkLoad` 逐站淨值判定（`netLoadAt` 回 `{floor, weight}`）。**B** 以相同口徑：`ModuleB.effFloor(o, veh)`（`o.effFloor` 由 `recompute` 預算；舊資料只有申報體積者以「有效體積÷車廂高」換算）＋`fitsVehicle(o, veh)`＋重量，用於媒合派車（去程貪婪／直達／回程）、2.17 選車門檻（小車地板，或有貨放不進小車即派大車）、`dispatchResourceError`（手動指派／派車單異動）。**申請引導** `Guide.patrolFit` 直接以 `checkLoad` 對收貨日巡迴空車試裝，任一台通過才判 R1（A），否則 R7（B）；等於上限仍算裝得下（≤）。
+
+---|---|---|
 | Level 1 有效體積 | `既有體積 + Σeff ≤ 車輛容量(L)` | `L1_VOLUME` |
 | 地板面積瓶頸 | `Σfloor ≤ 車廂地板(車長×車寬)` | `FLOOR` |
 | Level 2 維度 | 每件皆能以**六方向旋轉**放進車廂 `(l,w,h)` | `L2_DIM` |
@@ -101,7 +108,7 @@ draft（申請中）──(送出 submitDraft)──▶ submitted ──(自動�
 > 期望時間**只影響挑選順序**，不會因「來不及」而退件（規格 4.1）。
 
 **Step 2 佔用站區間（先卸後裝 3.4/3.5）**
-每張單佔用 `[收貨站序, 送貨站序)`；抵達送貨站即卸貨，**有效體積、重量、地板投影同步釋放**。
+每張單佔用 `[收貨站序, 送貨站序)`；抵達送貨站即卸貨，**有效地板面積、重量同步釋放**（G145）。
 未帶收貨站者視為自路線起點載運（相容）。
 
 **Step 3 逐班次嘗試（時間軸最近的下一班）**
@@ -158,7 +165,7 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 - `items[]`(逐件尺寸；G143 加 `plan` 計畫名稱、`workNo` 工令號碼、`shape` 物品外型、`pack` 物品外包裝，僅記錄)、`loadMin`(裝貨所需時間)+`unloadMin`(卸貨所需時間) = `handleMin`。
 - G143 新欄位：`transportStatus`(開單)、`applyDate`(民國年)、`tripleFormNo`、`applyUnit`＊、`applyExt`＊、`consignor{name＊,campus,ext＊}`（館別＝`pickupLoc`）、`recipient` 加 `campus`／`agentCampus`＊／`agentHall`＊（接收人館別＝`deliverLoc`＊）、`unloadReadyTime`、`delayReceiveTime`（預設＝可卸貨時間）、`nightOT`／`holidayOT`／`oneway`／`keepMatchDriver`（`yes`/`no`，預設 no）、`hazardTransport`（`yes`/`no`）、`agreeCarpool`（預設 true；false 時 `carpoolRejectReason` 必填）、`remark`、`changeReason`（修改時必填）、`captain`、`captainPhone`。`wantReceiveTime` 畫面名稱改為「可裝貨時間」。除 `hazardTransport` 外僅記錄，`agreeCarpool=false` **不等同** `direct`。
 - `formError(data, {editing})`：＊欄位、希望收貨日期、不同意併車須填事由、修改須填異動事由，最後套 `routeError`。是否送審：否＝`createOrder(data,{draft:true})`／`saveDraft`（申請中或退回修編 → 申請中，退回者保留 `revisions`）；是＝`createOrder`／`resubmit`（待二級審）。
-- `recompute`：由 items 加總 → `volume`(申報貨量)、`weight`、`effVol`(**有效體積**，容量計算基準)。
+- `recompute`：由 items 加總 → `volume`(申報貨量，僅顯示)、`weight`、`effFloor`(**有效地板面積** cm²，容量計算基準，G145)、`legacyEffVol`(只有申報體積的舊項目)。
 
 ### 主管准駁
 - `approve(o, note)`：填 `approvedAt`（核准序，供派車排序）；`reject(o, note)`：不進池、保留備註。
@@ -175,7 +182,7 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 - **出發（基地）據點 `DB.homeSite = 'D9'`（桃園龍潭）**：主檔參數，不寫死；去/回程方向與行經序列由其在南北順序中的位置推算。
 - **可服務範圍 `isServable(o)`＝基地及其以南**：現行車次模型為「自基地南下 → 折返北上回基地」，故**基地以北據點（D10 台北）不在任何路線上**。涉及北側據點的託運單**一律不排入**，並於派車 trace 與待派清單明確標示原因（北側排班方式為 TODO B-2，**待業務確認**），避免載走卻無法卸貨。
 - **時間上限＝每日 12.5 小時在勤額度**（見上「時間模型」）。**天數表不參與運算**（3.1）：`minTripDaysFor(車輛, 終點)` 依「車型 × 目的地」查表，僅作排班參考顯示；精算天數超出表定值時**以精算為準照常派車**，僅提醒調度員。
-- 容量基準＝**有效體積 `effVol`**（Level 1 + 形狀，不做 Level 2）＋重量。
+- 容量基準＝**有效地板面積**（不堆疊、只能水平轉向，與 A 共用 `loadengine`，G145）＋重量；不再只用 Level 1 體積。
 - **危險品限車（G144）**：車輛主檔 `hazmat: true`＝可載危險品（原型：V-T01）。`isHazard(o)`＝`hazardTransport==='yes'`；`hazardOk(o, vehicleId)`。`_dispatch`／`_dispatchReturn` 先剔除本車不可載的危險品單（trace 註明）；`runMatch` 選車後經 `_hazardPick(dec, 待派單, 已用車, …)`：待派單全為危險品且選定車不可載 → 改派未使用的 hazmat 幹線車（無則停止）。`dispatchResourceError` 對含危險品單的派車單拒絕非 hazmat 車（手動指派、併入、派車單異動共用）。
 
 ### 去程派車 `dispatch(vehicleId, mode, dispatchDate)`
@@ -452,7 +459,7 @@ flowchart TD
 | 觸發方式 | 送出**即時**自動媒合 | 業務**按鈕**派車 | 業務**按鈕**批次媒合 |
 | 主管核准 | 無 | 有（准駁） | 有（准駁） |
 | 路線 | 固定 10 站班次 | 10 據點南北線、貪婪/直達 | 點對點車程表 |
-| 容量判定 | 完整裝載引擎（含 Level 2 六方向）＋**站區間淨值** | 有效體積 Level 1 + 重量＋**動態淨值** | 座位數 `seats ≥ pax` |
+| 容量判定 | 共用不堆疊判定 `checkLoad`（單件擺放＋有效地板面積＋重量）＋**站區間淨值** | 同左口徑（`effFloor`／`fitsVehicle`）＋**動態淨值** | 座位數 `seats` |
 | 時間條件 | 站內處理時間每班全線合計 ≤ 60 分＋今日已發車班次不採計 | 行駛+裝卸 ≤ **查表天數×工時** + 交貨時間門檻 | 工時 ≤ 20:30 + 單程 4 小時窗 |
 | 期望時間 | **僅排序**，回報時間差、不退件 | 交貨時間為**門檻**（晚到留下一班） | 上車時間為合併比對條件 |
 | 失敗處理 | past / toobig / full（待調度，可改派或無車退回） | 留下一班 / 自動順延（待調度，可無車退回） | 仍待調度並註明原因（可手動指派或無車退回） |

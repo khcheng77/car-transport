@@ -15,7 +15,7 @@ const FILES = ['data.js', 'loadengine.js', 'signoff.js', 'flow.js', 'usage.js', 
 function fresh() {
   let src = FILES.map(f => fs.readFileSync(path.join(JS_DIR, f), 'utf8')).join('\n');
   // 匯出頂層 const（VM 中 const 不會掛到 global，串接後由尾段一次取出）
-  src += '\n; ({ DB, WasteFactorProvider, checkLoad, effectiveLoad, itemEffective,'
+  src += '\n; ({ DB, WasteFactorProvider, checkLoad, effectiveLoad, itemEffective, itemFitsFloor, floorCap,'
        + ' ModuleA, ModuleB, ModuleC, ModuleD, Guide, Signoff, Usage, Flow, fmtVol, minToHHMM, hhmmToMin });';
   const ctx = { console, Date, Math, Set, Map, String, Number, Array, JSON, isNaN, parseInt, parseFloat };
   vm.createContext(ctx);

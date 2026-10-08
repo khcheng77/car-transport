@@ -32,25 +32,23 @@ const Guide = {
      bulkCargo＝有物品且非隨身物品（需填貨物清單、走一般用車）；noCargoForShare＝沒有物品或只有隨身物品（可走差旅共乘）。 */
   /* 收貨日巡迴車上限（G135）：寄件據點當天各班次（含車次覆寫）使用的巡迴車；
      貨物清單合計＝體積 Σ長×寬×高×件數（公升，不含浪費係數）、重量 Σ單件重×件數。 */
-  cargoTotals(items) {
-    return (items || []).reduce((a, it) => {
-      const q = +it.qty || 1;
-      return { volume: a.volume + it.l * it.w * it.h / 1000 * q, weight: a.weight + (+it.weight || 0) * q };
-    }, { volume: 0, weight: 0 });
-  },
+  // 貨物合計：有效地板面積（底面積×件數×類別浪費係數，cm²）與重量——與巡迴／院區物品轉運同一套不堆疊算法（G145）
+  cargoTotals(items) { const e = effectiveLoad(items || []); return { floor: e.floor, weight: e.weight, volume: e.volume }; },
   patrolVehicles(site, date) {
     if (typeof ModuleA === 'undefined') return [];
     const ids = [...new Set(DB.regionalShifts.filter(s => s.branch === site).map(s => ModuleA.shiftPlan(date || '', s.id).vehicle))];
     return ids.map(id => DB.vehicles.find(x => x.id === id)).filter(Boolean);
   },
-  /* 貨物是否放得進收貨日的巡迴車：合計體積、合計重量皆小於某一台巡迴車上限（單件超過上限者合計必然超過）。
-     回傳 { fits, total, vehicle（最大的一台，供說明）, overItem（單件超過上限的物品） } */
+  /* 貨物是否裝得進收貨日的巡迴車（G145）：以巡迴物品轉運同一套裝載判定 checkLoad 對「空車」試裝——
+     不堆疊、只能水平轉向；有效地板面積（×類別係數）與重量皆不超過上限。任一台裝得下即可走巡迴。
+     回傳 { fits, total, vehicle（地板最大的一台，供說明）, overItem（任何巡迴車都放不進的單件） } */
   patrolFit(v) {
     const vs = this.patrolVehicles(v.fromSite, v.recvDate), total = this.cargoTotals(v.items);
     if (!vs.length) return { fits: false, total, vehicle: null, overItem: null };
-    const big = vs.slice().sort((a, b) => b.volume - a.volume || b.weight - a.weight)[0];
-    const overItem = (v.items || []).find(it => !vs.some(x => it.l * it.w * it.h / 1000 < x.volume && (+it.weight || 0) < x.weight)) || null;
-    const fits = vs.some(x => total.volume < x.volume && total.weight < x.weight);
+    const big = vs.slice().sort((a, b) => floorCap(b) - floorCap(a) || b.weight - a.weight)[0];
+    const items = v.items || [];
+    const overItem = items.find(it => !vs.some(x => itemFitsFloor(it, x.dims) && (+it.weight || 0) <= x.weight)) || null;
+    const fits = !overItem && vs.some(x => checkLoad(items, x, { floor: 0, weight: 0 }).ok);
     return { fits, total, vehicle: big, overItem };
   },
   bulkCargo(v) { return v.hasCargo === 'yes' && v.personalItems === 'no'; },
@@ -89,12 +87,12 @@ const Guide = {
         return { unit: 'B', rule: 'R6', reason: `危險品運輸，不走院區內巡迴班次，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。` };
       }
       const f = this.patrolFit(v), t = f.total, fmt = n => Math.round(n * 10) / 10;
-      const cap = f.vehicle ? `收貨日 ${v.recvDate || '—'} 巡迴車上限 ${fmt(f.vehicle.volume)}L／${fmt(f.vehicle.weight)}kg` : '收貨日無巡迴車';
+      const cap = f.vehicle ? `收貨日 ${v.recvDate || '—'} 巡迴車上限 地板 ${m2(floorCap(f.vehicle))}m²／${fmt(f.vehicle.weight)}kg、車廂高 ${f.vehicle.dims.h}cm` : '收貨日無巡迴車';
       if (!f.fits) {
-        const why = f.overItem ? `「${f.overItem.name}」單件體積或重量超過巡迴車上限（${cap}）` : `貨物合計 ${fmt(t.volume)}L／${fmt(t.weight)}kg 未小於${cap}`;
+        const why = f.overItem ? `「${f.overItem.name}」無法平放進巡迴車或單件超重（不堆疊、只能水平轉向），${cap}` : `貨物有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 超過${cap}`;
         return { unit: 'B', rule: 'R7', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，但${why}，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。` };
       }
-      return { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」、非危險品，貨物合計 ${fmt(t.volume)}L／${fmt(t.weight)}kg 小於${cap}，由院區內固定班次巡迴收送，送出即自動排入最近班次。` };
+      return { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」、非危險品，貨物不堆疊有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 裝得進${cap}，由院區內固定班次巡迴收送，送出即自動排入最近班次。` };
     }
     if (!v.startDate || !v.endDate) return { unit: null, hint: '請填寫用車起日與迄日。' };
     const n = this.days(v.startDate, v.endDate);

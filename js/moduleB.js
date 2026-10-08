@@ -183,20 +183,21 @@ const ModuleB = {
 
   // 由貨物項目清單重算整單彙總值（新增或編輯後呼叫）
   recompute(o) {
-    let raw = 0, eff = 0, wt = 0;
+    let raw = 0, floor = 0, legacy = 0, wt = 0;
     for (const it of o.items) {
       if (it.l != null && it.w != null && it.h != null) {
-        const e = itemEffective(it);           // { vol(單件L), eff(含qty), weight(含qty), qty }
-        raw += e.vol * e.qty; eff += e.eff; wt += e.weight;
+        const e = itemEffective(it);           // { vol(單件L), floor(有效地板 cm²，含qty×係數), weight(含qty), qty }
+        raw += e.vol * e.qty; floor += e.floor; wt += e.weight;
       } else {
-        raw += (+it.volume || 0);
-        eff += (+it.volume || 0) * WasteFactorProvider.get(it.category);
+        raw += (+it.volume || 0);              // 舊資料只有申報體積：有效體積（×係數）留待依車廂高換算地板
+        legacy += (+it.volume || 0) * WasteFactorProvider.get(it.category);
         wt += (+it.weight || 0);
       }
     }
-    o.volume = Math.round(raw);  // 申報總貨量（L）
+    o.volume = Math.round(raw);  // 申報總貨量（L，僅供顯示）
     o.weight = wt;               // 總重量（kg）
-    o.effVol = eff;              // 有效體積（容量計算用）
+    o.effFloor = floor;          // 有效地板面積 cm²（不堆疊，G145）
+    o.legacyEffVol = legacy;     // 只有申報體積的項目：有效體積（L）
     o.category = o.items.length === 1 ? o.items[0].category : null; // 單項時保留類別供顯示
   },
 
@@ -317,19 +318,22 @@ const ModuleB = {
       && this.isServable(o, leg === 'north' ? DB.homeSite : origin));
     if (dispatchDate) pool = pool.filter(o => this.meetsCutoff(o, dispatchDate));
     pool = pool.filter(o => (mode === 'direct' ? o.direct : !o.direct));
-    const totalVol = pool.reduce((s, o) => s + this.effVolume(o), 0);
+    const totalVol = pool.reduce((s, o) => s + this.effFloor(o, small), 0);   // 有效地板面積 cm²（G145）
     const totalWt = pool.reduce((s, o) => s + (+o.weight || 0), 0);
-    // 依 2.16 以小車「這台車」的容量參數為門檻（容積與載重上限任一超過即需大車）
-    const needBig = totalVol > small.volume || totalWt > small.weight;
+    const unfit = pool.find(o => !this.fitsVehicle(o, small));
+    // 依 2.16 以小車「這台車」的容量參數為門檻（地板面積與載重上限任一超過、或有貨無法平放進小車即需大車）
+    const needBig = totalVol > floorCap(small) || totalWt > small.weight || !!unfit;
     const veh = needBig ? big : small;
     return {
       sizeClass: needBig ? 'big' : 'small',
       vehicle: veh.id, vehicleName: veh.name,
       totalVol: Math.round(totalVol), totalWt: Math.round(totalWt), count: pool.length,
-      threshVol: Math.round(small.volume), threshWt: small.weight,
+      threshFloor: floorCap(small), threshWt: small.weight,
       reason: needBig
-        ? `當日該路線待載總貨量 ${Math.round(totalVol)}L／${Math.round(totalWt)}kg 超過小車容量上限（${Math.round(small.volume)}L／${small.weight}kg）→ 派大車（2.17）`
-        : `當日該路線待載總貨量 ${Math.round(totalVol)}L／${Math.round(totalWt)}kg 未超過小車容量上限（${Math.round(small.volume)}L／${small.weight}kg）→ 派小車（2.17）`,
+        ? (unfit && !(totalVol > floorCap(small) || totalWt > small.weight)
+          ? `${unfit.id} 有貨物無法平放進小車（不堆疊、只能水平轉向）→ 派大車（2.17／G145）`
+          : `當日該路線待載有效地板 ${m2(totalVol)}m²／${Math.round(totalWt)}kg 超過小車上限（地板 ${m2(floorCap(small))}m²／${small.weight}kg）→ 派大車（2.17）`)
+        : `當日該路線待載有效地板 ${m2(totalVol)}m²／${Math.round(totalWt)}kg 未超過小車上限（地板 ${m2(floorCap(small))}m²／${small.weight}kg）→ 派小車（2.17）`,
     };
   },
 
@@ -401,7 +405,15 @@ const ModuleB = {
     };
   },
 
-  effVolume(o) { return o.effVol != null ? o.effVol : o.volume * WasteFactorProvider.get(o.category); },
+  /* 不堆疊裝載（G145，與巡迴物品轉運共用 loadengine）：容量判斷一律以「有效地板面積」＋重量。
+     有效地板面積＝Σ 底面積×件數×類別浪費係數；舊資料只有申報體積的項目，以「有效體積÷車廂高」換算（滿高平放）。 */
+  effFloor(o, veh) {
+    const h = veh && veh.dims ? veh.dims.h : 200;
+    return (o.effFloor || 0) + (o.legacyEffVol || 0) * 1000 / h;
+  },
+  // 每件貨都能平放進該車（高度不超過、底面水平轉向放得進地板）
+  fitsVehicle(o, veh) { return (o.items || []).every(it => it.l == null || itemFitsFloor(it, veh.dims)); },
+  unfitItem(o, veh) { return (o.items || []).find(it => it.l != null && !itemFitsFloor(it, veh.dims)) || null; },
 
   /* 依出發據點南下方向排序（order 大→小） */
   southboundFrom(originId) {
@@ -431,7 +443,7 @@ const ModuleB = {
     const clock = this.newDutyClock(veh.sizeClass);
     const start = hhmmToMin(DB.shiftStartDefault);
     const seq = this.southboundFrom(originId);
-    let netVol = 0, netWt = 0, peakVol = 0;
+    let netVol = 0, netWt = 0, peakVol = 0;   // 皆為有效地板面積 cm²（G145）
     const onboard = [], served = new Set(), delivered = new Set(), info = new Map(), stops = [];
     let stopReason = null;
 
@@ -449,7 +461,7 @@ const ModuleB = {
       for (let i = onboard.length - 1; i >= 0; i--) {
         const o = onboard[i];
         if (o.dropSite === siteId) {
-          const ev = this.effVolume(o);
+          const ev = this.effFloor(o, veh);
           netVol -= ev; netWt -= o.weight; clock.addWork(o.unloadMin || 0);
           unloaded += ev; onboard.splice(i, 1); delivered.add(o.id);
           const inf = info.get(o.id); if (inf) { inf.dropTime = arriveEta; inf.dropDay = clock.day; }
@@ -461,7 +473,7 @@ const ModuleB = {
       const here = [...orderSet].filter(o => o.pickSite === siteId && !served.has(o.id))
         .sort((a, b) => a.approvedAt - b.approvedAt);
       for (const o of here) {
-        const ev = this.effVolume(o);
+        const ev = this.effFloor(o, veh);
         const lt = (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
         // 2.19 收貨時間窗：以抵達本站在勤時點判定（早到等待、晚到窗內仍可、超窗＝媒合不到）
         const rc = this.receiveCheck(o, arriveMin);
@@ -470,7 +482,7 @@ const ModuleB = {
           continue;
         }
         // 容量（2.4 動態淨值）與重量；卡不進即跳過該張（2.5），車輛仍續行（2.3）
-        if (netVol + ev <= veh.volume && netWt + o.weight <= veh.weight) {
+        if (this.fitsVehicle(o, veh) && netVol + ev <= floorCap(veh) && netWt + o.weight <= veh.weight) {
           netVol += ev; netWt += o.weight; clock.addWork(lt);
           loaded += ev; nLoad++; served.add(o.id); onboard.push(o);
           bldgs.add(bkey(o.pickupLoc));
@@ -486,8 +498,8 @@ const ModuleB = {
       for (let i = onboard.length - 1; i >= 0; i--) {
         const o = onboard[i];
         if (o.pickSite === siteId && o.dropSite === siteId) {
-          netVol -= this.effVolume(o); netWt -= o.weight; clock.addWork(o.unloadMin || 0);
-          unloaded += this.effVolume(o); onboard.splice(i, 1); delivered.add(o.id);
+          netVol -= this.effFloor(o, veh); netWt -= o.weight; clock.addWork(o.unloadMin || 0);
+          unloaded += this.effFloor(o, veh); onboard.splice(i, 1); delivered.add(o.id);
           const inf = info.get(o.id); if (inf) { inf.dropTime = inf.pickupTime; inf.dropDay = clock.day; }
           bldgs.add(bkey(o.deliverLoc));
         }
@@ -618,9 +630,11 @@ const ModuleB = {
       //    納入後整趟取貨排程須讓本單與先前已上車各單都落在收貨時間窗內（2.19／2.21 不排擠既定行程）
       const carried = []; let load = 0, wt = 0;
       for (const o of sameDest) {
-        const ev = this.effVolume(o);
-        if (load + ev > veh.volume || wt + o.weight > veh.weight) {
-          trace.push(`  <span class="no">✗ ${o.id} 超出容量（已上車 ${Math.round(load)}L／${wt}kg）→ 留下一班直達車（G39）</span>`);
+        const ev = this.effFloor(o, veh);
+        const bad = this.unfitItem(o, veh);
+        if (bad) { trace.push(`  <span class="no">✗ ${o.id}「${bad.name}」無法平放進 ${veh.id}（不堆疊、只能水平轉向）→ 留下一班直達車</span>`); continue; }
+        if (load + ev > floorCap(veh) || wt + o.weight > veh.weight) {
+          trace.push(`  <span class="no">✗ ${o.id} 超出容量（已上車地板 ${m2(load)}m²／${wt}kg）→ 留下一班直達車（G39）</span>`);
           continue;
         }
         const sch = schedule(carried.concat(o));
@@ -639,7 +653,7 @@ const ModuleB = {
         o.status = 'loaded'; o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = targetDest;
         o.dispatchOrigin = origin; o.dispatchDir = 'south';
         o.pickupTime = minToHHMM(t.pass + t.wait);
-        trace.push(`  <span class="ok">✓ 載入 ${o.id}（申報 ${o.volume}L → 有效 ${this.effVolume(o).toFixed(0)}L｜${o.pickupTime} 來收${t.wait ? `，早到等待 ${t.wait} 分至 ${o.wantReceiveTime}` : ''}）</span>`);
+        trace.push(`  <span class="ok">✓ 載入 ${o.id}（有效地板 ${m2(this.effFloor(o, veh))}m²｜${o.pickupTime} 來收${t.wait ? `，早到等待 ${t.wait} 分至 ${o.wantReceiveTime}` : ''}）</span>`);
       });
       // ③ 抵達迄點時間＝表定出發＋前置＋直達行駛＋本趟各取貨據點上貨與等待總和
       const directEta = minToHHMM(start + DB.prepMin + directDrive + (fin.extra || 0));
@@ -649,13 +663,13 @@ const ModuleB = {
       this.recordVehicleStatus(veh.id, 2, reason, targetDest, '申請單指定目的地');
       return { mode: 'direct', endpoint: targetDest, carried, trace, lateOrders, dispatchDate, origin,
         days: refDays, refDays, urgentDirect: true, reason, modeLabel: this.matrixRowInfo(2).mode, matrixRow: 2,
-        capUsed: Math.round(load), capTotal: veh.volume };
+        capUsed: Math.round(load), capTotal: floorCap(veh) };
     }
 
     // ---- 非直達貪婪：2.20/2.21 統一媒合（基準路線 → 逐張候選檢查是否排擠）----
     const nonDirect = pending.filter(o => !o.direct);
     trace.push(`<span class="hl">非直達車（貪婪法）</span>：動態淨值＋到送貨據點卸貨釋出容量（G33）；站內外攤平為同一條時間軸（2.20）`);
-    trace.push(`出發據點 ${this.siteById(origin).name}（2.22 可為任一據點）｜容量上限 ${veh.volume}L`);
+    trace.push(`出發據點 ${this.siteById(origin).name}（2.22 可為任一據點）｜車廂地板 ${m2(floorCap(veh))}m²（不堆疊，G145）`);
     trace.push(`<span class="dim">時間模型（2.13）：每日在勤上限 ${DB.dailyDutyMin} 分（${DB.dailyDutyMin / 60}h），自表定 ${DB.shiftStartDefault} 起算；`
       + `含前置 ${DB.prepMin} 分、收工 ${DB.closeMin} 分與返回休息地；行駛查路程表（2.9）；站內建物間移動（棟數−1）×${DB.intraSiteMovePerBuildingMin} 分（2.18）；收貨時間窗 ${DB.receiveWindowMin} 分（2.19）；休息用餐依累積行駛觸發（2.12）</span>`);
 
@@ -707,7 +721,7 @@ const ModuleB = {
       st.site.id !== origin && st.site.id !== endpoint && (st.count > 0 || st.unloaded > 0));
     const naturalDirect = carried.length > 0 && intermediateStops.length === 0;
 
-    trace.push(`<span class="hl">終點 = ${this.siteById(endpoint).name}｜峰值淨值 ${peakVol.toFixed(0)}L（G32/G33）</span>`);
+    trace.push(`<span class="hl">終點 = ${this.siteById(endpoint).name}｜峰值淨值 地板 ${m2(peakVol)}m²（G32/G33）</span>`);
     trace.push(`<span class="dim">精算出勤 ${estDays} 天（收工含返回休息地 ${clock.closeOut(endpoint)} 分）｜`
       + `最短天數表參考（3.1，不參與運算）：${veh.sizeClass === 'big' ? '大車' : '小車'} → ${refDays != null ? refDays + ' 天' : '（表中無值）'}</span>`);
     if (daysOver) trace.push(`  <span class="b-amber">▲ 本趟預估天數 ${estDays} 天超出表定 ${refDays} 天 → 以精算為準照常派車，僅提醒調度員（3.1）</span>`);
@@ -720,7 +734,7 @@ const ModuleB = {
     return { mode: 'greedy', endpoint, carried, delivered: deliveredHere, stops: sim.stops, trace,
       days: estDays, refDays, daysOver, naturalDirect, stopReason: sim.stopReason, lateOrders, dispatchDate, origin,
       unmatched, reason, modeLabel: this.matrixRowInfo(1).mode, matrixRow: 1,
-      capUsed: Math.round(peakVol), capTotal: veh.volume,
+      capUsed: Math.round(peakVol), capTotal: floorCap(veh),
       timeUsed: clock.dayElapsed, timeTotal: DB.dailyDutyMin, dutyDays: estDays,
       breaks: clock.breaksTaken };
   },
@@ -864,8 +878,10 @@ const ModuleB = {
     if (v.type !== f.vehicleType) return '車號與車種類型不符';
     const hz = list.filter(o => !this.hazardOk(o, v.id));
     if (hz.length) return `${v.id} 不可載危險品（${hz.map(o => o.id).join('、')} 為危險品運輸，G144）`;
-    const vol = list.reduce((s, o) => s + this.effVolume(o), 0), wt = list.reduce((s, o) => s + (+o.weight || 0), 0);
-    if (vol > v.volume) return `${v.id} 容積 ${Math.round(v.volume)}L 不足本派車單有效體積 ${Math.round(vol)}L`;
+    const bad = list.find(o => !this.fitsVehicle(o, v));
+    if (bad) return `${v.id} 車廂放不下 ${bad.id}「${this.unfitItem(bad, v).name}」（不堆疊、只能水平轉向，G145）`;
+    const vol = list.reduce((s, o) => s + this.effFloor(o, v), 0), wt = list.reduce((s, o) => s + (+o.weight || 0), 0);
+    if (vol > floorCap(v)) return `${v.id} 車廂地板 ${m2(floorCap(v))}m² 不足本派車單有效地板面積 ${m2(vol)}m²`;
     if (wt > v.weight) return `${v.id} 載重 ${v.weight}kg 不足本派車單 ${wt}kg`;
     if (!f.driver1) return '請選擇「駕駛人1」';
     if (f.driver2 && f.driver2 === f.driver1) return '駕駛人1 與駕駛人2 不可為同一人';
@@ -997,7 +1013,7 @@ const ModuleB = {
       this.recordVehicleStatus(veh.id, 5, reason5, endpoint, '出發據點');
       return { mode: 'return-direct', matrixRow: 5, modeLabel: this.matrixRowInfo(5).mode,
         endpoint, carried: [], deferred: [], trace, days: '—',
-        reason: reason5, capUsed: startNet, capTotal: veh.volume, locked: true };
+        reason: reason5, capUsed: startNet, capTotal: floorCap(veh), locked: true };
     }
 
     // 非直達回程車：先做全域直達檢查（G40/B-5 三條件）
@@ -1018,13 +1034,13 @@ const ModuleB = {
       trace.push(`  <span class="hl">▲ 發現撞期直達單 ${collide.map(o => o.id).join(', ')}（路線重疊＋收貨時間窗成立）→ 路段鎖定直達（G40）</span>`);
       trace.push(`  容量延續動態淨值（G41，不切換 3.3），不收新的非直達貨，仍依序經過沿線據點`);
       for (const o of collide) {
-        const ev = this.effVolume(o);
-        if (net + ev <= veh.volume && wt + o.weight <= veh.weight) {
+        const ev = this.effFloor(o, veh);
+        if (this.fitsVehicle(o, veh) && net + ev <= floorCap(veh) && wt + o.weight <= veh.weight) {
           net += ev; wt += o.weight; carried.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '直達'; o.dispatchEndpoint = endpoint;
           o.dispatchDir = 'north';
           o.pickupTime = collideInfo[o.id].passEta;
-          trace.push(`  <span class="ok">✓ 載直達回程單 ${o.id}（${this.siteById(o.pickSite).name} 上車 ${o.pickupTime}，有效 ${ev.toFixed(0)}L）淨值 ${net.toFixed(0)}L</span>`);
+          trace.push(`  <span class="ok">✓ 載直達回程單 ${o.id}（${this.siteById(o.pickSite).name} 上車 ${o.pickupTime}，有效地板 ${m2(ev)}m²）淨值 ${m2(net)}m²</span>`);
         }
       }
       nonDirectReturn.forEach(o => { deferred.push(o); trace.push(`  <span class="no">✗ 非直達回程單 ${o.id} 被鎖定排擠 → 自動順延下一趟（G42）</span>`); });
@@ -1032,7 +1048,7 @@ const ModuleB = {
       this.recordVehicleStatus(veh.id, 4, reason4, endpoint, '出發據點');
       return { mode: 'return-locked', matrixRow: 4, modeLabel: this.matrixRowInfo(4).mode,
         endpoint, carried, deferred, stops, trace, days: '—',
-        reason: reason4, capUsed: Math.round(net), capTotal: veh.volume, locked: true };
+        reason: reason4, capUsed: Math.round(net), capTotal: floorCap(veh), locked: true };
     }
 
     // 矩陣第 3 列：回程・非直達且無撞期 → 動態淨值、沿路收送＋到迄點卸貨釋出容量
@@ -1061,7 +1077,7 @@ const ModuleB = {
       for (let i = onboard.length - 1; i >= 0; i--) {
         const o = onboard[i];
         if (o.dropSite === site.id) {
-          const ev = this.effVolume(o);
+          const ev = this.effFloor(o, veh);
           net -= ev; wt -= o.weight; clock.addWork(o.unloadMin || 0);
           unloaded += ev; onboard.splice(i, 1); o.dispatchDropTime = arriveEta;
           bldgs.add(bkey(o.deliverLoc));
@@ -1070,7 +1086,7 @@ const ModuleB = {
       // 裝貨：本站為收貨據點（起）者
       const here = nonDirectReturn.filter(o => o.pickSite === site.id && o.status === 'approved');
       for (const o of here) {
-        const ev = this.effVolume(o);
+        const ev = this.effFloor(o, veh);
         const lt = (o.loadMin != null ? o.loadMin : o.handleMin) || 0;
         // 2.19 收貨時間窗（取代舊交貨門檻）：早到等待、晚到窗內仍可、超窗＝順延
         const rc = this.receiveCheck(o, arriveMin);
@@ -1083,7 +1099,7 @@ const ModuleB = {
           trace.push(`  <span class="no">✗ ${o.id} 於 ${site.name} 裝貨無法於 ${this.siteById(site.id).returnLoadBy} 前完成 → 順延下一趟（限制條件 3）</span>`);
           deferred.push(o); continue;
         }
-        if (net + ev <= veh.volume && wt + o.weight <= veh.weight) {
+        if (this.fitsVehicle(o, veh) && net + ev <= floorCap(veh) && wt + o.weight <= veh.weight) {
           net += ev; wt += o.weight; clock.addWork(lt); stopLoaded += ev; nLoad++;
           carried.push(o); onboard.push(o); o.status = 'loaded';
           o.dispatchVehicle = veh.id; o.dispatchMode = '非直達'; o.dispatchEndpoint = o.dropSite;
@@ -1103,9 +1119,9 @@ const ModuleB = {
       peakVol = Math.max(peakVol, net);
       stops.push({ site, loaded: Math.round(stopLoaded), unloaded: Math.round(unloaded), count: nLoad, cumVol: Math.round(net) });
       trace.push(`  ${site.name}：`
-        + (unloaded ? `<span class="b-amber">卸 ${unloaded.toFixed(0)}L</span> ` : '')
-        + (stopLoaded ? `<span class="ok">收 ${stopLoaded.toFixed(0)}L</span> ` : (unloaded ? '' : '<span class="dim">無回程貨</span> '))
-        + `→ 淨值 ${net.toFixed(0)}L／當日在勤 ${clock.dayElapsed} 分`);
+        + (unloaded ? `<span class="b-amber">卸 ${m2(unloaded)}m²</span> ` : '')
+        + (stopLoaded ? `<span class="ok">收 ${m2(stopLoaded)}m²</span> ` : (unloaded ? '' : '<span class="dim">無回程貨</span> '))
+        + `→ 淨值 ${m2(net)}m²／當日在勤 ${clock.dayElapsed} 分`);
     }
     // 抵達終點（出發據點）：卸下以基地為送貨據點者
     clock.addDrive(this.travelMin(prevSite, endpoint, veh.sizeClass));
@@ -1115,18 +1131,18 @@ const ModuleB = {
     for (let i = onboard.length - 1; i >= 0; i--) {
       const o = onboard[i];
       if (o.dropSite === endpoint) {
-        const ev = this.effVolume(o);
+        const ev = this.effFloor(o, veh);
         net -= ev; wt -= o.weight; clock.addWork(o.unloadMin || 0);
         homeUnloaded += ev; onboard.splice(i, 1); o.dispatchDropTime = homeEta;
       }
     }
-    if (homeUnloaded) trace.push(`  ${this.siteById(endpoint).name}（終點）：<span class="b-amber">卸 ${homeUnloaded.toFixed(0)}L</span> → 淨值 ${net.toFixed(0)}L／當日在勤 ${clock.dayElapsed} 分`);
-    trace.push(`  <span class="hl">回程終點＝${this.siteById(endpoint).name}（G36），峰值淨值 ${peakVol.toFixed(0)}L</span>`);
+    if (homeUnloaded) trace.push(`  ${this.siteById(endpoint).name}（終點）：<span class="b-amber">卸 ${m2(homeUnloaded)}m²</span> → 淨值 ${m2(net)}m²／當日在勤 ${clock.dayElapsed} 分`);
+    trace.push(`  <span class="hl">回程終點＝${this.siteById(endpoint).name}（G36），峰值淨值 地板 ${m2(peakVol)}m²</span>`);
     const reason3 = '回程無撞期直達單 → 動態淨值沿路收送、到迄點卸貨（G33/G40）';
     this.recordVehicleStatus(veh.id, 3, reason3, endpoint, '出發據點');
     return { mode: 'return-greedy', matrixRow: 3, modeLabel: this.matrixRowInfo(3).mode,
       endpoint, carried, deferred, stops, trace, days: '—',
-      reason: reason3, capUsed: Math.round(peakVol), capTotal: veh.volume,
+      reason: reason3, capUsed: Math.round(peakVol), capTotal: floorCap(veh),
       timeUsed: clock.dayElapsed, timeTotal: DB.dailyDutyMin, dutyDays: clock.day,
       breaks: clock.breaksTaken, locked: false };
   },
