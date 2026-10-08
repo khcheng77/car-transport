@@ -110,6 +110,18 @@ const ModuleB = {
     return o;
   },
   canEdit(o) { return ['draft', 'rejected'].includes(o.status); },
+  /* 危險品運輸（G144）：hazardTransport＝是 的託運單只能派給車輛主檔 hazmat（可載危險品）的車；
+     媒合派車不排入不合格車輛、手動指派／異動派車單亦檢核 */
+  isHazard(o) { return o.hazardTransport === 'yes'; },
+  hazardOk(o, vehicleId) { const v = DB.vehicles.find(x => x.id === vehicleId); return !this.isHazard(o) || !!(v && v.hazmat); },
+  // 媒合選車：待派單全為危險品、而選定車輛不可載危險品 → 改派未使用的 hazmat 幹線車（無則回 null）
+  _hazardPick(dec, list, used, trace, label) {
+    const v = DB.vehicles.find(x => x.id === dec.vehicle);
+    if ((v && v.hazmat) || !list.length || !list.every(o => this.isHazard(o))) return dec;
+    const alt = DB.vehicles.find(x => x.pool === 'LOGI' && x.sizeClass && x.hazmat && !used.has(x.id));
+    if (!alt) { trace.push(`<span class="no">✗ ${label}：待派託運單皆為危險品運輸，當日可載危險品的幹線車已無可用，留待其他派車日或手動指派</span>`, ''); return null; }
+    return Object.assign({}, dec, { vehicle: alt.id, sizeClass: alt.sizeClass, reason: `${dec.reason}；待派皆為危險品運輸，${dec.vehicle} 不可載危險品 → 改派 ${alt.id}` });
+  },
   rocDate(d) { d = d || new Date(); return `${d.getFullYear() - 1911}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; },
   /* 申請表單必填檢核（G143）：＊欄位、希望收貨日期、不同意併車須填事由、修改時須填異動事由，最後檢核起迄 */
   formError(data, opts) {
@@ -147,19 +159,19 @@ const ModuleB = {
       // 希望收貨日期（G129）：與派車日對應——派車調度依收貨日期列在該派車日，媒合派車只取收貨日期＝派車日者
       wantReceiveDate: data.wantReceiveDate || '',
       recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, campus, agentName, agentPhone, agentCampus, agentHall }
-      // ---- G143 新增欄位（未另指定屬性者為文字欄位；目前僅記錄，不影響媒合派車）----
+      // ---- G143 新增欄位（除危險品運輸 G144 外目前僅記錄，不影響媒合派車；不同意併車不等同直達）----
       tripleFormNo: data.tripleFormNo || '',            // 三聯單表單編號
       applyUnit: data.applyUnit || '',                  // 申請單位/委運單位＊
       applyExt: data.applyExt || '',                    // 申請人分機＊
       consignor: data.consignor || {},                  // 委運人：{ name＊, campus, ext＊（分機/手機） }；館別＝pickupLoc
       unloadReadyTime: data.unloadReadyTime || '',      // 可卸貨時間
       delayReceiveTime: data.delayReceiveTime != null ? data.delayReceiveTime : (data.unloadReadyTime || ''), // 調整延後收貨時間（預設＝可卸貨時間）
-      nightOT: data.nightOT || '', holidayOT: data.holidayOT || '',   // 是否需要夜間／假日加班
-      keepMatchDriver: data.keepMatchDriver || '',      // 願意持續媒合駕駛
-      hazardTransport: data.hazardTransport || 'no',    // 危險品運輸（是 yes／否 no）
+      nightOT: data.nightOT || 'no', holidayOT: data.holidayOT || 'no',   // 是否需要夜間／假日加班（是 yes／否 no）
+      keepMatchDriver: data.keepMatchDriver || 'no',    // 願意持續媒合駕駛（是 yes／否 no）
+      hazardTransport: data.hazardTransport || 'no',    // 危險品運輸（是 yes／否 no）：是＝限可載危險品車輛（G144）
       agreeCarpool: data.agreeCarpool !== false,        // 是否同意併車（預設同意）
       carpoolRejectReason: data.agreeCarpool === false ? (data.carpoolRejectReason || '') : '',   // 拒絕併車事由
-      oneway: data.oneway || '',                        // 是否單程運輸
+      oneway: data.oneway || 'no',                      // 是否單程運輸（是 yes／否 no）
       remark: data.remark || '', changeReason: data.changeReason || '',   // 備註、異動事由
       captain: data.captain || '', captainPhone: data.captainPhone || '', // 車長、車長分機/手機
       direct: !!data.direct,   // 3.2 急件直達（申請人指定）＝派車輸入條件，觸發獨立派車與回程鎖定
@@ -555,7 +567,10 @@ const ModuleB = {
     const veh = DB.vehicles.find(v => v.id === vehicleId);
     const trace = [];
     const origin = originId || DB.homeSite; // 2.22：出發據點可為任一據點
-    const all = this.orders.filter(o => o.status === 'approved' && this.isSouthbound(o) && this.onDate(o, dispatchDate));
+    const all0 = this.orders.filter(o => o.status === 'approved' && this.isSouthbound(o) && this.onDate(o, dispatchDate));
+    all0.filter(o => !this.hazardOk(o, vehicleId))
+      .forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入本車：危險品運輸，${vehicleId} 不可載危險品（G144）</span>`));
+    const all = all0.filter(o => this.hazardOk(o, vehicleId));
     const unservable = all.filter(o => !this.isServable(o, origin));
     unservable.forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入：${this.unservableReason(o, origin)}</span>`));
     let servable = all.filter(o => this.isServable(o, origin));
@@ -753,12 +768,14 @@ const ModuleB = {
     const southUsed = new Set(this.liveDispatches().filter(d => d.date === dispatchDate)
       .filter(d => this.dispatchOrders(d).some(o => o.dispatchDir === 'south')).map(d => d.vehicle));
     const pickSouth = (mode, label) => {
-      const dec = this.decideSizeClass(mode, dispatchDate, null, 'south');
-      if (!southUsed.has(dec.vehicle)) return dec;
-      const alt = DB.vehicles.filter(v => v.pool === 'LOGI' && v.sizeClass && !southUsed.has(v.id))
-        .sort((a, b) => (a.sizeClass === dec.sizeClass ? 0 : 1) - (b.sizeClass === dec.sizeClass ? 0 : 1))[0];
-      if (!alt) { trace.push(`<span class="no">✗ ${label}：當日幹線車皆已排去程，其餘待派託運單留待其他派車日</span>`, ''); return null; }
-      return Object.assign({}, dec, { vehicle: alt.id, sizeClass: alt.sizeClass, reason: `${dec.reason}；${dec.vehicle} 已排去程 → 改派 ${alt.id}` });
+      let dec = this.decideSizeClass(mode, dispatchDate, null, 'south');
+      if (southUsed.has(dec.vehicle)) {
+        const alt = DB.vehicles.filter(v => v.pool === 'LOGI' && v.sizeClass && !southUsed.has(v.id))
+          .sort((a, b) => (a.sizeClass === dec.sizeClass ? 0 : 1) - (b.sizeClass === dec.sizeClass ? 0 : 1))[0];
+        if (!alt) { trace.push(`<span class="no">✗ ${label}：當日幹線車皆已排去程，其餘待派託運單留待其他派車日</span>`, ''); return null; }
+        dec = Object.assign({}, dec, { vehicle: alt.id, sizeClass: alt.sizeClass, reason: `${dec.reason}；${dec.vehicle} 已排去程 → 改派 ${alt.id}` });
+      }
+      return this._hazardPick(dec, pending('south', mode === 'direct'), southUsed, trace, label);
     };
     for (let i = 0; i < 10 && pending('south', true).length; i++) {
       const dec = pickSouth('direct', '去程直達'); if (!dec) break;
@@ -784,6 +801,7 @@ const ModuleB = {
         if (!alt) { trace.push('<span class="no">✗ 回程非直達：幹線車皆為直達車（回程不停靠），北上託運單留待其他派車日</span>', ''); break; }
         dec = Object.assign({}, dec, { vehicle: alt.id, sizeClass: alt.sizeClass, reason: `${dec.reason}；${dec.vehicle} 為直達車回程不停靠 → 改派 ${alt.id}` });
       }
+      dec = this._hazardPick(dec, rets, directVeh, trace, '回程非直達'); if (!dec) break;
       const r = run('回程非直達', () => this._dispatchReturn(dec.vehicle, turnaround, false, 0));
       r.sizeDecision = dec;
       if (!(r.carried || []).length) break;
@@ -844,6 +862,8 @@ const ModuleB = {
     if (!f.vehicleType) return '請選擇「車種類型」';
     if (!v) return '請選擇物流池的「車號」';
     if (v.type !== f.vehicleType) return '車號與車種類型不符';
+    const hz = list.filter(o => !this.hazardOk(o, v.id));
+    if (hz.length) return `${v.id} 不可載危險品（${hz.map(o => o.id).join('、')} 為危險品運輸，G144）`;
     const vol = list.reduce((s, o) => s + this.effVolume(o), 0), wt = list.reduce((s, o) => s + (+o.weight || 0), 0);
     if (vol > v.volume) return `${v.id} 容積 ${Math.round(v.volume)}L 不足本派車單有效體積 ${Math.round(vol)}L`;
     if (wt > v.weight) return `${v.id} 載重 ${v.weight}kg 不足本派車單 ${wt}kg`;
@@ -961,7 +981,10 @@ const ModuleB = {
     startNet = startNet || 0;
     const path = this.returnPath(turnaroundId);
     const endpoint = DB.homeSite; // 回程固定回出發據點（G36/B-1）
-    const allReturn = this.orders.filter(o => o.status === 'approved' && !this.isSouthbound(o) && this.onDate(o));
+    const allReturn0 = this.orders.filter(o => o.status === 'approved' && !this.isSouthbound(o) && this.onDate(o));
+    allReturn0.filter(o => !this.hazardOk(o, vehicleId))
+      .forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入本車：危險品運輸，${vehicleId} 不可載危險品（G144）</span>`));
+    const allReturn = allReturn0.filter(o => this.hazardOk(o, vehicleId));
     allReturn.filter(o => !this.isServable(o))
       .forEach(o => trace.push(`<span class="no">✗ ${o.id} 不排入：${this.unservableReason(o)}</span>`));
     const returnOrders = allReturn.filter(o => this.isServable(o)).sort((a, b) => a.approvedAt - b.approvedAt);

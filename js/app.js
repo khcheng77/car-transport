@@ -371,7 +371,7 @@ function openCargoEditor(item, onSave, opts) {
   openModal(item ? '編輯貨物內容' : '新增貨物', `
     ${infoGrid('ce-fields', [
       ext ? fInput('計畫名稱', `<input type="text" id="ce-plan" value="${gEsc(it.plan)}">`) : '',
-      ext ? fInput(bc ? '工令號碼' : '工命號碼', `<input type="text" id="ce-workno" value="${gEsc(it.workNo)}">`) : '',
+      ext ? fInput('工令號碼', `<input type="text" id="ce-workno" value="${gEsc(it.workNo)}">`) : '',
       fInput(nameLbl, `<input type="text" id="ce-name" value="${it.name}">`, { full: !bc }),
       bc ? fInput('物品外型', `<input type="text" id="ce-shape" value="${gEsc(it.shape)}">`) : '',
       fInput(bc ? '長' : '長 (cm)', `<input type="number" id="ce-l" value="${it.l}"${bc ? ' placeholder="cm"' : ''}>`),
@@ -419,7 +419,7 @@ function renderCargoGrid(sel, items, editable, onChange, opts) {
   if (!box) return;
   const catName = (c) => (DB.wasteFactors.find(f => f.code === c) || {}).name || c;
   const hz = !!opts.hazard; // 模組 D：多一欄「危險品」
-  const ac = !!opts.aCols; // 巡迴物品轉運（G138）：首兩欄計畫名稱、工命號碼，最後一欄物品外包裝
+  const ac = !!opts.aCols; // 巡迴物品轉運（G138）：首兩欄計畫名稱、工令號碼，最後一欄物品外包裝
   const bc = !!opts.bCols; // 院區物品轉運（G143）：計畫名稱、工令號碼、物品名稱、物品外型、長、寬、高、類別、數量、重量、物品外包裝
   const g = v => gEsc(v || '—');
   if (bc) {
@@ -433,7 +433,7 @@ function renderCargoGrid(sel, items, editable, onChange, opts) {
     box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
       <div class="muted" style="font-size:12px;margin-top:6px;">長／寬／高單位 cm；重量為單件重（kg）。</div>`;
   } else {
-  const head = `${editable ? '<th></th>' : ''}${ac ? '<th>計畫名稱</th><th>工命號碼</th>' : ''}<th>${ac ? '物品名稱' : '品名'}</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>${hz ? '<th>危險品</th>' : ''}${ac ? '<th>物品外包裝</th>' : ''}`;
+  const head = `${editable ? '<th></th>' : ''}${ac ? '<th>計畫名稱</th><th>工令號碼</th>' : ''}<th>${ac ? '物品名稱' : '品名'}</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>${hz ? '<th>危險品</th>' : ''}${ac ? '<th>物品外包裝</th>' : ''}`;
   const cols = 5 + (editable ? 1 : 0) + (hz ? 1 : 0) + (ac ? 3 : 0);
   const body = items.length === 0
     ? `<tr><td colspan="${cols}" class="muted" style="text-align:center;padding:16px;">${opts.emptyText || `尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。`}</td></tr>`
@@ -964,7 +964,7 @@ function aaFormData() {
     loadMin: +$('#aa-load').value || 0, unloadMin: +$('#aa-unload').value || 0,
   };
 }
-// 巡迴物品轉運貨物 grid（G138）：首兩欄計畫名稱、工命號碼，最後一欄物品外包裝；品名改稱物品名稱
+// 巡迴物品轉運貨物 grid（G138）：首兩欄計畫名稱、工令號碼，最後一欄物品外包裝；品名改稱物品名稱
 const A_CARGO_OPTS = { aCols: true };
 function renderAaItems() { renderCargoGrid('#aa-items', aaItems, true, renderAaItems, A_CARGO_OPTS); }
 // 相容：審核端動作呼叫此函式刷新申請端 grid（若目前正在查詢畫面）
@@ -1490,6 +1490,7 @@ function renderBGrid() {
 /* ---------- 院區物品轉運單內容卡片（G143）：申請明細／單位主管審核共用 ---------- */
 function bOrderCards(o, pfx, head, extra) {
   const d = v => (v == null || v === '') ? '<span class="muted">—</span>' : gEsc(v);
+  const yn = v => v === 'yes' ? '是' : v === 'no' ? '否' : d(v);
   const c = o.consignor || {}, r = o.recipient || {};
   const wantWin = o.wantReceiveTime ? `${o.wantReceiveTime}<span class="hint" style="margin-left:6px;">～${minToHHMM(hhmmToMin(o.wantReceiveTime) + DB.receiveWindowMin)}</span>` : '<span class="muted">—</span>';
   return `
@@ -1513,11 +1514,11 @@ function bOrderCards(o, pfx, head, extra) {
         fItem('送貨站點', `${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span>`),
         fItem('接收人館別', d(o.deliverLoc)),
         fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
-        fItem('願意持續媒合駕駛', d(o.keepMatchDriver)),
-        fItem('危險品運輸', o.hazardTransport === 'yes' ? '<span class="badge b-red">⚠ 是</span>' : '否'),
+        fItem('願意持續媒合駕駛', yn(o.keepMatchDriver)),
+        fItem('危險品運輸', o.hazardTransport === 'yes' ? '<span class="badge b-red">⚠ 是</span><span class="hint" style="margin-left:6px;">限可載危險品車輛</span>' : '否'),
         fItem('是否同意併車', o.agreeCarpool === false ? '<span class="badge b-amber">不同意</span>' : '同意'),
         o.agreeCarpool === false ? fItem('拒絕併車事由', d(o.carpoolRejectReason)) : '',
-        fItem('是否單程運輸', d(o.oneway)),
+        fItem('是否單程運輸', yn(o.oneway)),
       ].join(''))}
     </div>
     <div class="card">
@@ -1527,7 +1528,7 @@ function bOrderCards(o, pfx, head, extra) {
         fItem('可裝貨時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', wantWin),
         fItem('可卸貨時間', d(o.unloadReadyTime)), fItem('調整延後收貨時間', d(o.delayReceiveTime)),
         fItem('裝貨／卸貨所需時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
-        fItem('是否需要夜間加班', d(o.nightOT)), fItem('是否需要假日加班', d(o.holidayOT)),
+        fItem('是否需要夜間加班', yn(o.nightOT)), fItem('是否需要假日加班', yn(o.holidayOT)),
         fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
         fItem('有效體積（容量計算用）', `<b>${ModuleB.effVolume(o).toFixed(0)}L</b>`),
       ].join(''))}
@@ -1641,11 +1642,11 @@ function renderBApplyNew(p) {
             <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
             <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
           </div>`, { stack: true, full: true }),
-        fInput('願意持續媒合駕駛', txt('ba-keepdrv')),
+        fInput('願意持續媒合駕駛', bYesNo('ba-keepdrv', 'no')),
         fInput('危險品運輸', bYesNo('ba-hz', 'no')),
         fInput('是否同意併車', `<label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="ba-carpool" checked> 同意併車</label>`),
         fInput('拒絕併車事由 <span class="hint">不同意併車時必填</span>', txt('ba-rejreason')),
-        fInput('是否單程運輸', txt('ba-oneway')),
+        fInput('是否單程運輸', bYesNo('ba-oneway', 'no')),
       ].join(''))}
     </div>
     <div class="card">
@@ -1657,8 +1658,8 @@ function renderBApplyNew(p) {
         fInput('調整延後收貨時間 <span class="hint">預設同可卸貨時間</span>', txt('ba-delayrecv')),
         fInput('裝貨所需時間 <span class="hint">分（G35）</span>', `<input type="number" id="ba-load" value="20">`),
         fInput('卸貨所需時間 <span class="hint">分（G35）</span>', `<input type="number" id="ba-unload" value="10">`),
-        fInput('是否需要夜間加班', txt('ba-nightot')),
-        fInput('是否需要假日加班', txt('ba-holidayot')),
+        fInput('是否需要夜間加班', bYesNo('ba-nightot', 'no')),
+        fInput('是否需要假日加班', bYesNo('ba-holidayot', 'no')),
       ].join(''))}
     </div>
     <div class="card">
@@ -1704,7 +1705,8 @@ function renderBApplyNew(p) {
     $('#ba-d').classList.toggle('sel', $('#page-b_apply input[name=ba-direct][value="1"]').checked);
   };
   $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
-  ['ba-hz', 'ba-send'].forEach(n => $$(`#page-b_apply input[name=${n}]`).forEach(r => r.onchange = () =>
+  const bYn = ['ba-hz', 'ba-send', 'ba-keepdrv', 'ba-oneway', 'ba-nightot', 'ba-holidayot'];   // 是／否 radio（G144）
+  bYn.forEach(n => $$(`#page-b_apply input[name=${n}]`).forEach(r => r.onchange = () =>
     $$(`#${n}-wrap .radio-pill`).forEach(l => l.classList.toggle('sel', $('input', l).checked))));
   // 調整延後收貨時間：預設連動可卸貨時間；使用者自行修改後即不再跟隨
   let delayTouched = false;
@@ -1734,14 +1736,14 @@ function renderBApplyNew(p) {
     setBldgVal('ba-pickbldg', 'ba-pickother', e.pickupLoc);
     setBldgVal('ba-dropbldg', 'ba-dropother', e.deliverLoc);
     const dr = $(`#page-b_apply input[name=ba-direct][value="${e.direct ? 1 : 0}"]`); dr.checked = true; dr.onchange();
-    const hz = $(`#page-b_apply input[name=ba-hz][value="${e.hazardTransport === 'yes' ? 'yes' : 'no'}"]`); hz.checked = true; hz.onchange();
-    set('ba-keepdrv', e.keepMatchDriver); $('#ba-carpool').checked = e.agreeCarpool !== false;
-    set('ba-rejreason', e.carpoolRejectReason); set('ba-oneway', e.oneway);
+    const yn = (n, val) => { const r = $(`#page-b_apply input[name=${n}][value="${val === 'yes' ? 'yes' : 'no'}"]`); r.checked = true; r.onchange(); };
+    yn('ba-hz', e.hazardTransport); yn('ba-keepdrv', e.keepMatchDriver); yn('ba-oneway', e.oneway);
+    yn('ba-nightot', e.nightOT); yn('ba-holidayot', e.holidayOT);
+    $('#ba-carpool').checked = e.agreeCarpool !== false; set('ba-rejreason', e.carpoolRejectReason);
     set('ba-want', e.wantReceiveTime); set('ba-wantdate', e.wantReceiveDate);
     set('ba-unloadready', e.unloadReadyTime); set('ba-delayrecv', e.delayReceiveTime);
     if ((e.delayReceiveTime || '') !== (e.unloadReadyTime || '')) delayTouched = true;
     set('ba-load', e.loadMin || 0); set('ba-unload', e.unloadMin || 0);
-    set('ba-nightot', e.nightOT); set('ba-holidayot', e.holidayOT);
     const r = e.recipient || {};
     [['runit', r.unit], ['rname', r.name], ['rphone', r.phone], ['rcampus', r.campus],
      ['aname', r.agentName], ['aphone', r.agentPhone], ['acampus', r.agentCampus], ['ahall', r.agentHall]].forEach(([k, v]) => set('ba-' + k, v));
@@ -1751,6 +1753,7 @@ function renderBApplyNew(p) {
   }
   $('#ba-add').onclick = () => openCargoEditor(null, it => { baItems.push(it); renderBaCargo(); }, B_CARGO_OPTS);
   const v = id => $('#' + id).value.trim();
+  const ynv = n => $(`#page-b_apply input[name=${n}]:checked`).value;
   const formData = () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return null; }
     const data = {
@@ -1762,13 +1765,13 @@ function renderBApplyNew(p) {
       pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),     // 委運人館別
       deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),    // 接收人館別
       direct: $('#page-b_apply input[name=ba-direct][value="1"]').checked,
-      keepMatchDriver: v('ba-keepdrv'), hazardTransport: $('#page-b_apply input[name=ba-hz]:checked').value,
-      agreeCarpool: $('#ba-carpool').checked, carpoolRejectReason: v('ba-rejreason'), oneway: v('ba-oneway'),
+      keepMatchDriver: ynv('ba-keepdrv'), hazardTransport: ynv('ba-hz'),
+      agreeCarpool: $('#ba-carpool').checked, carpoolRejectReason: v('ba-rejreason'), oneway: ynv('ba-oneway'),
       wantReceiveDate: $('#ba-wantdate').value,
       wantReceiveTime: $('#ba-want').value,                   // 可裝貨時間
       unloadReadyTime: v('ba-unloadready'), delayReceiveTime: v('ba-delayrecv'),
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
-      nightOT: v('ba-nightot'), holidayOT: v('ba-holidayot'),
+      nightOT: ynv('ba-nightot'), holidayOT: ynv('ba-holidayot'),
       recipient: Object.assign(recipientVal('ba'), { campus: v('ba-rcampus'), agentCampus: v('ba-acampus'), agentHall: v('ba-ahall') }),
       remark: v('ba-remark'), changeReason: editing ? v('ba-chg') : '',
       captain: v('ba-captain'), captainPhone: v('ba-capphone'),
@@ -2014,13 +2017,13 @@ function bOrderBadge(d) {
 // 派車調度明細（G127）：待調度申請單（媒合派車／手動指派／無車退回）＋派車單 grid（「明細」開視窗異動與送審）
 const bOpt = (v, t, cur, dis) => `<option value="${v}" ${v === cur ? 'selected' : ''}${dis ? ' disabled' : ''}>${t}</option>`;
 const bDrvOpts = (cur, blank) => bOpt('', blank, cur || '') + DB.drivers.filter(d => d.pool === 'LOGI').map(d => bOpt(d.id, `${d.name}（${d.id}）`, cur)).join('');
-const bLoadOf = os => ({ vol: os.reduce((s, o) => s + ModuleB.effVolume(o), 0), wt: os.reduce((s, o) => s + (+o.weight || 0), 0) });
+const bLoadOf = os => ({ vol: os.reduce((s, o) => s + ModuleB.effVolume(o), 0), wt: os.reduce((s, o) => s + (+o.weight || 0), 0), hz: os.some(o => ModuleB.isHazard(o)) });
 // 車號下拉（依車種類型）：容積／載重不足者停用
 function bFillVehicles(typeSel, vehSel, cur, load) {
   const t = $(typeSel).value;
   $(vehSel).innerHTML = bOpt('', t ? '請選擇' : '請先選車種類型', cur) + (t ? Usage.vehiclesOf('LOGI', t).map(v => {
-    const short = v.volume < load.vol || v.weight < load.wt;
-    return bOpt(v.id, `${v.id}（${v.name}｜${Math.round(v.volume)}L／${v.weight}kg${short ? '・容量不足' : ''}）`, cur, short); }).join('') : '');
+    const short = v.volume < load.vol || v.weight < load.wt, noHz = load.hz && !v.hazmat;   // 危險品運輸限可載危險品車（G144）
+    return bOpt(v.id, `${v.id}（${v.name}｜${Math.round(v.volume)}L／${v.weight}kg${v.hazmat ? '・可載危險品' : ''}${short ? '・容量不足' : ''}${noHz ? '・不可載危險品' : ''}）`, cur, short || noHz); }).join('') : '');
 }
 // 派車單區塊（原明細頁的派車單卡片）：表單＋申請單 grid＋異動紀錄；於視窗內顯示
 // 送審前可異動車種類型／車號／駕駛人1／駕駛人2／是否送審與刪除申請單；送審後（或已出車）即鎖定（G129）
@@ -2098,7 +2101,7 @@ function openBManualAssign(o, date, by, rerender) {
   const targets = ModuleB.manualTargets(date), ld = bLoadOf([o]);
   const tgtText = d => { const os = ModuleB.dispatchOrders(d), l = bLoadOf(os), v = DB.vehicles.find(x => x.id === d.vehicle);
     return `${d.id}｜${d.vehicle}（${d.vehicleType}）｜${[d.driver1, d.driver2].filter(Boolean).map(drvName).join('＋') || '未指定駕駛'}｜${os.length} 張｜剩餘 ${v ? Math.round(v.volume - l.vol) : '—'}L／${v ? v.weight - l.wt : '—'}kg`; };
-  const veh0 = DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass && v.volume >= ld.vol && v.weight >= ld.wt);
+  const veh0 = DB.vehicles.find(v => v.pool === 'LOGI' && v.sizeClass && v.volume >= ld.vol && v.weight >= ld.wt && (!ld.hz || v.hazmat));
   openModal(`手動指派 · ${o.id}`, `
     <div class="card-desc">${o.applicant}｜${bRoute(o)}｜${o.direct ? '直達' : '非直達'}｜申報 ${o.volume}L（有效 ${Math.round(ld.vol)}L）／${o.weight || 0}kg｜希望收貨 ${[o.wantReceiveDate, o.wantReceiveTime].filter(Boolean).join(' ') || '—'}｜派車日 <b>${date}</b></div>
     ${infoGrid('bma-mode', [fInput('指派方式', gPills('bma-mode', 'new', [['new', '新派車單（暫存未送審）'], ['merge', `併入既有派車單（${targets.length} 張可併）`]]), { full: true, stack: true })].join(''))}
@@ -3274,11 +3277,12 @@ RENDER.master = function () {
     <div class="grid-2">
       <div class="card"><div class="card-title">車輛主檔（含資源池別）<span class="g-tag">C-2</span></div>
         <div class="card-desc">歸屬據點＝行政/資產固定隸屬（不因出差改變）；當前位置＝排班可用性判斷依據（G59）。</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th><th>容量/座位</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th><th>容量/座位</th><th>可載危險品</th></tr></thead><tbody>
         ${DB.vehicles.map(v => `<tr><td>${v.id}</td><td>${v.name}</td>
           <td>${v.pool === 'LOGI' ? '<span class="badge b-navy">物流</span>' : '<span class="badge b-green">商務（C/D 共用）</span>'}</td>
           <td>${v.homeSite}</td><td>${v.currentSite}${v.currentSite !== v.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td>
-          <td>${v.pool === 'BIZ' ? v.seats + ' 座' : v.volume.toFixed(0) + 'L/' + v.weight + 'kg'}</td></tr>`).join('')}
+          <td>${v.pool === 'BIZ' ? v.seats + ' 座' : v.volume.toFixed(0) + 'L/' + v.weight + 'kg'}</td>
+          <td>${v.pool === 'LOGI' && v.sizeClass ? (v.hazmat ? '<span class="badge b-red">⚠ 可</span>' : '否') : '<span class="muted">—</span>'}</td></tr>`).join('')}
         </tbody></table></div></div>
       <div class="card"><div class="card-title">司機主檔（獨立資源）<span class="g-tag">C-2</span></div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>姓名</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th></tr></thead><tbody>

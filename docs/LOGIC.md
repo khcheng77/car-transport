@@ -81,7 +81,7 @@ draft（申請中）──(送出 submitDraft)──▶ submitted ──(自動�
 - `pickStation`(收貨站點) + `pickupLoc`（站點名稱）、`station`(送貨站點) + `building`（G138 表單移除建物，新單為空字串；舊資料仍顯示）、`applyUnit`（申請單位/委運單位，必填）、`consignor`／`recipient`／`recipientAgent`（姓名、分機、院區、館別；委運人與接收代理人分機可改填手機且必填）。
 - `deliverTime`(**期望收貨時間**，僅 `exact` 模式用於挑班次，**非硬性截止**)、`expectDiffMin`(排定到站與期望的差，僅供顯示)。
 - `serviceDate`(**排班日期**)：`exact` 可指定今天或未來日期（表單 `min` 擋過去）；`asap` 即當天。
-- `items[]`(逐件尺寸/類別/數量/重量；G138 加 `plan` 計畫名稱、`workNo` 工命號碼、`pack` 物品外包裝，僅記錄)、`recvMode`(`asap` 越快越好 / `exact` 指定期望時間)。
+- `items[]`(逐件尺寸/類別/數量/重量；G138 加 `plan` 計畫名稱、`workNo` 工令號碼、`pack` 物品外包裝，僅記錄)、`recvMode`(`asap` 越快越好 / `exact` 指定期望時間)。
 - `loadMin`+`unloadMin`（表單「裝貨／卸貨所需時間」）= `handleMin`（站內佔用時間）、`submitSeq`(送出序，決定同站處理先後)。
 - 表單「是否送出」（G138）：是 → `submit`（建立並立即媒合）；否 → `saveDraft`（申請中）。
 

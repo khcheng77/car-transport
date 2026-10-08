@@ -2897,6 +2897,54 @@ group('院區物品轉運申請表單改版（G143）', () => {
   });
 });
 
+group('院區物品轉運：危險品運輸限車與是非欄位（G144）', () => {
+  const DD = '2026-12-31';
+  const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false,
+    volume: 1000, category: 'BOX', weight: 100, handleMin: 20, wantReceiveDate: DD }, o)); H.ModuleB.approve(x); return x; };
+  test('車輛主檔：僅 V-T01 可載危險品；非危險品單任何車皆可', () => {
+    const H = fresh(), B = H.ModuleB;
+    const hz = mk(H, { hazardTransport: 'yes' }), n = mk(H, {});
+    ok(B.hazardOk(hz, 'V-T01') && !B.hazardOk(hz, 'V-T02'));
+    ok(B.hazardOk(n, 'V-T01') && B.hazardOk(n, 'V-T02'));
+  });
+  test('指定不可載危險品車派車：危險品單不排入、留待其他車', () => {
+    const H = fresh(), B = H.ModuleB;
+    const hz = mk(H, { hazardTransport: 'yes' }), n = mk(H, {});
+    const r = B.dispatch('V-T02', 'greedy', DD);
+    eq(n.status, 'loaded'); eq(hz.status, 'approved');
+    ok(r.trace.some(x => x.includes(hz.id) && x.includes('不可載危險品')), '媒合紀錄說明原因');
+  });
+  test('單一媒合：小車載一般單，危險品單改派可載危險品的大車', () => {
+    const H = fresh(), B = H.ModuleB;
+    const hz = mk(H, { hazardTransport: 'yes' }), n = mk(H, {});
+    B.runMatch(DD, '調度室');
+    eq(n.status, 'loaded'); eq(hz.status, 'loaded');
+    eq(hz.dispatchVehicle, 'V-T01'); eq(n.dispatchVehicle, 'V-T02');
+  });
+  test('只有危險品單時，選車直接改派可載危險品車', () => {
+    const H = fresh(), B = H.ModuleB;
+    const hz = mk(H, { hazardTransport: 'yes' });
+    eq(B.decideSizeClass('greedy', DD, null, 'south').vehicle, 'V-T02', '依貨量原應派小車');
+    B.runMatch(DD, '調度室');
+    eq(hz.status, 'loaded'); eq(hz.dispatchVehicle, 'V-T01');
+  });
+  test('派車單異動／手動指派：含危險品單時不可選不可載危險品的車', () => {
+    const H = fresh(), B = H.ModuleB;
+    const hz = mk(H, { hazardTransport: 'yes' });
+    B.runMatch(DD, '調度室');
+    const d = B.dispatchOf(hz);
+    const f = { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: d.driver1, driver2: '' };
+    ok(/不可載危險品/.test(B.dispatchResourceError(d, f)));
+    eq(B.dispatchResourceError(d, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: d.driver1, driver2: '' }), null);
+  });
+  test('是非欄位預設否；不同意併車不等同直達', () => {
+    const H = fresh(), B = H.ModuleB;
+    const o = mk(H, { agreeCarpool: false, carpoolRejectReason: '機密' });
+    eq(o.nightOT, 'no'); eq(o.holidayOT, 'no'); eq(o.oneway, 'no'); eq(o.keepMatchDriver, 'no');
+    eq(o.direct, false, '不同意併車仍為非直達');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

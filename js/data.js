@@ -157,7 +157,8 @@ const DB = {
       dims: { l: 360, w: 175, h: 185 }, volume: 360*175*185/1000, weight: 2500 },
     // sizeClass：3.1 天數表查表維度＋2.17 車型自動判斷之代表車（大車 big／小車 small）
     //   2.17（暫定）：依當日該路線總貨量門檻自動選車，超過小車容量上限即派大車（見 ModuleB.decideSizeClass）
-    { id: 'V-T01', type: '幹線聯結車', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big',
+    // hazmat：可載危險品（G144）——院區物品轉運「危險品運輸＝是」的託運單只能由 hazmat 車承運
+    { id: 'V-T01', type: '幹線聯結車', name: '幹線聯結車 01', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'big', hazmat: true,
       dims: { l: 600, w: 240, h: 240 }, volume: 600*240*240/1000, weight: 8000 },
     { id: 'V-T02', type: '幹線貨車', name: '幹線貨車 02', pool: 'LOGI', homeSite: 'D9', currentSite: 'D9', sizeClass: 'small',
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
