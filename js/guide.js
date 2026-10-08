@@ -190,8 +190,10 @@ const Guide = {
         break;
       }
     }
+    // 危險品（G144）：院區物品轉運帶入「危險品運輸＝是」，派車限可載危險品的車輛
     if ((r.unit === 'A' || r.unit === 'B') && (items.some(it => it.hazardous) || v.hazardTransport === 'yes')) {
-      warnings.push(`${this.UNITS[r.unit].name}目前沒有危險品欄位，請於備註說明並聯絡調度。`);
+      warnings.push(r.unit === 'B' ? '已帶入「危險品運輸＝是」：調度派車時只能使用可載危險品的車輛。'
+        : `${this.UNITS[r.unit].name}含危險品，請確認「危險品運輸」並聯絡調度。`);
     }
     return { unit: r.unit, page: this.UNITS[r.unit].page, data, labels, warnings };
   },

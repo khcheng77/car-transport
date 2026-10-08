@@ -125,7 +125,9 @@ draft（申請中）──(送出 submitDraft)──▶ submitted ──(自動�
 
 - **重新媒合** `rematch(app)`：未媒合單編輯貨物後清空舊排班重跑一次。
 
-### 司機任務單
+### 司機任務單（G142 查詢頁＋細節頁）
+四模組共用 `renderDriverSheet(cfg)`：查詢頁（日期起迄預設今天～＋14、司機）grid＝細節、日期、出發時間、司機名稱 → 細節頁。A 的 `aDriverTrips()`：一列＝一個「日期＋班次」（`time`＝班次 `depart`、司機＝`logiDriverOf(車輛)` 推定）；細節＝`aDriverCard(date, shiftId, list)`（下述停靠站表）。D 的 `dDriverTrips()`：一列＝一位司機的一段 `liveSegs` 指派區間（雙駕駛各一列、無司機列為 `__self` 自駕），細節＝任務資訊＋隨行貨物。
+
 依 **`serviceDate` ＋ `assignedShift`** 分組，每個「日期＋班次（車輛）」一張任務單（不同日期不混在同一張）。車輛沿固定 10 站路線**一次通過**，故任務單**以停靠站為單位、依站序（S1→S10）排列**：為每張單建立「取貨（收貨站）」與「卸貨（送貨站）」兩個停靠事件，同一站的收/送**自動彙整**（先卸後裝），每站顯示抵達時間、卸貨清單（單號/送貨地點/接收人/狀態）與取貨清單（單號/收貨地點/貨物）。抵達時間走 `shiftArrivalAtStation(班次, 站序, 日期)`（發車＋站序×3 分＋前面各站停站時間，與申請單 `arrival` 一致，G131）。
 
 ---
@@ -153,7 +155,9 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 ### 託運單主要欄位（`createOrder`）
 - `pickSite`(收貨據點/起)、`dropSite`(送貨據點/迄)。**無 `leg` 欄位**——行程方向由起迄相對順序推導（`isSouthbound`：迄點較南＝南下，較北＝北上），不由申請人勾選。
 - `pickupLoc`/`deliverLoc`(建物)、`deliverTime`(交貨時間)、`recipient`(接收人)、`direct`(直達與否)。
-- `items[]`(逐件尺寸)、`loadMin`+`unloadMin` = `handleMin`。
+- `items[]`(逐件尺寸；G143 加 `plan` 計畫名稱、`workNo` 工令號碼、`shape` 物品外型、`pack` 物品外包裝，僅記錄)、`loadMin`(裝貨所需時間)+`unloadMin`(卸貨所需時間) = `handleMin`。
+- G143 新欄位：`transportStatus`(開單)、`applyDate`(民國年)、`tripleFormNo`、`applyUnit`＊、`applyExt`＊、`consignor{name＊,campus,ext＊}`（館別＝`pickupLoc`）、`recipient` 加 `campus`／`agentCampus`＊／`agentHall`＊（接收人館別＝`deliverLoc`＊）、`unloadReadyTime`、`delayReceiveTime`（預設＝可卸貨時間）、`nightOT`／`holidayOT`／`oneway`／`keepMatchDriver`（`yes`/`no`，預設 no）、`hazardTransport`（`yes`/`no`）、`agreeCarpool`（預設 true；false 時 `carpoolRejectReason` 必填）、`remark`、`changeReason`（修改時必填）、`captain`、`captainPhone`。`wantReceiveTime` 畫面名稱改為「可裝貨時間」。除 `hazardTransport` 外僅記錄，`agreeCarpool=false` **不等同** `direct`。
+- `formError(data, {editing})`：＊欄位、希望收貨日期、不同意併車須填事由、修改須填異動事由，最後套 `routeError`。是否送審：否＝`createOrder(data,{draft:true})`／`saveDraft`（申請中或退回修編 → 申請中，退回者保留 `revisions`）；是＝`createOrder`／`resubmit`（待二級審）。
 - `recompute`：由 items 加總 → `volume`(申報貨量)、`weight`、`effVol`(**有效體積**，容量計算基準)。
 
 ### 主管准駁
@@ -172,6 +176,7 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 - **可服務範圍 `isServable(o)`＝基地及其以南**：現行車次模型為「自基地南下 → 折返北上回基地」，故**基地以北據點（D10 台北）不在任何路線上**。涉及北側據點的託運單**一律不排入**，並於派車 trace 與待派清單明確標示原因（北側排班方式為 TODO B-2，**待業務確認**），避免載走卻無法卸貨。
 - **時間上限＝每日 12.5 小時在勤額度**（見上「時間模型」）。**天數表不參與運算**（3.1）：`minTripDaysFor(車輛, 終點)` 依「車型 × 目的地」查表，僅作排班參考顯示；精算天數超出表定值時**以精算為準照常派車**，僅提醒調度員。
 - 容量基準＝**有效體積 `effVol`**（Level 1 + 形狀，不做 Level 2）＋重量。
+- **危險品限車（G144）**：車輛主檔 `hazmat: true`＝可載危險品（原型：V-T01）。`isHazard(o)`＝`hazardTransport==='yes'`；`hazardOk(o, vehicleId)`。`_dispatch`／`_dispatchReturn` 先剔除本車不可載的危險品單（trace 註明）；`runMatch` 選車後經 `_hazardPick(dec, 待派單, 已用車, …)`：待派單全為危險品且選定車不可載 → 改派未使用的 hazmat 幹線車（無則停止）。`dispatchResourceError` 對含危險品單的派車單拒絕非 hazmat 車（手動指派、併入、派車單異動共用）。
 
 ### 去程派車 `dispatch(vehicleId, mode, dispatchDate)`
 僅處理 `approved` 且**南下**（由起迄推導）的單，依 `approvedAt` 排序；帶 `dispatchDate` 時先套用 **2.14 媒合截止**（逾時者標記順延、不排入）。
@@ -219,7 +224,9 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 ### 車輛派遣狀態 `vehicleStatus`（3.8）
 每次派車記錄該車：**目前模式**（矩陣五列之一）、**觸發原因**（例：「當天有直達申請單（最早核准 LB004）→ 獨立派車」）、**終點與判定依據**（已載單最南送貨據點／申請單指定目的地／出發據點），供調度室一眼覆核。
 
-### 司機任務單
+### 司機任務單（G142 查詢頁＋細節頁）
+`bDriverTrips()`：一列＝一位司機的一趟（派車單 `dispatchId` × 方向 `dispatchDir`，日期取派車單 `date`）；駕駛人1／2 各一列（無指派駕駛時以 `logiDriverOf(車輛)` 推定），出發時間＝該趟最早 `pickupTime`。細節＝`bDriverCard(t)`（下述停靠序）＋同車駕駛。
+
 依 `dispatchVehicle` 分組；把每張單的收貨（`pickSite`）、送貨（`dropSite`）展開為**停靠序**，各據點顯示要「取貨／卸貨」哪些單、收/送地點與接收人。
 
 ---
