@@ -413,6 +413,26 @@ const ModuleB = {
   },
   // 每件貨都能平放進該車（高度不超過、底面水平轉向放得進地板）
   fitsVehicle(o, veh) { return (o.items || []).every(it => it.l == null || itemFitsFloor(it, veh.dims)); },
+  /* 派車單的峰值載量（G146）：去程／回程是兩段行程分開計算，沿路線順序「先卸後裝」累計有效地板面積與重量
+     （與媒合派車的動態淨值同一口徑，2.4），取兩程中的最大值；派車單異動、手動指派、新增申請單皆以此檢核容量。 */
+  peakLoad(list, veh) {
+    let peak = { floor: 0, weight: 0 };
+    const ord = id => this.siteById(id).order;
+    ['south', 'north'].forEach(dir => {
+      const legOs = list.filter(o => (o.dispatchDir || (this.isSouthbound(o) ? 'south' : 'north')) === dir);
+      if (!legOs.length) return;
+      const sites = [...new Set(legOs.flatMap(o => [o.pickSite, o.dropSite]))].sort((a, b) => dir === 'south' ? ord(b) - ord(a) : ord(a) - ord(b));
+      let f = 0, w = 0;
+      const add = (o, sign) => { f += sign * this.effFloor(o, veh); w += sign * (+o.weight || 0); };
+      sites.forEach(sid => {
+        legOs.filter(o => o.dropSite === sid && o.pickSite !== sid).forEach(o => add(o, -1));   // 先卸
+        legOs.filter(o => o.pickSite === sid).forEach(o => add(o, 1));                          // 再裝
+        peak = { floor: Math.max(peak.floor, f), weight: Math.max(peak.weight, w) };
+        legOs.filter(o => o.pickSite === sid && o.dropSite === sid).forEach(o => add(o, -1));   // 院區內轉運當站卸
+      });
+    });
+    return peak;
+  },
   unfitItem(o, veh) { return (o.items || []).find(it => it.l != null && !itemFitsFloor(it, veh.dims)) || null; },
 
   /* 依出發據點南下方向排序（order 大→小） */
@@ -880,8 +900,8 @@ const ModuleB = {
     if (hz.length) return `${v.id} 不可載危險品（${hz.map(o => o.id).join('、')} 為危險品運輸，G144）`;
     const bad = list.find(o => !this.fitsVehicle(o, v));
     if (bad) return `${v.id} 車廂放不下 ${bad.id}「${this.unfitItem(bad, v).name}」（不堆疊、只能水平轉向，G145）`;
-    const vol = list.reduce((s, o) => s + this.effFloor(o, v), 0), wt = list.reduce((s, o) => s + (+o.weight || 0), 0);
-    if (vol > floorCap(v)) return `${v.id} 車廂地板 ${m2(floorCap(v))}m² 不足本派車單有效地板面積 ${m2(vol)}m²`;
+    const pk = this.peakLoad(list, v), vol = pk.floor, wt = pk.weight;   // 沿途先卸後裝的峰值（G146）
+    if (vol > floorCap(v)) return `${v.id} 車廂地板 ${m2(floorCap(v))}m² 不足本派車單沿途峰值有效地板面積 ${m2(vol)}m²`;
     if (wt > v.weight) return `${v.id} 載重 ${v.weight}kg 不足本派車單 ${wt}kg`;
     if (!f.driver1) return '請選擇「駕駛人1」';
     if (f.driver2 && f.driver2 === f.driver1) return '駕駛人1 與駕駛人2 不可為同一人';
@@ -910,16 +930,25 @@ const ModuleB = {
     const v = DB.vehicles.find(x => x.id === f.vehicle);
     const next = { vehicleType: f.vehicleType || (v ? v.type : ''), vehicle: f.vehicle, driver1: f.driver1, driver2: f.driver2 || '',
       submitted: f.submitted == null ? d.submitted : !!f.submitted };
+    // 派遣人／派遣時間（G146：派車單明細視窗可修改；未帶入則維持原值）
+    if (f.dispatcher != null) { if (!String(f.dispatcher).trim()) return { ok: false, error: '請填寫「派遣人」' }; next.dispatcher = String(f.dispatcher).trim(); }
+    if (f.dispatchedAt != null) {
+      const at = f.dispatchedAt instanceof Date ? f.dispatchedAt : new Date(f.dispatchedAt);
+      if (isNaN(at)) return { ok: false, error: '請填寫正確的「派遣時間」' };
+      next.dispatchedAt = at;
+    }
     const err = this.dispatchResourceError(d, next);
     if (err) return { ok: false, error: err };
-    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2'].filter(k => (d[k] || '') !== (next[k] || ''));
+    const same = k => k === 'dispatchedAt' ? +new Date(d[k]) === +next[k] : (d[k] || '') === (next[k] || '');
+    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2', 'dispatcher', 'dispatchedAt'].filter(k => k in next && !same(k));
     const wasSub = d.submitted;
     if (!changed.length && wasSub === next.submitted) return { ok: true, changed: [] };
-    const before = `${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋') || '—'}`;
+    const before = `${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋') || '—'}`, beforeBy = d.dispatcher;
     Object.assign(d, next);
     this._applyToOrders(d);
     const list = this.dispatchOrders(d);
-    if (changed.length) this._dlog(d, '異動', by, `${before} → ${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋')}`);
+    if (changed.some(k => !['dispatcher', 'dispatchedAt'].includes(k))) this._dlog(d, '異動', by, `${before} → ${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋')}`);
+    if (changed.some(k => ['dispatcher', 'dispatchedAt'].includes(k))) this._dlog(d, '異動派遣資訊', by, `派遣人 ${beforeBy} → ${d.dispatcher}`);
     if (!wasSub && next.submitted) { list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室')); this._dlog(d, '送審', by, '送出運輸主管簽審'); }   // 送審後即鎖定（G129）
     return { ok: true, changed };
   },
@@ -943,6 +972,8 @@ const ModuleB = {
      兩者皆做資源檢核（容積／載重、車號與車種、駕駛不同人、請假、當日其他派車單撞車撞人）。
      手動指派不重算路線時間：收貨時間暫取申請人希望收貨時間，派遣模式依申請單（急件＝直達）。 */
   manualTargets(date) { return this.liveDispatches().filter(d => d.date === date && !d.submitted && !this.started(d)); },
+  // 派車單明細「新增申請單」可選的對象：同派車日（收貨日期）的待調度申請單（G146）
+  addCandidates(d) { return this.orders.filter(o => o.status === 'approved' && this.onDate(o, d.date)).sort((a, b) => a.approvedAt - b.approvedAt); },
   _applyManual(o) {
     o.status = 'loaded'; o.dispatchMode = o.direct ? '直達' : '非直達';
     o.dispatchDir = this.isSouthbound(o) ? 'south' : 'north'; o.dispatchOrigin = o.pickSite; o.dispatchEndpoint = o.dropSite;

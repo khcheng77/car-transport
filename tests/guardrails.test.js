@@ -2999,6 +2999,57 @@ group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', 
   });
 });
 
+group('院區物品轉運派車單明細：送審、異動、新增／刪除申請單（G146）', () => {
+  const DD = '2026-12-31';
+  const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
+    wantReceiveDate: DD, wantReceiveTime: '09:00', items: [{ name: '箱', l: 120, w: 100, h: 100, qty: 3, category: 'BOX', weight: 80 }] }, o)); H.ModuleB.approve(x); return x; };
+  const fleet = H => [mk(H, {}), mk(H, { site: 'D9', destSite: 'D6' }), mk(H, { site: 'D6', destSite: 'D2' }), mk(H, { site: 'D6', destSite: 'D3' }),
+    mk(H, { site: 'D2', destSite: 'D9' }), mk(H, { site: 'D3', destSite: 'D9' })];
+  test('媒合產生的派車單（去程＋回程同車、沿途卸貨釋出容量）可直接送審：檢核取沿途峰值而非全部加總', () => {
+    const H = fresh(), B = H.ModuleB;
+    const os = fleet(H);
+    B.runMatch(DD, '調度室');
+    const ds = B.liveDispatches();
+    ok(ds.length > 0, '有派車單');
+    ds.forEach(d => {
+      const v = H.DB.vehicles.find(x => x.id === d.vehicle), list = B.dispatchOrders(d);
+      const sum = list.reduce((t, o) => t + B.effFloor(o, v), 0);
+      ok(B.peakLoad(list, v).floor <= sum + 1e-6, '峰值不大於加總');
+      eq(B.dispatchResourceError(d, d), null, `${d.id} 資源檢核應通過`);
+      ok(B.submitDispatch(d, '調度室').ok, `${d.id} 應可送審`);
+    });
+    ok(os.some(o => H.Signoff.isPending(o)), '送審後進入運輸主管簽審');
+  });
+  test('峰值：同一站先卸後裝，前一段已卸的貨不佔後一段容量；去程與回程分開計算', () => {
+    const H = fresh(), B = H.ModuleB, v = H.DB.vehicles.find(x => x.id === 'V-T02');
+    const big = o => B.createOrder(Object.assign({ applicant: 'X', handleMin: 10, items: [{ name: '大箱', l: 300, w: 200, h: 200, qty: 1, category: 'BOX', weight: 100 }] }, o));
+    const a = big({ site: 'D9', destSite: 'D6' }), b = big({ site: 'D6', destSite: 'D3' }), r = big({ site: 'D3', destSite: 'D9' });
+    approx(B.peakLoad([a, b, r], v).floor, 300 * 200 * 1.1, 1, '接力與回程皆不疊加');
+    ok(B.peakLoad([a, b, r], v).floor <= H.floorCap(v));
+  });
+  test('派車單明細可修改派遣人與派遣時間（必填），並記錄異動', () => {
+    const H = fresh(), B = H.ModuleB;
+    fleet(H); B.runMatch(DD, '調度室');
+    const d = B.liveDispatches()[0];
+    ok(/派遣人/.test(B.updateDispatch(d, Object.assign({}, d, { dispatcher: ' ' }), 'x').error));
+    ok(/派遣時間/.test(B.updateDispatch(d, Object.assign({}, d, { dispatchedAt: 'abc' }), 'x').error));
+    const r = B.updateDispatch(d, Object.assign({}, d, { dispatcher: '調度室-林', dispatchedAt: '2026-12-30T08:30', submitted: false }), 'x');
+    ok(r.ok); eq(d.dispatcher, '調度室-林'); eq(d.dispatchedAt.getHours(), 8); ok(!d.submitted);
+    ok(d.log.some(l => l.action === '異動派遣資訊'));
+    ok(B.updateDispatch(d, Object.assign({}, d, { submitted: true }), 'x').ok); ok(d.submitted);
+    ok(!B.updateDispatch(d, Object.assign({}, d, { dispatcher: '別人' }), 'x').ok, '送審後不可再異動');
+  });
+  test('刪除的申請單回待調度，可由「新增」再加回同一張派車單', () => {
+    const H = fresh(), B = H.ModuleB;
+    fleet(H); B.runMatch(DD, '調度室');
+    const d = B.liveDispatches().find(x => x.apps.length > 1), o = B.dispatchOrders(d)[0];
+    ok(B.unassign(o, 'x').ok); eq(o.status, 'approved');
+    ok(B.addCandidates(d).includes(o), '同派車日待調度可加入');
+    ok(B.manualMerge(o, d, 'x').ok); eq(o.dispatchId, d.id);
+    ok(!B.addCandidates(d).includes(o));
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

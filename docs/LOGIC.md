@@ -183,6 +183,7 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 - **可服務範圍 `isServable(o)`＝基地及其以南**：現行車次模型為「自基地南下 → 折返北上回基地」，故**基地以北據點（D10 台北）不在任何路線上**。涉及北側據點的託運單**一律不排入**，並於派車 trace 與待派清單明確標示原因（北側排班方式為 TODO B-2，**待業務確認**），避免載走卻無法卸貨。
 - **時間上限＝每日 12.5 小時在勤額度**（見上「時間模型」）。**天數表不參與運算**（3.1）：`minTripDaysFor(車輛, 終點)` 依「車型 × 目的地」查表，僅作排班參考顯示；精算天數超出表定值時**以精算為準照常派車**，僅提醒調度員。
 - 容量基準＝**有效地板面積**（不堆疊、只能水平轉向，與 A 共用 `loadengine`，G145）＋重量；不再只用 Level 1 體積。
+- **派車單容量檢核（G146）**：`peakLoad(list, veh)`——去程／回程分開，沿路線順序先卸後裝累計有效地板面積與重量取峰值（與媒合動態淨值同口徑）；`dispatchResourceError`（派車單異動、手動指派、併入）以此比對車廂地板與載重。`updateDispatch` 另可改 `dispatcher`、`dispatchedAt`（必填，記「異動派遣資訊」）；`addCandidates(d)`＝同派車日待調度申請單（派車單明細「新增」）。
 - **危險品限車（G144）**：車輛主檔 `hazmat: true`＝可載危險品（原型：V-T01）。`isHazard(o)`＝`hazardTransport==='yes'`；`hazardOk(o, vehicleId)`。`_dispatch`／`_dispatchReturn` 先剔除本車不可載的危險品單（trace 註明）；`runMatch` 選車後經 `_hazardPick(dec, 待派單, 已用車, …)`：待派單全為危險品且選定車不可載 → 改派未使用的 hazmat 幹線車（無則停止）。`dispatchResourceError` 對含危險品單的派車單拒絕非 hazmat 車（手動指派、併入、派車單異動共用）。
 
 ### 去程派車 `dispatch(vehicleId, mode, dispatchDate)`

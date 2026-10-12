@@ -137,6 +137,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: 
 .radio-pill:hover { border-color: var(--navy); }
 .radio-pill.sel { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
 .radio-pill input { width: auto; }
+/* 是／否等短選項：選項緊湊、與欄位名稱同列（G146） */
+.radio-group.yn { flex-wrap: nowrap; gap: 6px; }
+.radio-group.yn .radio-pill { flex: none; min-width: 0; padding: 3px 12px; }
+.fcard.fcard-input > .fcard-value > .radio-group.yn { display: inline-flex; }
 
 /* ---------- 按鈕 ---------- */
 .btn {
