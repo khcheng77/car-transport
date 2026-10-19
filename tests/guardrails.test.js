@@ -2914,7 +2914,7 @@ group('院區財物轉運申請表單改版（G143）', () => {
     ok(/申請單位/.test(B.formError(form({ applyUnit: ' ' }))));
     ok(/申請人分機/.test(B.formError(form({ applyExt: '' }))));
     ok(/委運人姓名/.test(B.formError(form({ consignor: { ext: '1' } }))));
-    ok(/委運人分機/.test(B.formError(form({ consignor: { name: 'X' } }))));
+    ok(/委運人手機/.test(B.formError(form({ consignor: { name: 'X' } }))));
     ok(/接收人館別/.test(B.formError(form({ deliverLoc: '' }))));
     ok(/接收代理人院區/.test(B.formError(form({ recipient: Object.assign({}, form().recipient, { agentCampus: '' }) }))));
     ok(/接收代理人館別/.test(B.formError(form({ recipient: Object.assign({}, form().recipient, { agentHall: '' }) }))));
@@ -2976,11 +2976,13 @@ group('院區財物轉運：危險品運輸限車與是非欄位（G144）', () 
     ok(/不可載危險品/.test(B.dispatchResourceError(d, f)));
     eq(B.dispatchResourceError(d, { vehicleType: '幹線聯結車', vehicle: 'V-T01', driver1: d.driver1, driver2: '' }), null);
   });
-  test('是非欄位預設否；不同意併車不等同直達', () => {
+  test('是非欄位預設否；是否同意併車取代派送型態：否＝直達（G153，取代 G144「不等同直達」）', () => {
     const H = fresh(), B = H.ModuleB;
     const o = mk(H, { agreeCarpool: false, carpoolRejectReason: '機密' });
     eq(o.nightOT, 'no'); eq(o.holidayOT, 'no'); eq(o.oneway, 'no'); eq(o.keepMatchDriver, 'no');
-    eq(o.direct, false, '不同意併車仍為非直達');
+    eq(o.direct, true, '不同意併車＝直達');
+    const y = mk(H, { agreeCarpool: true }); eq(y.direct, false, '同意併車＝非直達');
+    const old = mk(H, { direct: true }); eq(old.agreeCarpool, false, '舊資料只給 direct：視為不同意併車');
   });
 });
 
@@ -3047,6 +3049,22 @@ group('院區財物轉運派車單明細：送審、異動、新增／刪除申�
     const a = big({ site: 'D9', destSite: 'D6' }), b = big({ site: 'D6', destSite: 'D3' }), r = big({ site: 'D3', destSite: 'D9' });
     approx(B.peakLoad([a, b, r], v).floor, 300 * 200 * 1.1, 1, '接力與回程皆不疊加');
     ok(B.peakLoad([a, b, r], v).floor <= H.floorCap(v));
+  });
+  test('派車單行車紀錄（G153）：里程、加油公升數、駕駛工時、駕駛加班時數皆選填；不填里程仍可送出（僅異動）', () => {
+    const H = fresh(), B = H.ModuleB;
+    fleet(H); B.runMatch(DD, '調度室');
+    const d = B.liveDispatches()[0], base = { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2 };
+    const blank = { startKm: '', endKm: '', fuelLiters: '', workHours: '', otHours: '' };
+    ok(B.updateDispatch(d, Object.assign({ tripLog: blank }, base), 'x').ok, '全部不填可送出');
+    ok(/同時填寫/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { startKm: '100' }) }, base), 'x').error));
+    ok(/結束里程/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { startKm: '100', endKm: '90' }) }, base), 'x').error));
+    ok(/加班/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { workHours: '2', otHours: '3' }) }, base), 'x').error));
+    ok(/加油公升數/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { fuelLiters: 'abc' }) }, base), 'x').error));
+    const r = B.updateDispatch(d, Object.assign({ tripLog: { startKm: '100', endKm: '260', fuelLiters: '35', workHours: '9', otHours: '1' } }, base), 'x');
+    ok(r.ok && r.changed.includes('tripLog'));
+    eq(JSON.stringify(d.tripLog), JSON.stringify({ startKm: 100, endKm: 260, fuelLiters: 35, workHours: 9, otHours: 1 }));
+    ok(d.log.some(l => l.action === '行車紀錄'), '記錄異動');
+    ok(B.dispatchOrders(d).every(o => !o.usage), '派車單行車紀錄不等於完成實登');
   });
   test('派車單明細可修改派遣人與派遣時間（必填），並記錄異動', () => {
     const H = fresh(), B = H.ModuleB;

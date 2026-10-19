@@ -138,9 +138,9 @@ const ModuleB = {
   /* 申請表單必填檢核（G143）：＊欄位、希望收貨日期、不同意併車須填事由、修改時須填異動事由，最後檢核起迄 */
   formError(data, opts) {
     const c = data.consignor || {}, r = data.recipient || {};
-    const need = [[data.applyUnit, '申請單位/委運單位'], [data.applyExt, '申請人分機'], [c.name, '委運人姓名'], [c.ext, '委運人分機/手機'],
-      [data.deliverLoc, '接收人館別'], [r.name, '接收人姓名'], [r.phone, '接收人分機/手機'],
-      [r.agentName, '接收代理人姓名'], [r.agentPhone, '接收代理人分機/手機'], [r.agentCampus, '接收代理人院區'], [r.agentHall, '接收代理人館別']];
+    const need = [[data.applyUnit, '申請單位/委運單位'], [data.applyExt, '申請人分機'], [c.name, '委運人姓名'], [c.ext, '委運人手機'],
+      [data.deliverLoc, '接收人館別'], [r.name, '接收人姓名'], [r.phone, '接收人手機'],
+      [r.agentName, '接收代理人姓名'], [r.agentPhone, '接收代理人手機'], [r.agentCampus, '接收代理人院區'], [r.agentHall, '接收代理人館別']];
     const miss = need.find(([v]) => !String(v || '').trim());
     if (miss) return `請填寫「${miss[1]}」`;
     if (!data.wantReceiveDate) return '請填寫「希望收貨日期」';
@@ -171,7 +171,7 @@ const ModuleB = {
       // 希望收貨日期（G129）：與派車日對應——派車調度依收貨日期列在該派車日，媒合派車只取收貨日期＝派車日者
       wantReceiveDate: data.wantReceiveDate || '',
       recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, campus, agentName, agentPhone, agentCampus, agentHall }
-      // ---- G143 新增欄位（除危險品運輸 G144 外目前僅記錄，不影響媒合派車；不同意併車不等同直達）----
+      // ---- G143 新增欄位（除危險品運輸 G144、是否同意併車 G153 外目前僅記錄，不影響媒合派車）----
       tripleNo: data.tripleNo || data.tripleFormNo || '',   // 三聯單單號（G147 物籌處介接，可輸入下拉；G148 整併原「三聯單表單編號」）
       applyUnit: data.applyUnit || '',                  // 申請單位/委運單位＊
       applyExt: data.applyExt || '',                    // 申請人分機＊
@@ -181,13 +181,14 @@ const ModuleB = {
       nightOT: data.nightOT || 'no', holidayOT: data.holidayOT || 'no',   // 是否需要夜間／假日加班（是 yes／否 no）
       keepMatchDriver: data.keepMatchDriver || 'no',    // 願意持續媒合駕駛（是 yes／否 no）
       hazardTransport: data.hazardTransport || 'no',    // 危險品運輸（是 yes／否 no）：是＝限可載危險品車輛（G144）
-      agreeCarpool: data.agreeCarpool !== false,        // 是否同意併車（預設同意）
-      carpoolRejectReason: data.agreeCarpool === false ? (data.carpoolRejectReason || '') : '',   // 拒絕併車事由
+      // 是否同意併車（G153 取代「派送型態」）：是＝非直達（沿線收送）、否＝直達（獨立派車）；舊資料只給 direct 時同步為不同意
+      agreeCarpool: data.agreeCarpool !== false && !data.direct,
+      carpoolRejectReason: (data.agreeCarpool === false || data.direct) ? (data.carpoolRejectReason || '') : '',   // 拒絕併車事由
       oneway: data.oneway || 'no',                      // 是否單程運輸（是 yes／否 no）
       remark: data.remark || '', changeReason: data.changeReason || '',   // 備註、異動事由
       captain: data.captain || '', captainPhone: data.captainPhone || '', // 車長、車長分機/手機
       escort: data.escort || '',                        // 押車人（G147：僅註記，不參與媒合）
-      direct: !!data.direct,   // 3.2 急件直達（申請人指定）＝派車輸入條件，觸發獨立派車與回程鎖定
+      direct: !!data.direct || data.agreeCarpool === false,   // 3.2 直達＝不同意併車（G153）：派車輸入條件，觸發獨立派車與回程鎖定
       items,                 // 貨物項目清單
       loadMin, unloadMin,    // 上貨/下貨時間（分）
       handleMin,             // 裝卸時間＝上貨＋下貨（G35）
@@ -935,6 +936,28 @@ const ModuleB = {
   /* 調度異動派車單：f = { vehicleType, vehicle, driver1, driver2, submitted }（G118／G129）
      送審前可異動車種類型／車號／駕駛人1／駕駛人2，是否送審 否 → 是＝送運輸主管簽審；
      送審後即不可再異動（G129 取代原「撤回送審／送審後異動重新送簽」），運輸主管退回後派車單回未送審才可再改；已出車者不可異動 */
+  /* 派車單行車紀錄（G153）：{ startKm, endKm, fuelLiters, workHours, otHours }，皆選填、0 以上；
+     里程須起訖同時填寫且結束 ≥ 起始；加班時數不可大於工時。只記錄在派車單，簽審生效後帶入車輛異動實登作為預設值（實登仍於實登單元完成）。 */
+  TRIP_FIELDS: [['startKm', '起始里程'], ['endKm', '結束里程'], ['fuelLiters', '加油公升數'], ['workHours', '駕駛工時'], ['otHours', '駕駛加班時數']],
+  tripLogOf(raw) {
+    const log = {};
+    for (const [k, label] of this.TRIP_FIELDS) {
+      const v = raw[k];
+      if (v === '' || v == null) { log[k] = null; continue; }
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) return { error: `「${label}」須為 0 以上的數字` };
+      log[k] = n;
+    }
+    if ((log.startKm == null) !== (log.endKm == null)) return { error: '「起始里程」與「結束里程」須同時填寫（皆不填＝僅異動）' };
+    if (log.startKm != null && log.endKm < log.startKm) return { error: '「結束里程」不可小於「起始里程」' };
+    if (log.otHours != null && log.workHours != null && log.otHours > log.workHours) return { error: '「駕駛加班時數」不可大於「駕駛工時」' };
+    return { log };
+  },
+  tripLogText(t) {
+    if (!t) return '—';
+    const out = this.TRIP_FIELDS.filter(([k]) => t[k] != null).map(([k, label]) => `${label} ${t[k]}`);
+    return out.length ? out.join('｜') : '清空';
+  },
   updateDispatch(d, f, by) {
     if (d.cancelled) return { ok: false, error: '派車單已取消' };
     if (this.started(d)) return { ok: false, error: '派車單已出車，不可再異動' };
@@ -952,8 +975,11 @@ const ModuleB = {
     }
     const err = this.dispatchResourceError(d, next);
     if (err) return { ok: false, error: err };
-    const same = k => k === 'dispatchedAt' ? +new Date(d[k]) === +next[k] : (d[k] || '') === (next[k] || '');
-    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2', 'dispatcher', 'dispatchedAt'].filter(k => k in next && !same(k));
+    // 行車紀錄（G153）：起訖里程、加油公升數、駕駛工時、駕駛加班時數，皆選填；未填里程仍可送出（僅異動）
+    if (f.tripLog) { const t = this.tripLogOf(f.tripLog); if (t.error) return { ok: false, error: t.error }; next.tripLog = t.log; }
+    const same = k => k === 'dispatchedAt' ? +new Date(d[k]) === +next[k]
+      : k === 'tripLog' ? JSON.stringify(d.tripLog || null) === JSON.stringify(next.tripLog) : (d[k] || '') === (next[k] || '');
+    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2', 'dispatcher', 'dispatchedAt', 'tripLog'].filter(k => k in next && !same(k));
     const wasSub = d.submitted;
     if (!changed.length && wasSub === next.submitted) return { ok: true, changed: [] };
     const before = `${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋') || '—'}`, beforeBy = d.dispatcher;
@@ -962,6 +988,7 @@ const ModuleB = {
     const list = this.dispatchOrders(d);
     if (changed.some(k => !['dispatcher', 'dispatchedAt'].includes(k))) this._dlog(d, '異動', by, `${before} → ${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋')}`);
     if (changed.some(k => ['dispatcher', 'dispatchedAt'].includes(k))) this._dlog(d, '異動派遣資訊', by, `派遣人 ${beforeBy} → ${d.dispatcher}`);
+    if (changed.includes('tripLog')) this._dlog(d, '行車紀錄', by, this.tripLogText(d.tripLog));
     if (!wasSub && next.submitted) { list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室')); this._dlog(d, '送審', by, '送出運輸主管簽審'); }   // 送審後即鎖定（G129）
     return { ok: true, changed };
   },

@@ -596,11 +596,12 @@ const infoGridRow = (id, itemsHtml) => infoGrid(id, itemsHtml).replace('class="f
 function personFields(prefix, role, opts) {
   opts = opts || {};
   const b0 = DB.orgUnits[0].id, g0 = DB.orgUnits[0].groups[0].id;
-  const req = opts.required ? '<span style="color:#c0392b;">＊</span>' : '';
+  const star = '<span style="color:#c0392b;">＊</span>', req = opts.required ? star : '', locReq = opts.locRequired ? star : '';
   const sel = 'style="flex:1;min-width:130px;"';
-  return infoGridRow(prefix + '-r1', [
-      fInput(`${role}院區`, `<select id="${prefix}-campus">${_campusOpts()}</select>`),
-      fInput(`${role}館別`, `<select id="${prefix}-hall">${_hallOpts()}</select>`),
+  // opts.row1：取代第一列（院區＋館別）的欄位，例如院區財物轉運的「院區、收貨站點、館別」（G153）
+  return infoGridRow(prefix + '-r1', opts.row1 || [
+      fInput(`${role}院區${locReq}`, `<select id="${prefix}-campus">${_campusOpts()}</select>`),
+      fInput(`${role}館別${locReq}`, `<select id="${prefix}-hall">${_hallOpts()}</select>`),
     ].join(''))
     + infoGridRow(prefix + '-r2', fInput(`${role}姓名 <span class="hint">事業部／組別／姓名</span>`,
       `<span style="display:flex;gap:8px;flex-wrap:wrap;"><select id="${prefix}-bu" ${sel}>${_buOpts(b0)}</select>
@@ -610,10 +611,12 @@ function personFields(prefix, role, opts) {
     + `<span id="${prefix}-unit" hidden></span>`;
 }
 // 明細：人員三列（院區＋館別／姓名／手機），與新增畫面同排版（G152）
-function personDetail(id, role, pn) {
+function personDetail(id, role, pn, site) {
   pn = pn || {};
   const dash = '<span class="muted">—</span>';
-  return infoGridRow(id + '-r1', [fItem(`${role}院區`, pn.campus ? brName(pn.campus) : dash), fItem(`${role}館別`, pn.hall || dash)].join(''))
+  // site：{ label, value }＝院區與館別之間的站點欄（院區財物轉運 G153）
+  return infoGridRow(id + '-r1', [fItem(`${role}院區`, pn.campus ? gEsc(brName(pn.campus)) : dash),
+      site ? fItem(site.label, site.value) : '', fItem(`${role}館別`, pn.hall ? gEsc(pn.hall) : dash)].join(''))
     + infoGridRow(id + '-r2', fItem(`${role}姓名`, pn.name ? gEsc(pn.name) + (pn.unit ? `<span class="hint">（${gEsc(pn.unit)}）</span>` : '') : dash, { full: true }))
     + infoGridRow(id + '-r3', fItem(`${role}手機`, pn.ext ? gEsc(pn.ext) : dash));
 }
@@ -643,7 +646,18 @@ function personVal(prefix) {
   const m = g && g.members.find(x => x.name === name);
   const ex = $('#' + prefix + '-ext');
   return { bu, group, name, ext: ex && ex.tagName === 'INPUT' ? ex.value.trim() : (m ? m.ext : ''), unit: (b && g) ? `${b.name}·${g.name}` : '',
-    campus: $('#' + prefix + '-campus').value, hall: $('#' + prefix + '-hall').value };
+    campus: $('#' + prefix + '-campus').value, hall: $('#' + prefix + '-hall') ? $('#' + prefix + '-hall').value : '' };
+}
+// 帶入人員欄位（修改畫面）：沒有事業部／組別的舊資料依姓名在人事資料中尋找；院區不在清單者留空
+function setPerson(prefix, pn) {
+  pn = pn || {};
+  let bu = pn.bu, group = pn.group;
+  if ((!bu || !group) && pn.name) DB.orgUnits.some(b => b.groups.some(g => {
+    if (!g.members.some(m => m.name === pn.name)) return false; bu = b.id; group = g.id; return true; }));
+  const el = id => $('#' + prefix + '-' + id), S = (id, v) => { if (el(id) && v != null && v !== '') el(id).value = v; };
+  if (bu && group) { S('bu', bu); el('group').innerHTML = _groupOpts(bu, group); el('member').innerHTML = _memberOpts(bu, group, pn.name); }
+  el('member').onchange();   // 依姓名同步單位與預帶分機
+  S('ext', pn.ext); S('campus', pn.campus); S('hall', pn.hall);
 }
 // 明細顯示：姓名·分機｜單位｜院區·館別
 function personDisplay(pn) {
@@ -1664,49 +1678,45 @@ function bOrderCards(o, pfx, head, extra) {
   return `
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資訊</span><span>${Flow.badge(o)}${signBadge(o)}</span></div>
-      ${infoGrid(pfx + '-basic', [
-        fItem('財物運輸單狀態', d(o.transportStatus || '開單')),
+      ${infoGridRow(pfx + '-b1', [
         fItem('財物運輸單號', `<b style="color:var(--navy);">${o.id}</b>`),
-        fItem('申請人', d(o.applicant)), fItem('申請日期', d(o.applyDate)),
-        fItem('三聯單單號', d(o.tripleNo)),
-        fItem('申請單位/委運單位', d(o.applyUnit)), fItem('申請人分機', d(o.applyExt)),
-        fItem('委運人姓名', d(c.name)), fItem('委運人院區', d(c.campus)), fItem('委運人分機/手機', d(c.ext)),
-        ...(head || []),
+        fItem('財物運輸單狀態', d(o.transportStatus || '開單')),
+        fItem('申請人', d(o.applicant)),
       ].join(''))}
+      ${infoGridRow(pfx + '-b2', [fItem('申請單位/委運單位', d(o.applyUnit)), fItem('申請日期', d(o.applyDate)), fItem('申請人分機', d(o.applyExt))].join(''))}
+      ${infoGridRow(pfx + '-b3', [fItem('三聯單單號', d(o.tripleNo)), ...(head || [])].join(''))}
     </div>
     <div class="card">
-      <div class="card-title">收送站點與派送條件</div>
-      ${infoGrid(pfx + '-route', [
-        fItem('收貨站點', `${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span>`),
-        fItem('委運人館別', d(o.pickupLoc)),
-        fItem('送貨站點', `${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span>`),
-        fItem('接收人館別', d(o.deliverLoc)),
-        fItem('派送型態', o.direct ? '直達（單一目的地 G38）' : '非直達（沿線收送）'),
-        fItem('願意持續媒合駕駛', yn(o.keepMatchDriver)),
+      <div class="card-title">委運人資訊</div>
+      ${personDetail(pfx + '-cons', '委運人', Object.assign({}, c, { hall: o.pickupLoc }),
+        { label: '收貨站點', value: `${ModuleB.siteById(o.pickSite).name}<span class="hint" style="margin-left:6px;">幹線車到此收貨</span>` })}
+      <div class="divider"></div>
+      <div class="card-title">接收人資訊</div>
+      ${personDetail(pfx + '-recv', '接收人', { name: r.name, ext: r.phone, campus: r.campus, unit: r.unit, hall: o.deliverLoc },
+        { label: '送貨站點', value: `${ModuleB.siteById(o.dropSite).name}<span class="hint" style="margin-left:6px;">送達此據點</span>` })}
+      <div class="divider"></div>
+      <div class="card-title">接收代理人資訊</div>
+      ${personDetail(pfx + '-rag', '接收代理人', { name: r.agentName, ext: r.agentPhone, campus: r.agentCampus, hall: r.agentHall })}
+    </div>
+    <div class="card">
+      <div class="card-title">派送條件與需求</div>
+      ${infoGridRow(pfx + '-route', [
         fItem('危險品運輸', o.hazardTransport === 'yes' ? '<span class="badge b-red">⚠ 是</span><span class="hint" style="margin-left:6px;">限可載危險品車輛</span>' : '否'),
-        fItem('是否同意併車', o.agreeCarpool === false ? '<span class="badge b-amber">不同意</span>' : '同意'),
-        o.agreeCarpool === false ? fItem('拒絕併車事由', d(o.carpoolRejectReason)) : '',
-        fItem('是否單程運輸', yn(o.oneway)),
+        fItem('是否同意併車', o.agreeCarpool === false || o.direct ? '<span class="badge b-amber">否</span><span class="hint" style="margin-left:6px;">直達（單一目的地 G38）</span>' : '是<span class="hint" style="margin-left:6px;">非直達（沿線收送）</span>'),
+        o.agreeCarpool === false || o.direct ? fItem('拒絕併車事由', d(o.carpoolRejectReason)) : '',
       ].join(''))}
+      ${infoGridRow(pfx + '-route2', [fItem('願意持續媒合駕駛', yn(o.keepMatchDriver)), fItem('是否單程運輸', yn(o.oneway))].join(''))}
     </div>
     <div class="card">
       <div class="card-title">時間與作業</div>
-      ${infoGrid(pfx + '-time', [
+      ${infoGridRow(pfx + '-time', [
         fItem('希望收貨日期', d(o.wantReceiveDate)),
         fItem('可裝貨時間 <span class="hint">＋4h 收貨時間窗（2.19）</span>', wantWin),
-        fItem('可卸貨時間', d(o.unloadReadyTime)), fItem('調整延後收貨時間', d(o.delayReceiveTime)),
+        fItem('可卸貨時間', d(o.unloadReadyTime)),
         fItem('裝貨／卸貨所需時間', `${o.loadMin || 0} 分 / ${o.unloadMin || 0} 分（合計 ${o.handleMin} 分）`),
         fItem('是否需要夜間加班', yn(o.nightOT)), fItem('是否需要假日加班', yn(o.holidayOT)),
         fItem('貨量 / 重量', `${o.volume}L / ${o.weight}kg`),
         fItem('有效地板面積（容量計算用）', `<b>${m2(ModuleB.effFloor(o))}m²</b><span class="hint" style="margin-left:6px;">不堆疊：底面積×類別係數</span>`),
-      ].join(''))}
-    </div>
-    <div class="card">
-      <div class="card-title">接收人資訊</div>
-      ${infoGrid(pfx + '-recv', [
-        fItem('單位', d(r.unit)), fItem('接收人姓名', d(r.name)), fItem('接收人分機/手機', d(r.phone)), fItem('接收人院區', d(r.campus)),
-        fItem('接收代理人姓名', d(r.agentName)), fItem('接收代理人分機/手機', d(r.agentPhone)),
-        fItem('接收代理人院區', d(r.agentCampus)), fItem('接收代理人館別', d(r.agentHall)),
       ].join(''))}
     </div>
     <div class="card">
@@ -1788,69 +1798,56 @@ function renderBApplyNew(p) {
     <div class="card">
       <div class="card-title">院區財物轉運申請單 <span class="g-tag">G38/G40/G143</span></div>
       <div class="card-title" style="font-size:14px;">基本資訊</div>
-      ${infoGrid('ba-fields0', [
+      ${infoGridRow('ba-r1', [
+        fItem('財物運輸單號', editing ? `<b style="color:var(--navy);">${editing.id}</b>` : `LB${String(ModuleB.seq).padStart(3, '0')} <span class="hint">（送出後產生）</span>`),
         fItem('財物運輸單狀態', editing ? (editing.transportStatus || '開單') : '開單'),
-        fItem('財物運輸單號', editing ? `<b style="color:var(--navy);">${editing.id}</b>` : `LB${String(ModuleB.seq).padStart(3, '0')} <span class="hint">（儲存後產生）</span>`),
         fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`),
-        fItem('申請日期', editing ? (editing.applyDate || '—') : ModuleB.rocDate()),
-        fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('ba-tripno')),
+      ].join(''))}
+      ${infoGridRow('ba-r2', [
         fInput(`申請單位/委運單位${req}`, `<input type="text" id="ba-unit" value="${gEsc(DB.currentUser.unit)}">`),
+        fItem('申請日期', editing ? (editing.applyDate || '—') : ModuleB.rocDate()),
         fInput(`申請人分機${req}`, `<input type="text" id="ba-ext" value="${gEsc(DB.currentUser.ext)}">`),
       ].join(''))}
-      ${infoGrid('ba-cons', [
-        fInput(`委運人姓名${req}`, txt('ba-cname')),
-        fInput(`委運人分機${req}/手機`, txt('ba-cext', '分機或手機')),
-        fInput('委運人院區', txt('ba-ccampus')),
-      ].join(''))}
-      ${sub('收送站點')}
-      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨站點／送貨站點</b>自動判斷（送貨站點較南＝南下、較北＝北上），無需自行勾選。起迄可為<b>同一據點</b>（院區內建物間轉運），但委運人館別與接收人館別不可相同。<br>
-        目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；現行車次模型為「自基地南下、折返北上回基地」，<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
-      ${infoGrid('ba-fields', [
+      ${infoGridRow('ba-r3', fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('ba-tripno')))}
+      ${sub('委運人資訊')}
+      <div class="callout info" style="margin-bottom:10px;">行程方向由系統依<b>收貨站點／送貨站點</b>自動判斷（送貨站點較南＝南下、較北＝北上）。起迄可為<b>同一據點</b>（院區內建物間轉運），但委運人館別與接收人館別不可相同。
+        目前基地為 <b>${ModuleB.siteById(DB.homeSite).name}</b>；<b>基地以北據點尚未納入排班</b>（排班方式待業務確認）。</div>
+      ${personFields('bcon', '委運人', { required: true, row1: [
+        fInput('委運人院區', `<select id="bcon-campus">${_campusOpts()}</select>`),
         fInput('收貨站點', `<select id="ba-site">${siteOpts}</select>`),
-        fInput('委運人館別', `<select id="ba-pickbldg"></select><input type="text" id="ba-pickother" placeholder="請輸入館別/位置" style="display:none;margin-top:6px;">`, { stack: true }),
+        fInput(`委運人館別`, `<select id="ba-pickbldg"></select><input type="text" id="ba-pickother" placeholder="請輸入館別/位置" style="display:none;margin-top:6px;">`),
+      ].join('') })}
+      ${sub('接收人資訊')}
+      ${personFields('brec', '接收人', { required: true, row1: [
+        fInput('接收人院區', `<select id="brec-campus">${_campusOpts()}</select>`),
         fInput('送貨站點', `<select id="ba-dest">${siteOpts}</select>`),
-      ].join(''))}
+        fInput(`接收人館別${req}`, `<select id="ba-dropbldg"></select><input type="text" id="ba-dropother" placeholder="請輸入館別/位置" style="display:none;margin-top:6px;">`),
+      ].join('') })}
+      ${sub('接收代理人資訊')}
+      ${personFields('bag', '接收代理人', { required: true, locRequired: true })}
       ${sub('派送條件與需求')}
-      ${infoGrid('ba-cond', fInput('派送型態 <span class="hint">直達不湊單、單一目的地 G38</span>', `
-          <div class="radio-group yn">
-            <label class="radio-pill sel" id="ba-nd"><input type="radio" name="ba-direct" value="0" checked>非直達（沿線收送）</label>
-            <label class="radio-pill" id="ba-d"><input type="radio" name="ba-direct" value="1">直達</label>
-          </div>`, { full: true }))}
-      ${infoGrid('ba-cond-yn', [
-        fInput('願意持續媒合駕駛', bYesNo('ba-keepdrv', 'no')),
+      ${infoGridRow('ba-cond', [
         fInput('危險品運輸', bYesNo('ba-hz', 'no')),
+        fInput('是否同意併車 <span class="hint">否＝直達（獨立派車、單一目的地 G38）</span>', bYesNo('ba-carpool', 'yes')),
+      ].join(''))}
+      ${infoGridRow('ba-cond-rej', fInput(`拒絕併車事由${req}`, txt('ba-rejreason', '不同意併車時必填'), { full: true }))}
+      ${infoGridRow('ba-cond-yn', [
+        fInput('願意持續媒合駕駛', bYesNo('ba-keepdrv', 'no')),
         fInput('是否單程運輸', bYesNo('ba-oneway', 'no')),
       ].join(''))}
-      ${infoGrid('ba-cond2', [
-        fInput('是否同意併車', `<label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="ba-carpool" checked style="width:auto;"> 同意併車</label>`),
-        fInput('拒絕併車事由 <span class="hint">不同意併車時必填</span>', txt('ba-rejreason'), { w2: true }),
-      ].join(''))}
       ${sub('時間與作業')}
-      ${infoGrid('ba-fields2', [
+      ${infoGridRow('ba-fields2', [
         fInput(`希望收貨日期${req} <span class="hint">對應派車日（G129）</span>`, `<input type="date" id="ba-wantdate" min="${bDayStr(0)}" value="${bDefaultDate()}">`),
-        fInput('可裝貨時間 <span class="hint">收貨時間窗起點，＋4h 為窗尾（2.19）</span>', `<input type="time" id="ba-want" value="10:00">`, { w2: true }),
+        fInput('可裝貨時間 <span class="hint">＋4h 為收貨窗尾（2.19）</span>', `<input type="time" id="ba-want" value="10:00">`),
         fInput('可卸貨時間', txt('ba-unloadready')),
-        fInput('調整延後收貨時間 <span class="hint">預設同可卸貨時間</span>', txt('ba-delayrecv')),
+      ].join(''))}
+      ${infoGridRow('ba-fields3', [
         fInput('裝貨所需時間 <span class="hint">分（G35）</span>', `<input type="number" id="ba-load" value="20">`),
         fInput('卸貨所需時間 <span class="hint">分（G35）</span>', `<input type="number" id="ba-unload" value="10">`),
       ].join(''))}
-      ${infoGrid('ba-fields2-yn', [
+      ${infoGridRow('ba-fields2-yn', [
         fInput('是否需要夜間加班', bYesNo('ba-nightot', 'no')),
         fInput('是否需要假日加班', bYesNo('ba-holidayot', 'no')),
-      ].join(''))}
-      ${sub('接收人資訊')}
-      ${infoGrid('ba-recv0', fInput('單位', `<input type="text" id="ba-runit" placeholder="收貨單位／部門">`))}
-      ${infoGrid('ba-recv', [
-        fInput(`接收人姓名${req}`, txt('ba-rname')),
-        fInput(`接收人分機${req}/手機`, txt('ba-rphone', '分機或手機')),
-        fInput('接收人院區', txt('ba-rcampus')),
-        fInput(`接收人館別${req}`, `<select id="ba-dropbldg"></select><input type="text" id="ba-dropother" placeholder="請輸入館別/位置" style="display:none;margin-top:6px;">`, { stack: true }),
-      ].join(''))}
-      ${infoGrid('ba-ragent', [
-        fInput(`接收代理人姓名${req}`, txt('ba-aname')),
-        fInput(`接收代理人分機/手機${req}`, txt('ba-aphone', '分機或手機')),
-        fInput(`接收代理人院區${req}`, txt('ba-acampus')),
-        fInput(`接收代理人館別${req}`, txt('ba-ahall')),
       ].join(''))}
       ${sub('其他')}
       ${infoGrid('ba-other', [
@@ -1877,20 +1874,20 @@ function renderBApplyNew(p) {
     </div>`;
   const bBack = () => { if (editing) { bApply.view = 'detail'; bApply.detailId = editing.id; } else bApply.view = 'list'; bApply.editId = null; baItems = []; RENDER.b_apply(); };
   if (editing) $('#bn-back').onclick = bBack; else $('#ba-cancel').onclick = bBack;
-  const setDirect = () => {
-    $('#ba-nd').classList.toggle('sel', $('#page-b_apply input[name=ba-direct][value="0"]').checked);
-    $('#ba-d').classList.toggle('sel', $('#page-b_apply input[name=ba-direct][value="1"]').checked);
-  };
-  $$('#page-b_apply input[name=ba-direct]').forEach(r => r.onchange = setDirect);
-  const bYn = ['ba-hz', 'ba-send', 'ba-keepdrv', 'ba-oneway', 'ba-nightot', 'ba-holidayot'];   // 是／否 radio（G144）
-  bYn.forEach(n => $$(`#page-b_apply input[name=${n}]`).forEach(r => r.onchange = () =>
-    $$(`#${n}-wrap .radio-pill`).forEach(l => l.classList.toggle('sel', $('input', l).checked))));
-  // 調整延後收貨時間：預設連動可卸貨時間；使用者自行修改後即不再跟隨
-  let delayTouched = false;
-  $('#ba-delayrecv').oninput = () => { delayTouched = true; };
-  $('#ba-unloadready').oninput = () => { if (!delayTouched) $('#ba-delayrecv').value = $('#ba-unloadready').value; };
+  const bYn = ['ba-hz', 'ba-carpool', 'ba-send', 'ba-keepdrv', 'ba-oneway', 'ba-nightot', 'ba-holidayot'];   // 是／否 radio（G144／G153）
+  // 拒絕併車事由只在「是否同意併車＝否」（直達）時出現
+  const syncCarpool = () => { const r = $('#page-b_apply input[name=ba-carpool]:checked'); $('#ba-cond-rej').style.display = r && r.value === 'no' ? '' : 'none'; initMasonry(p); };
+  bYn.forEach(n => $$(`#page-b_apply input[name=${n}]`).forEach(r => r.onchange = () => {
+    $$(`#${n}-wrap .radio-pill`).forEach(l => l.classList.toggle('sel', $('input', l).checked));
+    if (n === 'ba-carpool') syncCarpool();
+  }));
+  // 委運人／接收人／接收代理人：姓名三段下拉連動、預帶分機（同巡迴財物轉運 G152）
+  wirePerson('bcon', p); wirePerson('brec', p); wirePerson('bag', p);
   wireBldg('ba-site', 'ba-pickbldg', 'ba-pickother', siteBuildings); // 委運人館別
   wireBldg('ba-dest', 'ba-dropbldg', 'ba-dropother', siteBuildings); // 接收人館別
+  // 換收貨／送貨站點時，委運人／接收人院區預設跟著帶入（可再修改）
+  $('#ba-site').addEventListener('change', () => { $('#bcon-campus').value = $('#ba-site').value; });
+  $('#ba-dest').addEventListener('change', () => { $('#brec-campus').value = $('#ba-dest').value; });
   // 館別下拉切換「其他」會改變區塊高度 → 重排 Masonry
   ['ba-site', 'ba-pickbldg', 'ba-dest', 'ba-dropbldg'].forEach(id => {
     const el = $('#' + id); if (el) el.addEventListener('change', () => initMasonry(p));
@@ -1898,32 +1895,30 @@ function renderBApplyNew(p) {
   // 預設：自基地北端收貨、送往南部（可自行改；方向由起迄自動判斷 B-2）
   $('#ba-site').value = 'D6'; $('#ba-dest').value = 'D3';
   $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填館別選單
+  $('#bcon-campus').value = $('#ba-site').value; $('#brec-campus').value = $('#ba-dest').value;
   renderBaCargo(); // 一開始顯示空白清單
-  initMasonry(p);
+  syncCarpool();
   guideApply('B', bApply, p); // 申請引導帶入（若有）
   if (editing) { // 修改：帶入原單內容
     const e = editing, set = (id, v) => { $('#' + id).value = v == null ? '' : v; };
     set('ba-applicant', e.applicant); set('ba-tripno', e.tripleNo); set('ba-escort', e.escort);
     if (e.applyUnit) set('ba-unit', e.applyUnit);
     if (e.applyExt) set('ba-ext', e.applyExt);
-    const c = e.consignor || {};
-    set('ba-cname', c.name); set('ba-ccampus', c.campus); set('ba-cext', c.ext);
     $('#ba-site').value = e.pickSite; $('#ba-site').onchange();
     $('#ba-dest').value = e.dropSite; $('#ba-dest').onchange();
     setBldgVal('ba-pickbldg', 'ba-pickother', e.pickupLoc);
     setBldgVal('ba-dropbldg', 'ba-dropother', e.deliverLoc);
-    const dr = $(`#page-b_apply input[name=ba-direct][value="${e.direct ? 1 : 0}"]`); dr.checked = true; dr.onchange();
+    const r = e.recipient || {};
+    setPerson('bcon', e.consignor);
+    setPerson('brec', { bu: r.bu, group: r.group, name: r.name, ext: r.phone, campus: r.campus });
+    setPerson('bag', { bu: r.agentBu, group: r.agentGroup, name: r.agentName, ext: r.agentPhone, campus: r.agentCampus, hall: r.agentHall });
     const yn = (n, val) => { const r = $(`#page-b_apply input[name=${n}][value="${val === 'yes' ? 'yes' : 'no'}"]`); r.checked = true; r.onchange(); };
     yn('ba-hz', e.hazardTransport); yn('ba-keepdrv', e.keepMatchDriver); yn('ba-oneway', e.oneway);
     yn('ba-nightot', e.nightOT); yn('ba-holidayot', e.holidayOT);
-    $('#ba-carpool').checked = e.agreeCarpool !== false; set('ba-rejreason', e.carpoolRejectReason);
+    yn('ba-carpool', e.agreeCarpool !== false && !e.direct ? 'yes' : 'no'); set('ba-rejreason', e.carpoolRejectReason);
     set('ba-want', e.wantReceiveTime); set('ba-wantdate', e.wantReceiveDate);
-    set('ba-unloadready', e.unloadReadyTime); set('ba-delayrecv', e.delayReceiveTime);
-    if ((e.delayReceiveTime || '') !== (e.unloadReadyTime || '')) delayTouched = true;
+    set('ba-unloadready', e.unloadReadyTime);
     set('ba-load', e.loadMin || 0); set('ba-unload', e.unloadMin || 0);
-    const r = e.recipient || {};
-    [['runit', r.unit], ['rname', r.name], ['rphone', r.phone], ['rcampus', r.campus],
-     ['aname', r.agentName], ['aphone', r.agentPhone], ['acampus', r.agentCampus], ['ahall', r.agentHall]].forEach(([k, v]) => set('ba-' + k, v));
     set('ba-remark', e.remark); set('ba-captain', e.captain); set('ba-capphone', e.captainPhone);
     baItems = e.items.map(x => ({ ...x })); renderBaCargo();
     initMasonry(p);
@@ -1933,23 +1928,25 @@ function renderBApplyNew(p) {
   const ynv = n => $(`#page-b_apply input[name=${n}]:checked`).value;
   const formData = () => {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return null; }
+    const cp = personVal('bcon'), rp = personVal('brec'), ap = personVal('bag'), agree = ynv('ba-carpool') === 'yes';
     const data = {
       applicant: $('#ba-applicant').value,
       tripleNo: v('ba-tripno'), applyUnit: v('ba-unit'), applyExt: v('ba-ext'),
-      consignor: { name: v('ba-cname'), campus: v('ba-ccampus'), ext: v('ba-cext') },
+      consignor: { name: cp.name, ext: cp.ext, campus: cp.campus, bu: cp.bu, group: cp.group, unit: cp.unit },
       site: $('#ba-site').value,
       destSite: $('#ba-dest').value,
       pickupLoc: bldgVal('ba-pickbldg', 'ba-pickother'),     // 委運人館別
       deliverLoc: bldgVal('ba-dropbldg', 'ba-dropother'),    // 接收人館別
-      direct: $('#page-b_apply input[name=ba-direct][value="1"]').checked,
+      direct: !agree,                                          // 是否同意併車＝否 → 直達（G153）
       keepMatchDriver: ynv('ba-keepdrv'), hazardTransport: ynv('ba-hz'),
-      agreeCarpool: $('#ba-carpool').checked, carpoolRejectReason: v('ba-rejreason'), oneway: ynv('ba-oneway'),
+      agreeCarpool: agree, carpoolRejectReason: v('ba-rejreason'), oneway: ynv('ba-oneway'),
       wantReceiveDate: $('#ba-wantdate').value,
       wantReceiveTime: $('#ba-want').value,                   // 可裝貨時間
-      unloadReadyTime: v('ba-unloadready'), delayReceiveTime: v('ba-delayrecv'),
+      unloadReadyTime: v('ba-unloadready'),
       loadMin: +$('#ba-load').value || 0, unloadMin: +$('#ba-unload').value || 0,
       nightOT: ynv('ba-nightot'), holidayOT: ynv('ba-holidayot'),
-      recipient: Object.assign(recipientVal('ba'), { campus: v('ba-rcampus'), agentCampus: v('ba-acampus'), agentHall: v('ba-ahall') }),
+      recipient: { unit: rp.unit, name: rp.name, phone: rp.ext, campus: rp.campus, bu: rp.bu, group: rp.group,
+        agentName: ap.name, agentPhone: ap.ext, agentCampus: ap.campus, agentHall: ap.hall, agentBu: ap.bu, agentGroup: ap.group },
       remark: v('ba-remark'), changeReason: editing ? v('ba-chg') : '',
       captain: v('ba-captain'), captainPhone: v('ba-capphone'), escort: v('ba-escort'),
       items: baItems.map(x => ({ ...x })),
@@ -2240,6 +2237,12 @@ function bOrderCardHtml(d) {
         fInput('駕駛人1', `<select id="${k}-d1"${dis}>${bDrvOpts(d.driver1, '請選擇')}</select>`),
         fInput('駕駛人2', `<select id="${k}-d2"${dis}>${bDrvOpts(d.driver2, '（無）')}</select>`),
       ].join(''))}
+      <div class="card-title" style="font-size:14px;margin-top:6px;">行車紀錄 <span class="hint">選填；里程不填仍可送出（僅異動），填寫時起訖都要填；簽審生效後帶入車輛異動實登</span></div>
+      ${infoGridRow(k + '-trip', ModuleB.TRIP_FIELDS.map(([f, label]) => {
+        const v = d.tripLog && d.tripLog[f] != null ? d.tripLog[f] : '';
+        const unit = /Km$/.test(f) ? '（km）' : f === 'fuelLiters' ? '（公升）' : '（小時）';
+        return fInput(label + unit, `<input type="text" inputmode="decimal" id="${k}-${f}" value="${v}" placeholder="選填"${dis}>`);
+      }).join(''))}
       <div style="margin-top:6px;">${started ? '<span class="hint">已有申請單出車，派車單不可再異動。</span>'
         : d.submitted ? '<span class="hint">派車單已送審，不可再異動（運輸主管退回後才可再修改）。</span>'
         : '<span class="hint">送審前可異動派遣人、派遣時間、車種類型、車號、駕駛人，以及新增／刪除申請單；改車號不重算路線時間，請自行確認。</span>'}</div>
@@ -2284,7 +2287,8 @@ function openBOrderModal(d, by, rerender, keep) {
   if (keep) { $(`#${k}-type`).value = keep.vehicleType; $(`#${k}-by`).value = keep.dispatcher; $(`#${k}-at`).value = keep.dispatchedAtRaw; }
   bFillVehicles(`#${k}-type`, `#${k}-veh`, keep ? keep.vehicle : d.vehicle, ld);
   $(`#${k}-type`).onchange = () => bFillVehicles(`#${k}-type`, `#${k}-veh`, '', ld);
-  if (keep) { $(`#${k}-d1`).value = keep.driver1; $(`#${k}-d2`).value = keep.driver2; }
+  if (keep) { $(`#${k}-d1`).value = keep.driver1; $(`#${k}-d2`).value = keep.driver2;
+    if (keep.tripLog) ModuleB.TRIP_FIELDS.forEach(([f]) => { $(`#${k}-${f}`).value = keep.tripLog[f]; }); }
   const subR = v => $(`input[name="${k}-sub"][value="${v}"]`, body);
   if (subR('no')) {
     if (keep && keep.submitted) subR('yes').checked = true;
@@ -2296,6 +2300,7 @@ function openBOrderModal(d, by, rerender, keep) {
   $('#bro-close').onclick = closeModal;
   const formVal = () => ({ vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value, driver2: $(`#${k}-d2`).value,
     dispatcher: $(`#${k}-by`).value.trim(), dispatchedAtRaw: $(`#${k}-at`).value, dispatchedAt: $(`#${k}-at`).value,
+    tripLog: Object.fromEntries(ModuleB.TRIP_FIELDS.map(([f]) => [f, $(`#${k}-${f}`).value.trim()])),
     submitted: !!(subR('yes') && subR('yes').checked) });
   const done = msg => { toast(msg, 'ok'); closeModal(); rerender(); };
   const save = $(`#modal-body [data-brsave]`);
@@ -2305,6 +2310,8 @@ function openBOrderModal(d, by, rerender, keep) {
     if (!f.dispatchedAt) { toast('請填寫「派遣時間」', 'err'); return; }
     const pre = ModuleB.dispatchResourceError(d, f);
     if (pre) { toast(pre, 'err'); return; }
+    const tl = ModuleB.tripLogOf(f.tripLog);
+    if (tl.error) { toast(tl.error, 'err'); return; }
     const text = f.submitted ? '「是否送審」為是：派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效；<b>送審後即不可再異動</b>。' : '「是否送審」為否：儲存派車單異動，維持調度中（未送審）。';
     if (!(await confirmDialog({ title: `確認送出派車單 ${d.id}？`, text }))) return;
     const r = ModuleB.updateDispatch(d, f, by());
@@ -5481,7 +5488,10 @@ function renderDispUsageDetail(k, p) {
   const c = DISP_USAGE[k], M = c.M(), st = usageUi[k], d = M.usageDispatches().find(x => x.id === st.dispId);
   if (!d) { st.view = 'list'; return RENDER[k](); }
   const os = c.apps(d), u = d.usage, pool = M.USAGE_POOL, f = `${k}-du`, self = !!(c.allowSelf && c.allowSelf(d));
-  const dv = u ? Object.assign({}, u) : { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1 || (self ? Usage.SELF : ''), driver2: d.driver2 || '', startKm: '', endKm: '' };
+  // 未實登：預設帶入派車單（院區財物轉運另帶入派車調度填的行程紀錄 G153）
+  const tl = d.tripLog || {}, tv = x => x == null ? '' : x;
+  const dv = u ? Object.assign({}, u) : { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1 || (self ? Usage.SELF : ''), driver2: d.driver2 || '',
+    startKm: tv(tl.startKm), endKm: tv(tl.endKm), fuelLiters: tl.fuelLiters, workHours: tl.workHours, otHours: tl.otHours };
   const opt = (v, t, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${t}</option>`;
   const drvOpts = (cur, blank, withSelf) => opt('', blank, cur) + (withSelf ? opt(Usage.SELF, `使用者自駕（${os[0] ? os[0].applicant : ''}）`, cur) : '')
     + Usage.driversOf(pool).map(x => opt(x.id, `${x.name}（${x.id}）`, cur)).join('');
@@ -6021,6 +6031,7 @@ function guideApply(unit, state, p) {
     set('ba-applicant', d.applicant);
     set('ba-site', d.site); $('#ba-site', p).onchange();
     set('ba-dest', d.destSite); $('#ba-dest', p).onchange();
+    set('bcon-campus', d.site); set('brec-campus', d.destSite);   // 院區預設同站點（G153）
     set('ba-want', d.wantReceiveTime);
     if (d.wantReceiveDate) set('ba-wantdate', d.wantReceiveDate);
     if (d.hazardTransport) pick('ba-hz', d.hazardTransport);   // 危險品運輸（G143）
