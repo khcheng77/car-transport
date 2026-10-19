@@ -81,7 +81,7 @@ const ModuleD = {
       permits: [...new Set(data.permits || [])],             // 所需管制區通行證（交集篩選 G85）
       enterTaipei: !!data.enterTaipei,                       // 是否會進入台北市（噸位提示 G86）
       purpose: data.purpose || '',                           // 行程說明（選填：上車地點／目的地／事由）
-      tripleNo: data.tripleNo || '',                         // 三聯單號單號（G147 物籌處介接，可輸入下拉）
+      tripleNo: data.tripleNo || '',                         // 三聯單單號（G147 物籌處介接，可輸入下拉）
       items: (data.items || []).map(it => Object.assign({ hazardous: false }, it)), // 隨行貨物（選填）
     };
   },

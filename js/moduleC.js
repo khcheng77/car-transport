@@ -86,13 +86,14 @@ const ModuleC = {
     const hasCargo = !!data.hasCargo;
     const f = {
       applicant: data.applicant, dept: data.dept, applicantPhone,
-      reason: data.reason || '', projectCode: data.projectCode || '', tripleNo: data.tripleNo || '',   // 三聯單號單號（G147）
+      reason: data.reason || '', projectCode: data.projectCode || '',
       captain: data.captain || '', captainPhone: data.captainPhone || '', homeBase: data.homeBase || '',
       isOneway, route, reportAt, endAt, passengers,
       reportPlace: data.reportPlace || '',            // 報到地點（G136）
       personalCargo: this._cargoRows(data.personalCargo),   // 隨身貨物（G136）
       agreeCarpool: data.agreeCarpool !== false,   // 未指定＝同意併車
-      manifestNo: hasCargo ? (data.manifestNo || '') : '', escortNo: hasCargo ? (data.escortNo || '') : '',
+      // 三聯單單號（G148：整併原「三聯單表單編號」，物籌處介接；有載運品才保存）、護運單號
+      tripleNo: hasCargo ? (data.tripleNo || data.manifestNo || '') : '', escortNo: hasCargo ? (data.escortNo || '') : '',
       remark: data.remark || '',
       // 媒合引擎內部欄位（推導）
       ext: applicantPhone,
@@ -138,7 +139,7 @@ const ModuleC = {
     if (!(+data.passengers >= 1)) return '「乘客數」至少 1 人';
     const ce = this.cargoRowError(data.personalCargo); if (ce) return ce;
     if (data.hasCargo) {
-      if (!(data.manifestNo || '').trim()) return '有載運品時「三聯單表單編號」為必填';
+      if (!(data.tripleNo || data.manifestNo || '').trim()) return '有載運品時「三聯單單號」為必填';
       if (!(data.escortNo || '').trim()) return '有載運品時「護運單號」為必填';
     }
     if (opts && opts.editing && !(data.changeReason || '').trim()) return '修改申請單時「異動事由」為必填';

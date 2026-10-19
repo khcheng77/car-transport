@@ -781,7 +781,7 @@ function renderAApplyDetail(p, id) {
         fItem('申請單位/委運單位', a.applyUnit || '<span class="muted">—</span>'),
         fItem('申請人分機', a.applyExt || '<span class="muted">—</span>'),
         fItem('申請日期', a.applyDate || ModuleA.rocDate(new Date(a.createdAt))),
-        fItem('三聯單號單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
+        fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
         fItem('危險品運輸', a.hazardTransport === 'yes' ? '<span class="badge b-red">是</span>' : '否'),
         fItem('車屬院區', brName(a.branch)),
         fItem('收貨站點', a.pickupLoc || '<span class="muted">—</span>'),
@@ -873,7 +873,7 @@ function renderAApplyNew(p) {
         fInput(`申請單位/委運單位${req}`, `<input type="text" id="aa-unit" value="${gEsc(DB.currentUser.unit)}">`),
         fItem('申請人分機', DB.currentUser.ext),
         fItem('申請日期', ModuleA.rocDate()),
-        fInput('三聯單號單號 <span class="hint">物籌處介接</span>', tripleNoInput('aa-tripno')),
+        fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('aa-tripno')),
         fInput('危險品運輸', `<div class="radio-group" id="aa-hz-wrap">
             <label class="radio-pill"><input type="radio" name="aa-hz" value="yes">是</label>
             <label class="radio-pill sel"><input type="radio" name="aa-hz" value="no" checked>否</label></div>`),
@@ -1527,7 +1527,7 @@ function bLoadDemo(leg, approved) {
 let bDemoNo = 0;
 function bDemoExtra(unit, ext, consignor) {
   bDemoNo++;
-  return { applyUnit: unit, applyExt: ext, consignor: { name: consignor, campus: '', ext }, tripleFormNo: `3F-${String(bDemoNo).padStart(4, '0')}` };
+  return { applyUnit: unit, applyExt: ext, consignor: { name: consignor, campus: '', ext }, tripleNo: DB.tripleNoOptions[(bDemoNo - 1) % DB.tripleNoOptions.length] };
 }
 function bDemoRecipient(r) {
   return Object.assign({ agentName: r.name, agentPhone: r.phone, agentCampus: '同接收人', agentHall: '收發室' }, r);
@@ -1584,7 +1584,7 @@ function bOrderCards(o, pfx, head, extra) {
         fItem('財物運輸單狀態', d(o.transportStatus || '開單')),
         fItem('財物運輸單號', `<b style="color:var(--navy);">${o.id}</b>`),
         fItem('申請人', d(o.applicant)), fItem('申請日期', d(o.applyDate)),
-        fItem('三聯單表單編號', d(o.tripleFormNo)), fItem('三聯單號單號', d(o.tripleNo)),
+        fItem('三聯單單號', d(o.tripleNo)),
         fItem('申請單位/委運單位', d(o.applyUnit)), fItem('申請人分機', d(o.applyExt)),
         fItem('委運人姓名', d(c.name)), fItem('委運人院區', d(c.campus)), fItem('委運人分機/手機', d(c.ext)),
         ...(head || []),
@@ -1682,7 +1682,7 @@ let baItems = []; // 幹線新增表單的貨物項目暫存（每筆含獨立�
 const B_CARGO_OPTS = { bCols: true };   // 貨物 grid：計畫名稱、工令號碼、財物名稱、財物外型、長、寬、高、類別、數量、重量、財物外包裝
 function renderBaCargo() { renderCargoGrid('#ba-items', baItems, true, renderBaCargo, B_CARGO_OPTS); }
 // 是／否單選膠囊
-// 三聯單號單號（G147）：可直接輸入、也可由下拉選擇的欄位；選項為示意資料，正式版由物籌處介接提供（四模組共用）
+// 三聯單單號（G147）：可直接輸入、也可由下拉選擇的欄位；選項為示意資料，正式版由物籌處介接提供（四模組共用）
 function tripleNoInput(id, val) {
   return `<input type="text" id="${id}" list="tripleno-list" value="${gEsc(val || '')}" placeholder="輸入或下拉選擇" autocomplete="off">`;
 }
@@ -1709,8 +1709,7 @@ function renderBApplyNew(p) {
         fItem('財物運輸單號', editing ? `<b style="color:var(--navy);">${editing.id}</b>` : `LB${String(ModuleB.seq).padStart(3, '0')} <span class="hint">（儲存後產生）</span>`),
         fInput('申請人', `<input type="text" id="ba-applicant" value="研發部-吳承恩">`),
         fItem('申請日期', editing ? (editing.applyDate || '—') : ModuleB.rocDate()),
-        fInput('三聯單表單編號', txt('ba-tripleno')),
-        fInput('三聯單號單號 <span class="hint">物籌處介接</span>', tripleNoInput('ba-tripno')),
+        fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('ba-tripno')),
         fInput(`申請單位/委運單位${req}`, `<input type="text" id="ba-unit" value="${gEsc(DB.currentUser.unit)}">`),
         fInput(`申請人分機${req}`, `<input type="text" id="ba-ext" value="${gEsc(DB.currentUser.ext)}">`),
       ].join(''))}
@@ -1820,7 +1819,7 @@ function renderBApplyNew(p) {
   guideApply('B', bApply, p); // 申請引導帶入（若有）
   if (editing) { // 修改：帶入原單內容
     const e = editing, set = (id, v) => { $('#' + id).value = v == null ? '' : v; };
-    set('ba-applicant', e.applicant); set('ba-tripleno', e.tripleFormNo); set('ba-tripno', e.tripleNo); set('ba-escort', e.escort);
+    set('ba-applicant', e.applicant); set('ba-tripno', e.tripleNo); set('ba-escort', e.escort);
     if (e.applyUnit) set('ba-unit', e.applyUnit);
     if (e.applyExt) set('ba-ext', e.applyExt);
     const c = e.consignor || {};
@@ -1852,7 +1851,7 @@ function renderBApplyNew(p) {
     if (baItems.length === 0) { toast('請至少新增一項貨物', 'err'); return null; }
     const data = {
       applicant: $('#ba-applicant').value,
-      tripleFormNo: v('ba-tripleno'), tripleNo: v('ba-tripno'), applyUnit: v('ba-unit'), applyExt: v('ba-ext'),
+      tripleNo: v('ba-tripno'), applyUnit: v('ba-unit'), applyExt: v('ba-ext'),
       consignor: { name: v('ba-cname'), campus: v('ba-ccampus'), ext: v('ba-cext') },
       site: $('#ba-site').value,
       destSite: $('#ba-dest').value,
@@ -2511,7 +2510,6 @@ function cAppItems(a) {
     fItem('申請人分機手機', a.applicantPhone || a.ext || '—'),
     fItem('申請事由', a.reason || '—'),
     fItem('計畫代號', a.projectCode || '—'),
-    fItem('三聯單號單號', a.tripleNo ? gEsc(a.tripleNo) : '—'),
     fItem('車長', a.captain || '—'),
     fItem('車長分機手機', a.captainPhone || '—'),
     fItem('車屬據點', a.homeBase || '—'),
@@ -2527,7 +2525,7 @@ function cAppItems(a) {
     fItem('是否跨院區', cYN(a.crossCampus)),
     fItem('是否進台北市', cYN(a.enterTaipei)),
     fItem('是否有載運品', cYN(a.hasCargo)),
-  ].concat(a.hasCargo ? [fItem('三聯單表單編號', a.manifestNo || '—'), fItem('護運單號', a.escortNo || '—')] : [])
+  ].concat(a.hasCargo ? [fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '—'), fItem('護運單號', a.escortNo || '—')] : [])
    .concat([fItem('備註', a.remark || '—', { full: true })]);
 }
 // 異動紀錄（修改／取消的異動事由）
@@ -2744,7 +2742,6 @@ function renderCApplyNew(p) {
         fInput('申請人分機手機', `<input type="text" id="ca-phone" value="${v('applicantPhone')}" placeholder="分機或手機">`),
         fInput('申請事由 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-reason" value="${v('reason')}" placeholder="出差／洽公事由">`),
         fInput('計畫代號', `<input type="text" id="ca-project" value="${v('projectCode')}">`),
-        fInput('三聯單號單號 <span class="hint">物籌處介接</span>', tripleNoInput('ca-tripno', src.tripleNo)),
         fInput('車長', `<input type="text" id="ca-captain" value="${v('captain')}">`),
         fInput('車長分機手機', `<input type="text" id="ca-captain-phone" value="${v('captainPhone')}" placeholder="分機或手機">`),
         fInput('車屬據點 <span class="hint" title="選項待業務提供，暫用據點主檔">暫</span>', `<select id="ca-base">${baseOpts}</select>`),
@@ -2779,7 +2776,7 @@ function renderCApplyNew(p) {
       ].join(''))}
       <div id="ca-cargo-wrap">
         ${infoGrid('ca-cargo-grid', [
-          fInput('三聯單表單編號 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-manifest" value="${v('manifestNo')}">`),
+          fInput('三聯單單號 <span style="color:#c0392b;">*</span> <span class="hint">物籌處介接</span>', tripleNoInput('ca-tripno', src.tripleNo || src.manifestNo)),
           fInput('護運單號 <span style="color:#c0392b;">*</span>', `<input type="text" id="ca-escort" value="${v('escortNo')}">`),
         ].join(''))}
       </div>
@@ -2831,7 +2828,7 @@ function renderCApplyNew(p) {
     if (caRouteEdit) { toast('車輛起迄地點有編輯中的列，請先儲存或取消', 'err'); return null; }
     const data = {
       applicant: $('#ca-applicant').value, dept: $('#ca-dept').value, applicantPhone: $('#ca-phone').value.trim(),
-      reason: $('#ca-reason').value.trim(), projectCode: $('#ca-project').value.trim(), tripleNo: $('#ca-tripno').value.trim(),
+      reason: $('#ca-reason').value.trim(), projectCode: $('#ca-project').value.trim(),
       captain: $('#ca-captain').value.trim(), captainPhone: $('#ca-captain-phone').value.trim(), homeBase: $('#ca-base').value,
       isOneway: cYes('ca-oneway', p), route: caRoute.slice(),
       reportAt: $('#ca-report').value, endAt: cYes('ca-oneway', p) ? '' : $('#ca-end').value,
@@ -2840,7 +2837,7 @@ function renderCApplyNew(p) {
       agreeCarpool: cYes('ca-carpool', p), baseShuttle: cYes('ca-shuttle', p),
       permitP: cYes('ca-permitp', p), permitK: cYes('ca-permitk', p),
       crossCampus: cYes('ca-cross', p), enterTaipei: cYes('ca-taipei', p), hasCargo: cYes('ca-cargo', p),
-      manifestNo: $('#ca-manifest').value.trim(), escortNo: $('#ca-escort').value.trim(),
+      tripleNo: $('#ca-tripno').value.trim(), escortNo: $('#ca-escort').value.trim(),
       remark: $('#ca-remark').value.trim(),
       changeReason: editing ? $('#ca-change').value.trim() : '',
     };
@@ -3944,7 +3941,7 @@ function renderDApplyDetail(p, id) {
         fItem('建立時間', fmtTime(a.createdAt)),
         fItem('需求標記', dNeedTags(a), { full: true }),
         fItem('行程說明', a.purpose || '<span class="muted">—</span>', { full: true, tall: true }),
-        fItem('三聯單號單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
+        fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
       ].join(''))}
     </div>
     <div class="card">
@@ -4056,7 +4053,7 @@ function renderDApplyNew(p) {
         fInput('願意等待駕駛媒合 <span class="hint">選填；即使派車為自駕，出發前仍願意讓調度補派司機（G84）</span>',
           dChecks('da-wait', [['yes', '願意等待駕駛媒合']], src.waitDriver ? ['yes'] : []), { stack: true, full: true }),
         fInput('行程說明 <span class="hint">選填：上車地點／目的地／事由</span>', `<input type="text" id="da-purpose" value="${v(src.purpose)}" placeholder="例：新竹科學園區客戶拜訪（多點洽公）">`, { full: true }),
-        fInput('三聯單號單號 <span class="hint">物籌處介接</span>', tripleNoInput('da-tripno', src.tripleNo)),
+        fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('da-tripno', src.tripleNo)),
       ].join(''))}
     </div>
     <div class="card">
@@ -4269,7 +4266,7 @@ function renderDApproveDetail(p, id) {
         fItem('是否自駕', a.selfDrive ? '是' : '否'),
         fItem('需求標記', dNeedTags(a), { w2: true }),
         fItem('行程說明', a.purpose || '<span class="muted">—</span>', { full: true, tall: true }),
-        fItem('三聯單號單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
+        fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
         a.reviewNote ? fItem('審核備註', a.reviewNote, { full: true }) : '',
       ].join(''))}
     </div>
@@ -4550,7 +4547,7 @@ function renderDReviewDetail(p, id) {
         fItem('是否自駕', a.selfDrive ? `是${a.waitDriver ? '（願意等待駕駛媒合）' : ''}` : '否'),
         fItem('需求標記', dNeedTags(a), { w2: true }),
         fItem('行程說明', a.purpose || '<span class="muted">—</span>', { full: true, tall: true }),
-        fItem('三聯單號單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
+        fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
       ].join(''))}
     </div>
     <div class="card">
@@ -5902,7 +5899,7 @@ function tick() {
 }
 window.addEventListener('DOMContentLoaded', () => {
   buildNav();
-  // 三聯單號單號下拉選項（G147；正式版由物籌處介接資料來源提供）
+  // 三聯單單號下拉選項（G147；正式版由物籌處介接資料來源提供）
   document.body.insertAdjacentHTML('beforeend', `<datalist id="tripleno-list">${DB.tripleNoOptions.map(x => `<option value="${gEsc(x)}"></option>`).join('')}</datalist>`);
   $('#modal-close').onclick = closeModal;
   $('#modal-mask').onclick = (e) => { if (e.target.id === 'modal-mask') closeModal(); };

@@ -2632,8 +2632,8 @@ group('差旅共乘申請欄位改版（G133）', () => {
     eq(o.type, 'oneway'); eq(o.endAt, '', '單程不存用車結束'); eq(o.returnDate, D);
     const legacy = C.createApp({ applicant: 'X', type: 'round', origin: '台北總部', dest: '台中辦公室', departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '17:00', pax: 3 });
     eq(legacy.route.join('|'), '台北總部|台中辦公室'); eq(legacy.reportAt, `${D}T08:00`); eq(legacy.passengers, 3);
-    const nc = C.createApp(form({ hasCargo: false, manifestNo: 'M1' }));
-    eq(nc.manifestNo, '', '無載運品不存三聯單號');
+    const nc = C.createApp(form({ hasCargo: false, tripleNo: 'M1' }));
+    eq(nc.tripleNo, '', '無載運品不存三聯單單號');
   });
   test('表單檢核：事由、起訖地點、日期時間、乘客數、載運品單號、異動事由', () => {
     const C = fresh().ModuleC;
@@ -2647,8 +2647,9 @@ group('差旅共乘申請欄位改版（G133）', () => {
     eq(C.formError(form({ isOneway: true, endAt: '' })), null, '單程不需結束時間');
     ok(/乘客數/.test(C.formError(form({ passengers: 0 }))));
     ok(/三聯單/.test(C.formError(form({ hasCargo: true, escortNo: 'E1' }))));
-    ok(/護運單號/.test(C.formError(form({ hasCargo: true, manifestNo: 'M1' }))));
-    eq(C.formError(form({ hasCargo: true, manifestNo: 'M1', escortNo: 'E1' })), null);
+    ok(/護運單號/.test(C.formError(form({ hasCargo: true, tripleNo: 'M1' }))));
+    eq(C.formError(form({ hasCargo: true, tripleNo: 'M1', escortNo: 'E1' })), null);
+    eq(C.createApp(form({ hasCargo: true, manifestNo: 'OLD', escortNo: 'E1' })).tripleNo, 'OLD', '舊欄位 manifestNo 併入三聯單單號（G148）');
     ok(/異動事由/.test(C.formError(form(), { editing: true })), '修改須填異動事由');
     eq(C.formError(form({ changeReason: '改時間' }), { editing: true }), null);
   });
@@ -2882,10 +2883,10 @@ group('院區財物轉運申請表單改版（G143）', () => {
     items: [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 2, category: 'BOX', weight: 10 }] }, o);
   test('新單帶出財物運輸單狀態「開單」與民國申請日期；新欄位寫入、預設值', () => {
     const H = fresh(), B = H.ModuleB;
-    const o = B.createOrder(form({ unloadReadyTime: '15:00', tripleFormNo: '3F-1', captain: '王車長' }));
+    const o = B.createOrder(form({ unloadReadyTime: '15:00', tripleNo: '3F-1', captain: '王車長' }));
     eq(o.transportStatus, '開單'); ok(/^\d{3}\/\d{2}\/\d{2}$/.test(o.applyDate), '民國日期 ' + o.applyDate);
     eq(o.delayReceiveTime, '15:00', '調整延後收貨時間預設＝可卸貨時間');
-    eq(o.agreeCarpool, true); eq(o.hazardTransport, 'no'); eq(o.tripleFormNo, '3F-1'); eq(o.captain, '王車長');
+    eq(o.agreeCarpool, true); eq(o.hazardTransport, 'no'); eq(o.tripleNo, '3F-1'); eq(B.createOrder(form({ tripleFormNo: 'OLD' })).tripleNo, 'OLD', '舊欄位併入三聯單單號（G148）'); eq(o.captain, '王車長');
     eq(o.consignor.name, '吳承恩'); eq(o.recipient.agentHall, '收發室');
     const o2 = B.createOrder(form({ unloadReadyTime: '15:00', delayReceiveTime: '16:30', agreeCarpool: true, carpoolRejectReason: '不需要' }));
     eq(o2.delayReceiveTime, '16:30', '可自行調整'); eq(o2.carpoolRejectReason, '', '同意併車不保留拒絕事由');
@@ -2911,8 +2912,8 @@ group('院區財物轉運申請表單改版（G143）', () => {
     B.saveDraft(o, form({ remark: '改備註', changeReason: 'x' })); eq(o.status, 'draft'); eq(o.remark, '改備註');
     B.resubmit(o, form({ changeReason: '送審' })); eq(H.Flow.of(o), 'review');
     const r = B.createOrder(form()); B.reject(r, '請補三聯單');
-    B.saveDraft(r, form({ tripleFormNo: '3F-9', changeReason: '補三聯單' }));
-    eq(r.status, 'draft'); eq(r.tripleFormNo, '3F-9'); eq(r.revisions.length, 1);
+    B.saveDraft(r, form({ tripleNo: '3F-9', changeReason: '補三聯單' }));
+    eq(r.status, 'draft'); eq(r.tripleNo, '3F-9'); eq(r.revisions.length, 1);
     const a = B.createOrder(form()); B.approve(a);
     let err = ''; try { B.saveDraft(a, form()); } catch (e) { err = e.message; } ok(err, '待調度不可改');
   });
@@ -3053,7 +3054,7 @@ group('院區財物轉運派車單明細：送審、異動、新增／刪除申�
   });
 });
 
-group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位、押車人、三聯單號單號', () => {
+group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位、押車人、三聯單單號', () => {
   const DD = '2026-12-31', NOW = '2026-12-01T09:00:00';
   const bOrder = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', handleMin: 20,
     wantReceiveDate: DD, wantReceiveTime: '09:00', items: [{ name: '箱', l: 100, w: 80, h: 80, qty: 1, category: 'BOX', weight: 30 }] }, o)); H.ModuleB.approve(x); return x; };
@@ -3113,7 +3114,7 @@ group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位
     ok(r.ok); eq(rec.usage.fuelLiters, 40.5); eq(rec.usage.workHours, 9); eq(rec.usage.otHours, 1);
     ok(U.save(rec, base, 'x', { pool: 'LOGI' }).ok, '三欄皆可不填'); eq(rec.usage.fuelLiters, null);
   });
-  test('押車人僅註記、三聯單號單號四模組皆保存', () => {
+  test('押車人僅註記、三聯單單號四模組皆保存', () => {
     const H = fresh(); H.Flow._now = NOW;
     const o = bOrder(H, { escort: '王押車', tripleNo: '3L-115-00101' }); eq(o.escort, '王押車'); eq(o.tripleNo, '3L-115-00101');
     const a = H.ModuleA.createApp({ applicant: 'X', branch: 'D6', station: 'D6-300', recvMode: 'asap', serviceDate: DD, items: [], tripleNo: '3L-115-00102' }); eq(a.tripleNo, '3L-115-00102');

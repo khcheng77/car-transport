@@ -172,8 +172,7 @@ const ModuleB = {
       wantReceiveDate: data.wantReceiveDate || '',
       recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, campus, agentName, agentPhone, agentCampus, agentHall }
       // ---- G143 新增欄位（除危險品運輸 G144 外目前僅記錄，不影響媒合派車；不同意併車不等同直達）----
-      tripleFormNo: data.tripleFormNo || '',            // 三聯單表單編號
-      tripleNo: data.tripleNo || '',                    // 三聯單號單號（G147 物籌處介接，可輸入下拉）
+      tripleNo: data.tripleNo || data.tripleFormNo || '',   // 三聯單單號（G147 物籌處介接，可輸入下拉；G148 整併原「三聯單表單編號」）
       applyUnit: data.applyUnit || '',                  // 申請單位/委運單位＊
       applyExt: data.applyExt || '',                    // 申請人分機＊
       consignor: data.consignor || {},                  // 委運人：{ name＊, campus, ext＊（分機/手機） }；館別＝pickupLoc

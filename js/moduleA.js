@@ -36,7 +36,7 @@ const ModuleA = {
       applyDate: this.rocDate(),        // 申請日期（民國年，G138）
       hazardTransport: data.hazardTransport === 'yes' ? 'yes' : 'no',   // 危險品運輸（G138，僅記錄）
       remark: data.remark || '',        // 備註（G138）
-      tripleNo: data.tripleNo || '',    // 三聯單號單號（G147 物籌處介接，可輸入下拉）
+      tripleNo: data.tripleNo || '',    // 三聯單單號（G147 物籌處介接，可輸入下拉）
       applicant: data.applicant,
       applyUnit: data.applyUnit || '',  // 申請單位／委運單位（預帶登入使用者，G138 可修改、必填）
       applyExt: data.applyExt || '',    // 申請人分機（登入使用者）
