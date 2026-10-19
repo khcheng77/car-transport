@@ -2320,8 +2320,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     eq(G.visibleCards(base({ mode: 'people' })).join(), 'K1,K4,K7');
     eq(G.visibleCards(base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-30' })).join(), 'K1,K4,K6,K7', '長天數也走行程');
     eq(G.visibleCards(base({ mode: 'people', startDate: '2099-03-05', endDate: '2099-03-01' })).join(), 'K1,K4,K7', '迄日早於起日');
-    eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes', personalItems: 'no' })).join(), 'K1,K4,K6,K3,K7');
-    eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes', personalItems: 'yes' })).join(), 'K1,K4,K6,K7', '隨身財物不需貨物清單（G134）');
+    eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes', items: [box] })).join(), 'K1,K4,K6,K7', '隨行財物填在行程卡片的 grid，不出現貨物清單卡片（G150）');
   });
 
   test('R1／R2：寄件與收件據點相同 → 收貨申請，不同 → 幹線託運', () => {
@@ -2334,7 +2333,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
   test('例行用車已移除：長天數不再另走例行用車，依地點／財物判定；迄日早於起日未判定', () => {
     const G = fresh().Guide;
     ok(!('E' in G.UNITS), '判定功能不含例行用車');
-    const long = base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-31', origin: '台北總部', dest: '台中辦公室', hasCargo: 'no' });
+    const long = base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-31', origin: '台北總部', dest: '台中辦公室', hasCargo: 'no', agreeCarpool: 'yes' });
     eq(G.route(long).unit, 'C', '92 天、共乘清單、無財物 → 出差用車');
     eq(G.route(Object.assign(long, { dest: G.OTHER })).unit, 'D', '92 天、其他地點 → 一般用車');
     ok(!G.route(base({ mode: 'people', startDate: '2099-03-05', endDate: '2099-03-01' })).unit, '迄日早於起日未判定');
@@ -2343,19 +2342,19 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
   test('R4／R5：地點在共乘清單且無財物 → 出差用車；其他地點或有財物 → 一般用車', () => {
     const G = fresh().Guide;
     const p = o => base(Object.assign({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '桃園機場T1' }, o));
-    eq(G.route(p({ hasCargo: 'no' })).unit, 'C');
-    eq(G.route(p({ hasCargo: 'yes', personalItems: 'no' })).unit, 'D');
+    eq(G.route(p({ hasCargo: 'no', agreeCarpool: 'yes' })).unit, 'C');
+    eq(G.route(p({ hasCargo: 'yes', items: [box], agreeCarpool: 'no' })).unit, 'D');
     eq(G.route(p({ dest: G.OTHER })).unit, 'D', '其他地點不必等隨行財物即判定');
-    ok(!G.route(p({ hasCargo: '' })).unit, '清單內地點需先選是否有財物');
+    ok(!G.route(p({ hasCargo: 'no' })).unit, '清單內地點需先選是否同意併車（G150）');
   });
 
   test('帶入：出差用車／一般用車的帶入資料可直接通過該功能驗證', () => {
     const H = fresh(), G = H.Guide;
-    const c = G.prefill(base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '高鐵台北站', hasCargo: 'no' }));
+    const c = G.prefill(base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '高鐵台北站', hasCargo: 'no', agreeCarpool: 'yes' }));
     eq(c.unit, 'C'); eq(c.data.type, 'round'); eq(c.data.pax, 2);
     ok(H.ModuleC.createApp(c.data).id, '出差用車可建立');
     const dv = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: G.OTHER, otherPlace: '新竹科學園區三家客戶',
-      hasCargo: 'yes', personalItems: 'no', items: [Object.assign({ hazardous: true }, box)], selfDrive: true });
+      hasCargo: 'yes', items: [Object.assign({ hazardous: true }, box)], selfDrive: true });
     eq(G.missing(dv).length, 0, '欄位齊全：' + G.missing(dv).join('、'));
     const d = G.prefill(dv);
     eq(d.unit, 'D'); eq(H.ModuleD.validate(d.data).length, 0, 'D 驗證：' + H.ModuleD.validate(d.data).join('、'));
@@ -2383,19 +2382,19 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     const G = fresh().Guide;
     const d = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: G.OTHER, dest: '桃園機場T1', otherPlace: 'x', hasCargo: 'no' });
     ok(G.missing(d).some(m => m.includes('自己開車')));
-    const c = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '新竹分公司', hasCargo: 'no', tripType: 'oneway' });
+    const c = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '新竹分公司', hasCargo: 'no', agreeCarpool: 'yes', tripType: 'oneway' });
     ok(G.missing(c).some(m => m.includes('單程')), '新竹分公司非轉運點不可單程');
     ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', hazardTransport: 'no' })).some(m => m.includes('貨物')), '財物至少 1 項');
   });
 
   test('引導紀錄：前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判', () => {
     const G = fresh().Guide;
-    const cv = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '高鐵台北站', hasCargo: 'no' });
+    const cv = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '高鐵台北站', hasCargo: 'no', agreeCarpool: 'yes' });
     const { rec, pf } = G.hand(cv);
     eq(rec.id, 'GD-0001'); eq(rec.status, 'handed'); eq(rec.unit, 'C'); eq(pf.recId, 'GD-0001');
     eq(rec.log.map(l => l.action).join(), '建立引導,判定並帶入');
     const again = G.reopen(rec.id);
-    again.hasCargo = 'yes'; again.personalItems = 'no'; again.items = [box]; again.selfDrive = false;
+    again.hasCargo = 'yes'; again.items = [box]; again.agreeCarpool = 'no'; again.carpoolRejectReason = '攜帶樣品'; again.selfDrive = false;
     const r2 = G.hand(again, rec.id).rec;
     eq(r2, rec, '同一筆紀錄'); eq(G.records.length, 1); eq(rec.unit, 'D');
     ok(rec.log[rec.log.length - 1].note.includes('差旅共乘申請 → 一般用車申請'), '歷程記錄改判');
@@ -2718,37 +2717,55 @@ group('差旅共乘申請欄位改版（G133）', () => {
   });
 });
 
-group('申請引導：隨行財物屬於隨身財物（G134）', () => {
+group('申請引導：行程是否同意併車、隨行財物 grid（G150）', () => {
   const FUT = '2099-03-01';
   const p = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', mode: 'people', items: [], startDate: FUT, endDate: FUT,
     origin: '台北總部', dest: '高鐵台北站', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 2,
-    hasCargo: '', personalItems: '', selfDrive: null }, o);
-  const box = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
-  test('隨行財物沒有 → 差旅共乘', () => {
+    hasCargo: 'no', agreeCarpool: '', carpoolRejectReason: '', selfDrive: null }, o);
+  const box = { name: '樣品箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5, pack: '紙箱' };
+  test('地點都在共乘清單：未選是否同意併車 → 未判定；是 → 差旅共乘；否 → 一般用車', () => {
     const G = fresh().Guide;
-    eq(G.route(p({ hasCargo: 'no' })).unit, 'C');
+    const r = G.route(p()); ok(!r.unit && r.hint.includes('同意併車'), r.hint);
+    eq(G.route(p({ agreeCarpool: 'yes' })).unit, 'C');
+    const d = G.route(p({ agreeCarpool: 'no' })); eq(d.unit, 'D'); ok(d.reason.includes('不同意併車'), d.reason);
   });
-  test('隨行財物有、屬於隨身財物 是 → 差旅共乘，不需貨物清單，可直接帶入', () => {
+  test('其他地點不問是否同意併車，直接一般用車；不同意併車原因不列缺漏', () => {
+    const G = fresh().Guide;
+    const o = p({ dest: G.OTHER, otherPlace: '新竹客戶', agreeCarpool: 'no', selfDrive: true });
+    ok(!G.askCarpool(o)); eq(G.route(o).unit, 'D'); eq(G.missing(o).length, 0, G.missing(o).join('、'));
+  });
+  test('不同意併車：原因必填，帶入一般用車行程說明', () => {
     const H = fresh(), G = H.Guide;
-    const v = p({ hasCargo: 'yes', personalItems: 'yes' });
-    const r = G.route(v); eq(r.unit, 'C'); eq(r.rule, 'R4'); ok(r.reason.includes('隨身財物'), r.reason);
+    const v = p({ agreeCarpool: 'no', selfDrive: false });
+    ok(G.missing(v).includes('不同意併車原因'));
+    v.carpoolRejectReason = '攜帶機密文件';
     eq(G.missing(v).length, 0, G.missing(v).join('、'));
-    ok(H.ModuleC.createApp(G.prefill(v).data).id, '可建立差旅共乘申請');
+    const d = G.prefill(v); ok(d.data.purpose.includes('不同意併車原因：攜帶機密文件'), d.data.purpose);
+    eq(H.ModuleD.validate(d.data).length, 0, H.ModuleD.validate(d.data).join('、'));
   });
-  test('隨行財物有、屬於隨身財物 否 → 一般用車，需貨物清單並帶入', () => {
+  test('隨行財物有：grid 至少 1 項；同意併車帶入差旅共乘隨身貨物，可建立申請單', () => {
     const H = fresh(), G = H.Guide;
-    const v = p({ hasCargo: 'yes', personalItems: 'no', selfDrive: false });
-    eq(G.route(v).unit, 'D'); ok(G.missing(v).some(m => m.includes('貨物')), '需貨物清單');
+    const v = p({ hasCargo: 'yes', agreeCarpool: 'yes' });
+    ok(G.missing(v).some(m => m.includes('隨行財物明細')), '需至少 1 項');
     v.items = [box]; eq(G.missing(v).length, 0, G.missing(v).join('、'));
-    const d = G.prefill(v); eq(d.data.items.length, 1); eq(H.ModuleD.validate(d.data).length, 0);
+    const c = G.prefill(v); eq(c.unit, 'C');
+    eq(JSON.stringify(c.data.personalCargo), JSON.stringify([{ name: '樣品箱', qty: 2, l: 40, w: 30, h: 30, weight: 5, pack: '紙箱' }]));
+    ok(c.labels.includes('隨身貨物 1 項'), c.labels.join('、'));
+    eq(H.ModuleC.cargoRowError(c.data.personalCargo), null);
+    eq(H.ModuleC.createApp(c.data).personalCargo.length, 1, '差旅共乘保存隨身貨物');
   });
-  test('隨行財物有、未選屬於隨身財物 → 未判定；其他地點走一般用車時列為缺漏，隨身財物不帶貨物清單', () => {
+  test('隨行財物有、不同意併車 → 一般用車隨行貨物（含財物外型係數類別、外包裝）', () => {
+    const H = fresh(), G = H.Guide;
+    const v = p({ hasCargo: 'yes', items: [box], agreeCarpool: 'no', carpoolRejectReason: '貨多', selfDrive: true });
+    const d = G.prefill(v); eq(d.unit, 'D'); eq(d.data.items.length, 1);
+    eq(d.data.items[0].category, 'BOX'); eq(d.data.items[0].pack, '紙箱'); eq(d.data.items[0].hazardous, false);
+    eq(H.ModuleD.validate(d.data).length, 0);
+  });
+  test('隨行財物沒有：grid 資料不帶入', () => {
     const G = fresh().Guide;
-    const r = G.route(p({ hasCargo: 'yes' })); ok(!r.unit && r.hint.includes('隨身財物'), r.hint);
-    const o = p({ dest: G.OTHER, otherPlace: '新竹客戶', hasCargo: 'yes', selfDrive: true });
-    eq(G.route(o).unit, 'D'); ok(G.missing(o).includes('屬於隨身財物'));
-    o.personalItems = 'yes'; o.items = [box];
-    eq(G.missing(o).length, 0, '隨身財物不需貨物清單'); eq(G.prefill(o).data.items.length, 0, '不帶貨物清單');
+    const v = p({ hasCargo: 'no', items: [box], agreeCarpool: 'yes' });
+    eq(G.prefill(v).data.personalCargo.length, 0);
+    const d = G.prefill(Object.assign(v, { agreeCarpool: 'no', carpoolRejectReason: 'x', selfDrive: true })); eq(d.data.items.length, 0);
   });
 });
 

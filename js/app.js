@@ -365,9 +365,10 @@ function renderItemEditor(boxSel, arr, onChange) {
 function openCargoEditor(item, onSave, opts) {
   opts = opts || {};
   const it = Object.assign({ name: '', l: '', w: '', h: '', qty: 1, category: 'BOX', weight: '', hazardous: false, plan: '', workNo: '', shape: '', pack: '' }, item || {});
-  const bc = !!opts.bCols, ext = opts.aCols || bc;
-  const nameLbl = ext ? '財物名稱' : '品名';
+  const bc = !!opts.bCols, ext = opts.aCols || bc, gc = !!opts.gCols;
+  const nameLbl = ext || gc ? '財物名稱' : '品名';
   const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
+  if (gc) return openCarryEditor(it, !!item, catOpts, onSave);
   openModal(item ? '編輯貨物內容' : '新增貨物', `
     ${infoGrid('ce-fields', [
       ext ? fInput('計畫名稱', `<input type="text" id="ce-plan" value="${gEsc(it.plan)}">`) : '',
@@ -412,6 +413,36 @@ function openCargoEditor(item, onSave, opts) {
   };
 }
 
+/* 申請引導「隨行財物」編輯視窗（G150）：財物名稱、長、寬、高、財物外型（浪費係數）、重量、數量、財物外包裝 */
+function openCarryEditor(it, editing, catOpts, onSave) {
+  openModal(editing ? '編輯隨行財物' : '新增隨行財物', `
+    ${infoGrid('ce-fields', [
+      fInput('財物名稱', `<input type="text" id="ce-name" value="${gEsc(it.name)}">`, { full: true }),
+      fInput('長 (cm)', `<input type="number" id="ce-l" min="0" step="any" value="${it.l}">`),
+      fInput('寬 (cm)', `<input type="number" id="ce-w" min="0" step="any" value="${it.w}">`),
+      fInput('高 (cm)', `<input type="number" id="ce-h" min="0" step="any" value="${it.h}">`),
+      fInput('財物外型（浪費係數）', `<select id="ce-cat">${catOpts}</select>`),
+      fInput('重量 (kg) <span class="hint">單件</span>', `<input type="number" id="ce-wt" min="0" step="any" value="${it.weight}">`),
+      fInput('數量', `<input type="number" id="ce-qty" min="1" step="1" value="${it.qty}">`),
+      fInput('財物外包裝', `<input type="text" id="ce-pack" value="${gEsc(it.pack)}" placeholder="例：紙箱">`, { full: true }),
+    ].join(''))}
+    <div style="text-align:center;margin-top:20px;">
+      <button class="btn btn-primary" id="ce-ok">▶ 送出</button>
+      <button class="btn btn-ghost" id="ce-cancel">取消</button>
+    </div>`);
+  $('#ce-cancel').onclick = closeModal;
+  $('#ce-ok').onclick = () => {
+    const name = $('#ce-name').value.trim();
+    const l = +$('#ce-l').value, w = +$('#ce-w').value, h = +$('#ce-h').value, qty = +$('#ce-qty').value, weight = +$('#ce-wt').value;
+    if (!name) { toast('請填財物名稱', 'err'); return; }
+    if (!(l > 0 && w > 0 && h > 0)) { toast('長寬高需為正數', 'err'); return; }
+    if (!(weight > 0)) { toast('重量需大於 0', 'err'); return; }
+    if (!(Number.isInteger(qty) && qty >= 1)) { toast('數量需為正整數', 'err'); return; }
+    onSave({ name, l, w, h, category: $('#ce-cat').value, weight, qty, pack: $('#ce-pack').value.trim() });
+    closeModal();
+  };
+}
+
 /* ---- 貨物項目唯讀 grid；editable 時最左欄加「編輯／刪除」按鈕 ---- */
 function renderCargoGrid(sel, items, editable, onChange, opts) {
   opts = opts || {};
@@ -422,7 +453,16 @@ function renderCargoGrid(sel, items, editable, onChange, opts) {
   const ac = !!opts.aCols; // 巡迴財物轉運（G138）：首兩欄計畫名稱、工令號碼，最後一欄財物外包裝
   const bc = !!opts.bCols; // 院區財物轉運（G143）：計畫名稱、工令號碼、財物名稱、財物外型、長、寬、高、類別、數量、重量、財物外包裝
   const g = v => gEsc(v || '—');
-  if (bc) {
+  if (opts.gCols) {   // 申請引導「隨行財物」（G150）
+    const cat = c => { const f = DB.wasteFactors.find(x => x.code === c); return f ? `${f.name}（${f.factor}）` : gEsc(c); };
+    const head = `${editable ? '<th>功能鍵</th>' : ''}<th>財物名稱</th><th>長(cm)</th><th>寬(cm)</th><th>高(cm)</th><th>財物外型（浪費係數）</th><th>重量(kg)</th><th>數量</th><th>財物外包裝</th>`;
+    const body = items.length === 0
+      ? `<tr><td colspan="${8 + (editable ? 1 : 0)}" class="muted" style="text-align:center;padding:16px;">${opts.emptyText || '尚無隨行財物。'}</td></tr>`
+      : items.map((it, i) => `<tr>
+        ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-cedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-cdel="${i}">刪除</button></td>` : ''}
+        <td>${gEsc(it.name)}</td><td>${it.l}</td><td>${it.w}</td><td>${it.h}</td><td>${cat(it.category)}</td><td>${it.weight || 0}</td><td>${it.qty || 1}</td><td>${g(it.pack)}</td></tr>`).join('');
+    box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  } else if (bc) {
     const head = `${editable ? '<th></th>' : ''}<th>計畫名稱</th><th>工令號碼</th><th>財物名稱</th><th>財物外型</th><th>長</th><th>寬</th><th>高</th><th>類別</th><th>數量</th><th>重量</th><th>財物外包裝</th>`;
     const body = items.length === 0
       ? `<tr><td colspan="${11 + (editable ? 1 : 0)}" class="muted" style="text-align:center;padding:16px;">${opts.emptyText || `尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。`}</td></tr>`
@@ -5468,7 +5508,7 @@ function guideDefaults() {
     mode: '', fromSite: '', fromStation: '', toSite: '', toStation: '', tripleNo: '', recvDate: Guide.todayStr(), recvTime: '', hazardTransport: '', items: [],
     startDate: '', endDate: '',
     origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 1,
-    hasCargo: '', personalItems: '', selfDrive: null };
+    hasCargo: '', agreeCarpool: '', carpoolRejectReason: '', selfDrive: null };
 }
 const gEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 // 單選膠囊：opts = [[value, 文字], ...]；cur 為目前值（布林以 'yes'/'no' 表示）
@@ -5564,7 +5604,7 @@ function loadGuideDemo() {
   Guide.hand(base({ applicant: '研發部-吳承恩', dept: '研發部', ext: '4102', mode: 'goods', fromSite: 'D6', fromStation: 'D6-200', toSite: 'D6', toStation: 'D6-500',
     hazardTransport: 'no', items: [box] }));
   const c = Guide.hand(base({ applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310', mode: 'people', startDate: d(3), endDate: d(3),
-    origin: '台北總部', dest: '高鐵台北站', departTime: '08:30', backTime: '18:00', pax: 2, hasCargo: 'no' }));
+    origin: '台北總部', dest: '高鐵台北站', departTime: '08:30', backTime: '18:00', pax: 2, hasCargo: 'no', agreeCarpool: 'yes' }));
   const app = ModuleC.createApp(c.pf.data);
   Guide.markSubmitted(c.rec.id, app.id);
   Guide.hand(base({ mode: 'people', startDate: d(7), endDate: d(8), origin: '台北總部', dest: Guide.OTHER, otherPlace: '新竹科學園區客戶（多點洽公）',
@@ -5594,8 +5634,11 @@ function renderGuideDetail(p, id) {
     if (share) filled.push(fItem('行程型態', v.tripType === 'oneway' ? '單程（送到轉運點）' : '來回'));
     filled.push(fItem('出發時間', dash(v.departTime)));
     if (!(share && v.tripType === 'oneway')) filled.push(fItem(share ? '回程上車時間' : '結束時間', dash(v.backTime)));
-    filled.push(fItem('人數', `${v.pax} 人`), fItem('隨行財物', v.hasCargo === 'yes'
-      ? (v.personalItems === 'yes' ? '有（屬於隨身財物）' : v.personalItems === 'no' ? '有（不屬於隨身財物）' : '有') : '沒有'));
+    filled.push(fItem('人數', `${v.pax} 人`), fItem('隨行財物', v.hasCargo === 'yes' ? `有（${(v.items || []).length} 項）` : '沒有'));
+    if (Guide.askCarpool(v)) {
+      filled.push(fItem('是否同意併車', v.agreeCarpool === 'yes' ? '是' : v.agreeCarpool === 'no' ? '否' : dash('')));
+      if (v.agreeCarpool === 'no') filled.push(fItem('不同意併車原因', dash(v.carpoolRejectReason), { w2: true }));
+    }
     if (r.unit === 'D') filled.push(fItem('可否自己開車', yn(v.selfDrive, '可以', '不行')));
   }
   const acts = [];
@@ -5619,6 +5662,7 @@ function renderGuideDetail(p, id) {
       ${infoGrid('gd-filled', filled.join(''))}
     </div>
     ${cards.includes('K3') ? `<div class="card"><div class="card-title">貨物清單</div><div id="gd-items"></div></div>` : ''}
+    ${cards.includes('K6') && v.hasCargo === 'yes' ? `<div class="card"><div class="card-title">隨行財物</div><div id="gd-carry"></div></div>` : ''}
     <div class="card">
       <div class="card-title">判定結果</div>
       ${infoGrid('gd-result', [
@@ -5640,6 +5684,7 @@ function renderGuideDetail(p, id) {
     </div>
     ${backBar('gd-back')}`;
   if (cards.includes('K3')) renderCargoGrid('#gd-items', v.items, false, null, { hazard: true });
+  if (cards.includes('K6') && v.hasCargo === 'yes') renderCargoGrid('#gd-carry', v.items, false, null, { gCols: true });
   $('#gd-back').onclick = () => { guideState.view = 'list'; RENDER.guide(); };
   const ed = $('#gd-edit');
   if (ed) ed.onclick = () => guideEdit(r.id);
@@ -5706,7 +5751,7 @@ function renderGuideNew(p) {
       fInput('迄日', `<input type="date" id="gf-endDate" value="${gEsc(v.endDate)}">`),
       fItem('天數', `<span id="gf-days">—</span>`),
     ].join('')))}
-    ${card('K6', '行程', '出發地／目的地都在共乘清單，且沒有隨行財物或只有隨身財物時可自動併車共乘；其他地點選「其他」。', infoGrid('gg-K6', [
+    ${card('K6', '行程', '出發地／目的地都在共乘清單時，同意併車＝差旅共乘（自動併車），不同意併車＝一般用車；其他地點選「其他」，一律走一般用車。', infoGrid('gg-K6', [
       fInput('出發地', `<select id="gf-origin">${placeOpts(DB.bizOrigins, v.origin, '其他地點')}</select>`),
       fInput('目的地', `<select id="gf-dest">${placeOpts(DB.bizDests, v.dest, '其他地點／多點')}</select>`),
       fInput('其他地點說明', `<input type="text" id="gf-otherPlace" value="${gEsc(v.otherPlace)}" placeholder="例：新竹科學園區客戶（多點洽公）">`, { w2: true }),
@@ -5715,9 +5760,15 @@ function renderGuideNew(p) {
       fInput(`<span id="gf-backLabel">結束時間</span>`, `<input type="time" id="gf-backTime" value="${gEsc(v.backTime)}">`),
       fInput('人數', `<input type="number" id="gf-pax" min="1" step="1" value="${gEsc(v.pax)}">`),
       fInput('隨行財物', gPills('gf-hasCargo', v.hasCargo, [['no', '沒有'], ['yes', '有']]), { stack: true }),
-      fInput('屬於隨身財物 <span class="hint">隨身財物仍可共乘</span>', gPills('gf-personalItems', v.personalItems, [['yes', '是'], ['no', '否']]), { stack: true }),
+      fInput('是否同意併車 <span class="hint">是＝差旅共乘、否＝一般用車</span>', gPills('gf-agreeCarpool', v.agreeCarpool, [['yes', '是'], ['no', '否']]), { stack: true }),
+      fInput('不同意併車原因', `<input type="text" id="gf-carpoolRejectReason" value="${gEsc(v.carpoolRejectReason)}" placeholder="例：攜帶機密文件、需單獨行程">`, { w2: true }),
       fInput('沒有司機時可否自己開車', gPills('gf-selfDrive', gYN(v.selfDrive), [['yes', '可以'], ['no', '不行']]), { stack: true, w2: true }),
-    ].join('')))}
+    ].join('')) + `
+      <div id="gf-carry-wrap" style="display:none;">
+        <div class="card-title" style="justify-content:space-between;font-size:14px;margin-top:6px;"><span>隨行財物</span>
+          <button class="btn btn-accent btn-sm" id="gf-add-carry">＋ 新增</button></div>
+        <div id="gf-carry"></div>
+      </div>`)}
     ${card('K3', '貨物清單', '欄位比照物流申請（長寬高／類別／件數／重量），並標註是否為危險品。', `<div id="gf-items"></div>`,
       `<button class="btn btn-accent btn-sm" id="gf-add-item">＋ 新增</button>`)}
     ${card('K7', '判定結果', '', `<div id="gr-body"></div>`)}
@@ -5730,7 +5781,7 @@ function renderGuideNew(p) {
 
 function guideWire(p) {
   const v = guideState.v;
-  const text = ['applicant', 'dept', 'ext', 'tripleNo', 'recvDate', 'recvTime', 'startDate', 'endDate', 'otherPlace', 'departTime', 'backTime', 'pax'];
+  const text = ['applicant', 'dept', 'ext', 'tripleNo', 'carpoolRejectReason', 'recvDate', 'recvTime', 'startDate', 'endDate', 'otherPlace', 'departTime', 'backTime', 'pax'];
   text.forEach(k => {
     const inp = $('#gf-' + k, p);
     // 值沒變就不重繪：輸入後直接點「前往並帶入」時，失焦的 change 若重繪判定結果會吃掉這次點擊
@@ -5754,7 +5805,7 @@ function guideWire(p) {
     };
   });
   const bools = { selfDrive: 1 };
-  ['mode', 'hazardTransport', 'tripType', 'hasCargo', 'personalItems', 'selfDrive'].forEach(k => {
+  ['mode', 'hazardTransport', 'tripType', 'hasCargo', 'agreeCarpool', 'selfDrive'].forEach(k => {
     $$(`input[name=gf-${k}]`, p).forEach(r => r.onchange = () => {
       v[k] = bools[k] ? r.value === 'yes' : r.value;
       $$(`#gf-${k}-wrap .radio-pill`, p).forEach(l => l.classList.toggle('sel', $('input', l).checked));
@@ -5762,6 +5813,7 @@ function guideWire(p) {
     });
   });
   $('#gf-add-item', p).onclick = () => openCargoEditor(null, it => { v.items.push(it); guideRefresh(p); }, { hazard: true });
+  $('#gf-add-carry', p).onclick = () => openCargoEditor(null, it => { v.items.push(it); guideRefresh(p); }, { gCols: true });
   $('#gf-reset', p).onclick = confirmThen({ title: '全部清除重填？', text: '引導中已填寫的內容將清空。' }, () => {
     guideState.v = null; RENDER.guide(); toast('已清除，請重新填寫');
   });
@@ -5784,8 +5836,11 @@ function guideRefresh(p, initial) {
   const showItem = (id, on) => { const gi = $('#' + id, p).closest('.grid-item'); gi.style.display = on ? '' : 'none'; };
   const other = v.origin === Guide.OTHER || v.dest === Guide.OTHER;
   showItem('gf-otherPlace', other);
-  showItem('gf-personalItems-wrap', v.hasCargo === 'yes');   // 有隨行財物才問是否屬於隨身財物（G134）
-  const share = Guide.inBizList(v) && !Guide.bulkCargo(v); // 可能走出差共乘：顯示行程型態、回程上車時間
+  // 是否同意併車：地點都在共乘清單才問；選否才填不同意併車原因（G150）
+  showItem('gf-agreeCarpool-wrap', Guide.askCarpool(v));
+  showItem('gf-carpoolRejectReason', Guide.askCarpool(v) && v.agreeCarpool === 'no');
+  $('#gf-carry-wrap', p).style.display = v.hasCargo === 'yes' ? '' : 'none';
+  const share = Guide.inBizList(v) && v.agreeCarpool !== 'no'; // 可能走差旅共乘：顯示行程型態、回程上車時間
   showItem('gf-tripType-wrap', share);
   showItem('gf-backTime', !(share && v.tripType === 'oneway'));
   showItem('gf-selfDrive-wrap', r.unit === 'D');
@@ -5809,6 +5864,7 @@ function guideRefresh(p, initial) {
   });
   guideState.shown = cards;
   renderCargoGrid('#gf-items', v.items, true, () => guideRefresh(p), { hazard: true, emptyText: '尚無貨物，請按右上角「新增」加入。' });
+  renderCargoGrid('#gf-carry', v.items, true, () => guideRefresh(p), { gCols: true, emptyText: '尚無隨行財物，請按右上角「新增」加入。' });
   guideResult(p, r);
   initMasonry(p);
   if (fresh.length) {
@@ -5914,6 +5970,7 @@ function guideApply(unit, state, p) {
     if (d.departDate) { set('ca-report', `${d.departDate}T${d.earliestPickup || '09:00'}`); $('#ca-report', p).onchange(); }
     if (d.type !== 'oneway' && d.returnDate) set('ca-end', `${d.returnDate}T${d.earliestReturn || '18:00'}`);
     set('ca-pax', d.pax);
+    if (d.personalCargo && d.personalCargo.length) { caCargo = d.personalCargo.map(r => Object.assign({}, r)); renderCaCargo(); }   // 隨行財物 → 隨身貨物（G150）
   }
   guideBanner(p, pf, state);
   initMasonry(p);

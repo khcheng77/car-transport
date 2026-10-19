@@ -34,8 +34,11 @@ const Guide = {
       && DB.bizOrigins.includes(v.origin) && DB.bizDests.includes(v.dest);
   },
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
-  /* 隨行財物（G134）：有隨行財物時再問「屬於隨身財物」（是／否）。
-     bulkCargo＝有財物且非隨身財物（需填貨物清單、走一般用車）；noCargoForShare＝沒有財物或只有隨身財物（可走差旅共乘）。 */
+  /* 行程（G150）：地點都在共乘清單時問「是否同意併車」——是＝差旅共乘、否＝一般用車（否時填不同意併車原因）；
+     隨行財物＝有時填「隨行財物」grid（財物名稱、長寬高、財物外型（浪費係數）、重量、數量、財物外包裝），
+     帶入差旅共乘的隨身貨物或一般用車的隨行貨物。原「屬於隨身財物」（G134）移除。 */
+  askCarpool(v) { return this.inBizList(v); },
+  carryItems(v) { return v.hasCargo === 'yes' ? (v.items || []) : []; },
   /* 收貨日巡迴車上限（G135）：收貨院區當天各班次（含車次覆寫）使用的巡迴車；
      貨物清單合計＝體積 Σ長×寬×高×件數（公升，不含浪費係數）、重量 Σ單件重×件數。 */
   // 貨物合計：有效地板面積（底面積×件數×類別浪費係數，cm²）與重量——與巡迴／院區財物轉運同一套不堆疊算法（G145）
@@ -57,8 +60,6 @@ const Guide = {
     const fits = !overItem && vs.some(x => checkLoad(items, x, { floor: 0, weight: 0 }).ok);
     return { fits, total, vehicle: big, overItem };
   },
-  bulkCargo(v) { return v.hasCargo === 'yes' && v.personalItems === 'no'; },
-  noCargoForShare(v) { return v.hasCargo === 'no' || (v.hasCargo === 'yes' && v.personalItems === 'yes'); },
 
   /* ---- 卡片出現規則（規格 5.2）---- */
   visibleCards(v) {
@@ -71,7 +72,6 @@ const Guide = {
       out.push('K4');
       if (this.days(v.startDate, v.endDate) != null) {
         out.push('K6');
-        if (this.bulkCargo(v)) out.push('K3');   // 非隨身財物才需貨物清單（G134）
       }
     }
     out.push('K7');
@@ -107,14 +107,11 @@ const Guide = {
     if (!this.inBizList(v)) {
       return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；地點不在共乘清單（${this.placeName(v.origin)} → ${this.placeName(v.dest)}），由調度人工確認資源後派車，可自駕。` };
     }
-    if (v.hasCargo !== 'no' && v.hasCargo !== 'yes') return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內。請選擇是否有隨行財物。` };
-    if (v.hasCargo === 'yes' && v.personalItems !== 'yes' && v.personalItems !== 'no') {
-      return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內且有隨行財物。請選擇隨行財物是否屬於隨身財物。` };
+    if (v.agreeCarpool !== 'yes' && v.agreeCarpool !== 'no') return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內。請選擇是否同意併車。` };
+    if (v.agreeCarpool === 'no') {
+      return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；不同意併車，由一般用車派車（調度人工確認資源），可自駕。` };
     }
-    if (this.bulkCargo(v)) {
-      return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；隨行財物不屬於隨身財物，出差共乘不處理貨物，改由一般用車派車，可自駕。` };
-    }
-    return { unit: 'C', rule: 'R4', days: n, reason: `用車期間 ${n} 天；往返共乘清單內的地點（${v.origin} → ${v.dest}）且${v.hasCargo === 'yes' ? '隨行財物屬於隨身財物' : '未攜帶財物'}，由系統自動併車共乘。` };
+    return { unit: 'C', rule: 'R4', days: n, reason: `用車期間 ${n} 天；往返共乘清單內的地點（${v.origin} → ${v.dest}）且同意併車，由系統自動併車共乘。` };
   },
 
   /* ---- 判定後仍缺少的欄位（全部填齊才可「前往並帶入」）---- */
@@ -140,12 +137,12 @@ const Guide = {
       if (needBack && !v.backTime) out.push(u === 'C' ? '回程上車時間' : '結束時間');
       if (!(Number.isInteger(+v.pax) && +v.pax >= 1)) out.push('人數（至少 1 人）');
       if (!v.hasCargo) out.push('隨行財物');
-      else if (v.hasCargo === 'yes' && !v.personalItems) out.push('屬於隨身財物');
+      else if (v.hasCargo === 'yes' && !(v.items || []).length) out.push('隨行財物明細（至少 1 項）');
+      if (this.askCarpool(v) && v.agreeCarpool === 'no' && !(v.carpoolRejectReason || '').trim()) out.push('不同意併車原因');
     }
     if (u === 'C' && v.tripType === 'oneway' && !this.canOneway(v)) out.push('行程型態（單程限目的地為交通轉運點）');
     if (u === 'D') {
       if ((v.origin === this.OTHER || v.dest === this.OTHER) && !(v.otherPlace || '').trim()) out.push('其他地點說明');
-      if (this.bulkCargo(v) && (!v.items || !v.items.length)) out.push('貨物清單（至少 1 項）');
       if (typeof v.selfDrive !== 'boolean') out.push('沒有司機時可否自己開車');
       if (v.startDate === v.endDate && v.departTime && v.backTime && v.backTime <= v.departTime) out.push('結束時間（須晚於出發時間）');
     }
@@ -188,20 +185,25 @@ const Guide = {
         const round = v.tripType !== 'oneway';
         data = Object.assign({}, who, { type: round ? 'round' : 'oneway', origin: v.origin, dest: v.dest,
           departDate: v.startDate, earliestPickup: v.departTime,
-          returnDate: round ? v.endDate : v.startDate, earliestReturn: round ? v.backTime : '', pax: +v.pax });
+          returnDate: round ? v.endDate : v.startDate, earliestReturn: round ? v.backTime : '', pax: +v.pax,
+          // 隨行財物 → 差旅共乘「隨身貨物」（該 grid 無類別欄，財物外型不帶入）
+          personalCargo: this.carryItems(v).map(it => ({ name: it.name, qty: it.qty, l: it.l, w: it.w, h: it.h, weight: it.weight, pack: it.pack || '' })) });
         labels.push('申請人', round ? '來回單' : '單程單', `${v.origin} → ${v.dest}`, `去程 ${v.startDate} ${v.departTime}`);
         if (round) labels.push(`回程 ${v.endDate} ${v.backTime}`);
         labels.push(`${v.pax} 人`);
+        if (data.personalCargo.length) labels.push(`隨身貨物 ${data.personalCargo.length} 項`);
         break;
       }
       case 'D': {
-        const place = `${this.placeName(v.origin)} → ${this.placeName(v.dest)}${(v.otherPlace || '').trim() ? '：' + v.otherPlace.trim() : ''}`;
+        const reject = this.askCarpool(v) && v.agreeCarpool === 'no' ? (v.carpoolRejectReason || '').trim() : '';
+        const place = `${this.placeName(v.origin)} → ${this.placeName(v.dest)}${(v.otherPlace || '').trim() ? '：' + v.otherPlace.trim() : ''}`
+          + (reject ? `；不同意併車原因：${reject}` : '');   // 一般用車沒有併車欄位，原因寫入行程說明
+        const carry = this.carryItems(v).map(it => Object.assign({ hazardous: false }, it));
         data = Object.assign({}, who, { startDate: v.startDate, startTime: v.departTime, endDate: v.endDate, endTime: v.backTime,
-          pax: +v.pax, selfDrive: v.selfDrive, purpose: place, items: this.bulkCargo(v) ? items : [] });
+          pax: +v.pax, selfDrive: v.selfDrive, purpose: place, items: carry });
         labels.push('申請人', `用車 ${v.startDate} ${v.departTime} ～ ${v.endDate} ${v.backTime}`, `${v.pax} 人`,
-          `自駕：${v.selfDrive ? '可以' : '不行'}`, '行程說明');
-        if (this.bulkCargo(v)) labels.push(`隨行貨物 ${items.length} 項`);
-        else if (v.hasCargo === 'yes') labels.push('隨行財物屬隨身財物（不帶貨物清單）');
+          `自駕：${v.selfDrive ? '可以' : '不行'}`, reject ? '行程說明（含不同意併車原因）' : '行程說明');
+        if (carry.length) labels.push(`隨行貨物 ${carry.length} 項`);
         break;
       }
     }
