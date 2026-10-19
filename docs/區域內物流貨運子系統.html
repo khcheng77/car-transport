@@ -365,7 +365,7 @@
   <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
   <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 11 種狀態（G122 定 10 種；「已刪除」為申請人撤單，G133／G147 起四模組皆可）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
   <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，或派車調度退回使用者修改（院區財物轉運、差旅共乘、一般用車，G147）；申請人修改後重送，重送需再經單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛異動實登登錄里程完畢</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已刪除</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人撤單（車輛出發日前一天（含）以前；已派車、已簽審者亦可，釋放車輛與司機，G147），結案</td></tr></table>
-  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中（暫存）→ 送出即自動媒合（本模組無二級審、無調度主管）：媒合成功＝待出車；未排入＝待調度（調度可於車次追蹤／異動改派班次，或無車退回）→ 已出車（收貨日期＋班次出發時間）→ 已回登。</div>
+  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中（暫存）→ 送出即自動媒合（本模組無二級審、無調度主管）：媒合成功＝待出車；未排入＝待調度（調度可於車次追蹤／異動改派班次，或無車退回）→ 已出車（收貨日期＋班次出發時間）→ 已回登。收貨日期前一天（含）以前申請人可撤單 → 已刪除（已排入班次者移出並重算到站，G147）；本模組無派車調度退回修改。</div>
   <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：已排班→待出車｜未排入·請改期→待調度｜已交貨（交貨確認）→已刪除，改以「已出車／已回登」表達。</div>
 </div>
 </div>
@@ -376,6 +376,7 @@
     <p><b>本版修訂摘要（依實作回填）</b></p>
     <p>
       ・<b>4.7 新增（2026-10-19，G147／G148 業管會議修訂）</b>——用語「物品」改「財物」；車輛出發日前一天（含）以前可撤單；新增三聯單單號（物籌處介接）；車輛使用實登更名車輛異動實登並新增加油公升數、司機工時、司機加班時數。<br>
+      ・<b>規格同步（2026-10-19，G149）</b>——3.2A 補三聯單單號列、收貨／送貨站點可由申請引導帶入；4.5 實登欄位表補加油公升數、司機工時、司機加班時數；狀態表新增「已刪除」、「退回修編」補調度退回；名詞解釋補撤單、三聯單單號、車輛異動實登。<br>
       ・<b>1.0 新增（2026-10-08，G145）</b>——與業務單位確認裝載判定<b>巡迴財物轉運、院區財物轉運、申請引導一致</b>，條件為「<b>財物不堆疊、能夠裝入的最大量</b>」：單件平放（只能水平轉向）＋有效地板面積（底面積×類別浪費係數）加總＋重量。取代 1.2／1.3 的 Level 1 體積加總、長寬比形狀懲罰與 Level 2 六方向旋轉。<br>
       ・<b>4.6 新增（2026-10-08，G142）</b>——司機任務單改為查詢頁（日期起迄、司機；grid＝細節、日期、出發時間、司機名稱）＋細節頁（原班次任務卡）；貨物欄位「工命號碼」更正為「<b>工令號碼</b>」。<br>
       ・<b>到站時間修正（2026-10-04，G131）</b>——預計到站時間改為「發車＋站間行駛＋<b>前面各站的停站時間</b>」（同班次各單上貨計收貨站、卸貨計送貨站），
@@ -978,6 +979,12 @@
     <dd>駕駛完成整趟路線、回到總部後，針對本趟路線中「使用者不準時」或「使用者沒出現」的申請單所做的回報，記錄到申請單層級；於車輛異動實登明細頁「本車次申請單」的異常回報欄操作。</dd>
     <dt>車次</dt>
     <dd>同一收貨日期、同一班次的出車，由一台車、一位司機跑完整條路線；車次內可含多張申請單。</dd>
+    <dt>撤單（G147）</dt>
+    <dd>申請人於收貨日期前一天（含）以前，在申請明細頁撤回申請（撤單原因必填）；已排入班次者自班次移出並重算到站時間，狀態「已刪除」結案。</dd>
+    <dt>三聯單單號（G147／G148）</dt>
+    <dd>與物籌處財物介接的單號（比照三聯單系統介接資料），可輸入也可下拉選擇；申請引導於收貨院區與送貨院區不同時必填並帶入（G149）。</dd>
+    <dt>車輛異動實登</dt>
+    <dd>原「車輛使用實登」（G147 更名）；本模組以車次為單位登打，見「車次實登」。實登另可填車輛加油公升數、司機工時、司機加班時數（選填）。</dd>
     <dt>車次實登</dt>
     <dd>以車次為單位登打實際使用的車輛、司機與起訖里程，實登人員由系統帶入；儲存後車次內每張申請單轉為「已回登」。</dd>
     <dt>貨品回報狀態</dt>

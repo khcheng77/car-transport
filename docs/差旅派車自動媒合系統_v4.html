@@ -123,7 +123,7 @@
   <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
   <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 11 種狀態（G122 定 10 種；「已刪除」為申請人撤單，G133／G147 起四模組皆可）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
   <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，或派車調度退回使用者修改（院區財物轉運、差旅共乘、一般用車，G147）；申請人修改後重送，重送需再經單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛異動實登登錄里程完畢</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已刪除</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人撤單（車輛出發日前一天（含）以前；已派車、已簽審者亦可，釋放車輛與司機，G147），結案</td></tr></table>
-  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中 → 待二級審 →（退回修編）→ 待調度 →（無車退回）→ 調度中（批次媒合產生派車單）→ 調度主管審 → 待出車 → 已出車（出發日期＋去程上車時間）→ 已回登。</div>
+  <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中 → 待二級審 →（退回修編）→ 待調度 →（無車退回）→ 調度中（批次媒合產生派車單）→ 調度主管審 → 待出車 → 已出車（出發日期＋去程上車時間）→ 已回登。（退回修編：單位主管退回，或派車調度退回使用者修改，重送需再經單位主管審，G147）；出發日前一天（含）以前申請人可撤單 → 已刪除（已派車、已簽審亦可，釋放車輛與司機，G147）。</div>
   <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：已送出→待二級審｜已駁回→退回修編｜已核准→待調度｜已媒合→調度中（併入派車單）／待出車（調度主管同意後）｜已上車→已出車｜已完成→已回登｜待人工協調、已作廢（逾期作廢）→已刪除（媒合不成者仍為待調度並註明原因，可手動指派或無車退回）。</div>
 </div>
 
@@ -158,6 +158,7 @@
         <li><b>派車調度（11 節）</b>：調度室可「退回修改」待調度申請單（含所在派車單尚未送審者），可勾選批次退回；申請人修改後重送需再經單位主管審核。</li>
         <li><b>04 節</b>：「三聯單表單編號」更名整併為「三聯單單號」（物籌處財物介接，可輸入也可下拉；仍於有載運品時顯示、必填）。</li>
         <li><b>車輛異動實登</b>：原「車輛使用實登」更名，新增加油公升數、司機工時、司機加班時數。用語「物品」一律改「財物」。</li>
+        <li><b>規格同步（G149）</b>：11 節派車單實登欄位補三欄；狀態表新增「已刪除」、「退回修編」補調度退回；名詞解釋補「撤單」。</li>
       </ul>
       <p style="margin-top:12px;padding-top:10px;border-top:1px dashed #d5d2c8"><b>2026-10-07 更新：送出／取消操作、派車調度畫面、司機任務單（G139–G141）</b></p>
       <ul>
@@ -696,6 +697,7 @@
     <h2 class="sec-title"><span class="num">14</span>名詞對照表</h2>
     <div class="glossary-grid">
       <div class="term"><div class="t-name">三聯單單號</div><div class="t-def">有載運品時必填，與物籌處財物介接（比照三聯單系統介接資料），可輸入也可下拉（G147／G148，原三聯單表單編號）</div></div>
+      <div class="term"><div class="t-name">撤單</div><div class="t-def">出發日期前一天（含）以前，申請人在申請明細頁取消申請（原因必填）；派車單已送審、簽審通過者亦可，撤回簽審並移出派車單，狀態「已刪除」（G147）</div></div>
       <div class="term"><div class="t-name">退回修改</div><div class="t-def">調度室把待調度申請單退回申請人修編，修改後重送需再經單位主管審核；可批次（G147）</div></div>
       <div class="term"><div class="t-name">來回單</div><div class="t-def">司機/車輛全程綁定同一批人，去程送達後待命，回程載回原班人馬，去回視為同一趟任務</div></div>
       <div class="term"><div class="t-name">單程單</div><div class="t-def">送往/來自交通轉運點的單程需求，出發前完成配對，4小時時間窗內可配對回程單程單，只能單程配單程</div></div>
