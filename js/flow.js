@@ -1,6 +1,6 @@
 /* ============================================================
    flow.js — 共用：申請單狀態（四模組對齊，G122）
-   A 巡迴財物轉運／B 院區財物轉運／C 差旅共乘／D 一般用車申請 一律只顯示下列狀態：
+   A 巡迴財物轉運／B 院區財物轉運／C 人員運輸／D 一般用車申請 一律只顯示下列狀態：
      申請中 → 待二級審 →（退回修編）→ 待調度 →（無車退回）→ 調度中 → 調度主管審 → 待出車 → 已出車 → 已回登
    沒有的關卡就跳過：A 不經二級審與調度主管（送出即排班：成功＝待出車、未排入＝待調度）；
    D 一單一派車單（派車判斷即產生並送調度主管審，無「調度中」，G126）。
@@ -28,7 +28,7 @@ const Flow = {
   now() { return this._now ? new Date(this._now) : new Date(); },
   todayStr() { const d = this.now(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; },
   /* 撤單（G147，四模組共用規則）：車輛出發日前一天（含）以前皆可撤單——系統日期早於出發日期；
-     已派車、已送簽審或簽審通過者亦可撤（模組自派車單移出、釋放車輛與司機）；已刪除、無車退回、已實登者不可撤。 */
+     已派車、已送簽審或簽審通過者亦可撤（模組自派車單移出、釋放車輛與駕駛）；已刪除、無車退回、已實登者不可撤。 */
   CANCEL_CLOSED: ['cancelled', 'noCar', 'noVehicle'],
   canCancel(rec, departDate) { return !this.CANCEL_CLOSED.includes(rec.status) && !rec.usage && (!departDate || this.todayStr() < departDate); },
   cancelError(rec, departDate) {

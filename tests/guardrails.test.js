@@ -300,7 +300,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.serviceDate, FIX_DATE);
   });
 
-  test('卡發車時間：已發車的班次不可媒合（司機出發後不知新單）', () => {
+  test('卡發車時間：已發車的班次不可媒合（駕駛出發後不知新單）', () => {
     const H = fresh(); fixNow(H, 10, 40); H.ModuleA.__fixed = true; // 現在 10:40
     // 10:00 班已於 10:00 發車（雖未抵收貨站）→ 不可再排 → 應排 11:00 的 R4
     const { result } = submit(H, { pickStation: 'D1-300', station: 'D1-600' });
@@ -342,10 +342,10 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     const sh = H.DB.regionalShifts[0];
     const def = H.ModuleA.shiftPlan('2026-09-10', sh.id);
     eq(def.vehicle, sh.vehicle, '預設車輛＝班次主檔車輛');
-    ok(def.driver, '預設應有司機');
+    ok(def.driver, '預設應有駕駛');
     H.ModuleA.setShiftPlan('2026-09-10', sh.id, { vehicle: 'V-L02', driver: 'DR2' });
     const ov = H.ModuleA.shiftPlan('2026-09-10', sh.id);
-    eq(ov.vehicle, 'V-L02', '覆寫車輛生效'); eq(ov.driver, 'DR2', '覆寫司機生效');
+    eq(ov.vehicle, 'V-L02', '覆寫車輛生效'); eq(ov.driver, 'DR2', '覆寫駕駛生效');
     // 覆寫僅限該日該班次，不影響其他日期
     eq(H.ModuleA.shiftPlan('2026-09-11', sh.id).vehicle, sh.vehicle, '他日不受影響');
   });
@@ -566,7 +566,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(g.dispatchVehicle && d.dispatchVehicle && rn.dispatchVehicle, '每張已載單應有車號');
   });
 
-  test('派車方向標記 dispatchDir：去程=south、回程=north（司機任務單依此分趟，不混疊時間軸）', () => {
+  test('派車方向標記 dispatchDir：去程=south、回程=north（駕駛任務單依此分趟，不混疊時間軸）', () => {
     const H = fresh();
     const g = H.ModuleB.createOrder({ applicant: 'A', site: 'D9', destSite: 'D3', direct: false, volume: 2000, category: 'BOX', weight: 300, handleMin: 30 });
     const d = H.ModuleB.createOrder({ applicant: 'B', site: 'D9', destSite: 'D2', direct: true, volume: 2000, category: 'BOX', weight: 300, handleMin: 20 });
@@ -873,7 +873,7 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
     ok(H.ModuleB.returnToRestMin('D1', 'small') < H.ModuleB.returnToRestMin('D6', 'small'), '屏東較接近休息會館');
   });
 
-  test('2.12 司機休息用餐：依純累積行駛觸發，計入在勤但不推進行駛時數線', () => {
+  test('2.12 駕駛休息用餐：依純累積行駛觸發，計入在勤但不推進行駛時數線', () => {
     const H = fresh();
     const c = H.ModuleB.newDutyClock();
     const base = c.dayElapsed;
@@ -1040,9 +1040,9 @@ group('模組 B 南北幹線（G30–G44 / T4-2〜T4-5）', () => {
 });
 
 /* =================================================================
-   模組 C：差旅共乘（G50–G63）
+   模組 C：人員運輸（G50–G63）
    ================================================================= */
-group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
+group('模組 C 人員運輸（G50–G63 / T5-2〜T5-6）', () => {
   const D = '2026-08-27', D2 = '2026-08-28';
   function round(H, over) {
     return H.ModuleC.createApp(Object.assign({
@@ -1063,7 +1063,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     ok(c.groupId !== a.groupId, 'c 回程日期不同不得併入（G54）');
   });
 
-  test('G59/G60/G61 資源檢核：保修車、請假司機被排除，跨群不重用車/司機', () => {
+  test('G59/G60/G61 資源檢核：保修車、請假駕駛被排除，跨群不重用車/駕駛', () => {
     const H = fresh();
     const a = round(H, { applicant: '業務部-周雅婷' });
     const b = round(H, { applicant: '研發部-吳承恩', returnDate: D, earliestReturn: '16:00' }); // 另一群
@@ -1072,10 +1072,10 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     ok(a.vehicle && b.vehicle, '兩群皆應派到車');
     ok(a.vehicle !== b.vehicle, '同日不同群不得重用同車（佔用表 dedup）');
     ok(a.vehicle !== 'V-B02', '保修中的 V-B02 不得指派（G60）');
-    ok(a.driver !== 'DR4' && b.driver !== 'DR4', '請假司機 DR4 不得指派（G61）');
+    ok(a.driver !== 'DR4' && b.driver !== 'DR4', '請假駕駛 DR4 不得指派（G61）');
   });
 
-  test('G59 當前位置：出發地對應據點須與車/司機 currentSite 相符', () => {
+  test('G59 當前位置：出發地對應據點須與車/駕駛 currentSite 相符', () => {
     const H = fresh();
     // 台中辦公室 出發 → 對應 D6，只有 V-B03/DR5 在 D6
     const a = H.ModuleC.createApp({ type: 'round', origin: '台中辦公室', dest: '桃園機場T1',
@@ -1114,7 +1114,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     ok(go.groupId !== back.groupId, '跨日回程不得與去程配成同一趟（修正①：同日檢核）');
   });
 
-  test('G51 修正②：回程目的地非原出發地不得配對（Q35：回司機出發地）', () => {
+  test('G51 修正②：回程目的地非原出發地不得配對（Q35：回駕駛出發地）', () => {
     const H = fresh();
     const go = H.ModuleC.createApp({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1',
       departDate: D, earliestPickup: '08:00', returnDate: D, earliestReturn: '', pax: 3,
@@ -1126,7 +1126,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
     [go, back].forEach(x => H.ModuleC.approve(x));
     H.ModuleC.runBatch(D);
     eq(go.status, 'matched', '去程應以純去程單程單媒合');
-    ok(go.groupId !== back.groupId, '回程目的地非原出發地不得配對（修正②：回司機出發地）');
+    ok(go.groupId !== back.groupId, '回程目的地非原出發地不得配對（修正②：回駕駛出發地）');
   });
 
   test('C-4 防禦：待調度單手動指派後（建立派車單）不被下一次批次重排', () => {
@@ -1208,7 +1208,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
       applicant: 'X', dept: 'D', ext: '1' });
     const cands = H.ModuleC.findResourceCandidates(a, 480, 600, null);
     ok(cands.length > 1, '應有多個候選');
-    eq(cands[0].deadhead, 0, '第一個候選空駛應為 0（車與司機都已在出發地）');
+    eq(cands[0].deadhead, 0, '第一個候選空駛應為 0（車與駕駛都已在出發地）');
     eq(cands[0].vehicle.id, 'V-B03', '空駛 0 的 V-B03 應排最前');
     for (let i = 1; i < cands.length; i++) ok(cands[i].deadhead >= cands[i - 1].deadhead, '候選須依空駛升冪');
   });
@@ -1227,7 +1227,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
   test('C-2 歸屬據點 homeSite 與當前位置分離；已回登後回歸屬據點', () => {
     const H = fresh();
     H.DB.vehicles.filter(v => v.pool === 'BIZ').forEach(v => ok(v.homeSite, '車輛應有 homeSite'));
-    H.DB.drivers.filter(d => d.pool === 'BIZ').forEach(d => ok(d.homeSite, '司機應有 homeSite'));
+    H.DB.drivers.filter(d => d.pool === 'BIZ').forEach(d => ok(d.homeSite, '駕駛應有 homeSite'));
     const a = round(H); H.ModuleC.approve(a); H.ModuleC.runBatch(D);
     eq(a.status, 'matched');
     const v = H.DB.vehicles.find(x => x.id === a.vehicle);
@@ -1319,7 +1319,7 @@ group('模組 C 差旅共乘（G50–G63 / T5-2〜T5-6）', () => {
 /* =================================================================
    模組 C：派車調度 · 派車單（G112–G115）
    ================================================================= */
-group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／退回申請單）', () => {
+group('人員運輸 · 派車單（G112–G115 批次產生／異動／送審／退回申請單）', () => {
   test('G128 手動指派：指定車種類型／車號／駕駛產生未送審派車單；可併入未送審派車單；留覆寫紀錄', () => {
     const H = fresh(), C = H.ModuleC;
     const mk = o => { const a = C.createApp(Object.assign({ type: 'oneway', origin: '台北總部', dest: '桃園機場', departDate: '2026-12-20', earliestPickup: '09:00',
@@ -1331,7 +1331,7 @@ group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／
     ok(/^DP\d{3}$/.test(o.id) && !o.submitted && o.manual, '產生未送審（暫存）派車單');
     eq(o.dispatcher, '調度室-王'); eq(a1.status, 'matched'); eq(a1.driver2, 'DR4'); eq(H.Flow.of(a1), 'dispatching', '調度中');
     ok(a1.overridden && a1.overrides.length === 1, '留人工覆寫紀錄');
-    ok(C.manualAssign(a2, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR5' }, 'x').error.includes('已由差旅共乘'), '同車同日不可重複');
+    ok(C.manualAssign(a2, { vehicleType: '商務廂車', vehicle: 'V-B01', driver1: 'DR5' }, 'x').error.includes('已由人員運輸'), '同車同日不可重複');
     eq(C.manualTargets('2026-12-20').map(x => x.id).join(), o.id);
     const seats = H.DB.vehicles.find(v => v.id === 'V-B01').seats;
     if (2 + 6 > seats) ok(C.manualMerge(a3, o, 'x').error.includes('座位'), '併入超出座位不可');
@@ -1389,7 +1389,7 @@ group('差旅共乘 · 派車單（G112–G115 批次產生／異動／送審／
     ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id, submitted: true })).error.includes('已送審'), '送審後不可異動車輛／駕駛');
     ok(C.updateDispatch(o, Object.assign({}, f, { submitted: false })).error.includes('已送審'), '送審後不可撤回送審');
     eq(a.sign.status, 'pending'); eq(Signoff_state(a), '送簽審');
-    C.signReject(a, '運輸主管', '請換司機'); ok(!o.submitted, '主管退回後回未送審');
+    C.signReject(a, '運輸主管', '請換駕駛'); ok(!o.submitted, '主管退回後回未送審');
     ok(C.updateDispatch(o, Object.assign({}, f, { driver1: other.id })).ok, '退回後可再異動');
     C.submitDispatch(o); C.signApprove(a, '運輸主管');
     H.Flow._now = new Date(2026, 7, 27, 9, 30);   // 到出發時間＝已出車
@@ -1484,16 +1484,16 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     eq(D.matrixOutcome('none', false), 'noVehicle');
   });
 
-  test('G76 有車有司機 → 派車＋派司機（勾自駕亦同，不可只派車）', () => {
+  test('G76 有車有駕駛 → 派車＋派駕駛（勾自駕亦同，不可只派車）', () => {
     const H = fresh(), D = H.ModuleD;
     const a = dApp(H, { selfDrive: true }); D.approve(a);
     eq(D.resourceState(a), 'withDriver');
-    ok(D.decide(a, { vehicle: 'V-B01' }).error, '有可派司機時不可省略司機');
+    ok(D.decide(a, { vehicle: 'V-B01' }).error, '有可派駕駛時不可省略駕駛');
     const r = D.dispatch(a, { vehicle: 'V-B01', driver: 'DR3' });
     ok(r.ok); eq(r.outcome, 'withDriver'); eq(a.status, 'dispatched'); eq(a.vehicle, 'V-B01'); eq(a.driver, 'DR3');
   });
 
-  test('G76 有車沒司機＋勾自駕 → 派車（使用者自行駕駛，不派司機）', () => {
+  test('G76 有車沒駕駛＋勾自駕 → 派車（使用者自行駕駛，不派駕駛）', () => {
     const H = fresh(), D = H.ModuleD;
     allDriversOnLeave(H);
     const a = dApp(H, { selfDrive: true }); D.approve(a);
@@ -1502,7 +1502,7 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     ok(r.ok); eq(r.outcome, 'selfDrive'); eq(a.status, 'dispatched'); eq(a.driver, null);
   });
 
-  test('G76 有車沒司機＋未勾自駕 → 無車可派，不進候補、不佔用資源', () => {
+  test('G76 有車沒駕駛＋未勾自駕 → 無車可派，不進候補、不佔用資源', () => {
     const H = fresh(), D = H.ModuleD;
     allDriversOnLeave(H);
     const a = dApp(H, { selfDrive: false }); D.approve(a);
@@ -1534,13 +1534,13 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     eq(D.vehicleBusy('V-B01', c), null, '12:00 起接續 09~12 不算重疊');
   });
 
-  test('G71/G72 共用池：差旅共乘已媒合的車/司機，一般用車同日不可用（以日為單位）', () => {
+  test('G71/G72 共用池：人員運輸已媒合的車/駕駛，一般用車同日不可用（以日為單位）', () => {
     const H = fresh(), C = H.ModuleC, D = H.ModuleD;
     const c = C.createApp({ type: 'oneway', origin: '台北總部', dest: '桃園機場T1', departDate: DAY, earliestPickup: '08:00',
       returnDate: DAY, earliestReturn: '', pax: 1, applicant: 'X', dept: 'D', ext: '1' });
     c.status = 'matched'; c.vehicle = 'V-B01'; c.driver = 'DR3';
     const a = dApp(H, { startTime: '18:00', endTime: '20:00' }); D.approve(a);
-    eq(D.vehicleBusy('V-B01', a).type, 'C', '同日即視為差旅共乘佔用（沿用 C 的日粒度）');
+    eq(D.vehicleBusy('V-B01', a).type, 'C', '同日即視為人員運輸佔用（沿用 C 的日粒度）');
     eq(D.driverBusy('DR3', a).type, 'C');
     const b = dApp(H, { startDate: '2026-10-02', endDate: '2026-10-02' }); D.approve(b);
     eq(D.vehicleBusy('V-B01', b), null, '隔日不受影響');
@@ -1548,7 +1548,7 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     eq(D.vehicleBusy('V-B01', a), null, '作廢的差旅單不佔用');
   });
 
-  test('G72 共用池反向：差旅共乘批次媒合不指派一般用車已派出的車/司機', () => {
+  test('G72 共用池反向：人員運輸批次媒合不指派一般用車已派出的車/駕駛', () => {
     const H = fresh(), C = H.ModuleC, D = H.ModuleD;
     const g = dApp(H, { startDate: '2026-08-28', endDate: '2026-08-28', startTime: '13:00', endTime: '15:00', pax: 1 });
     D.approve(g); D.dispatch(g, { vehicle: 'V-B01', driver: 'DR3' });
@@ -1629,12 +1629,12 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     eq(D.vehicleBusy('V-B03', b), null, '提前歸還後之後時段釋放');
   });
 
-  test('G70 獨立模組：一般用車與差旅共乘申請單分開、批次媒合不處理一般用車單', () => {
+  test('G70 獨立模組：一般用車與人員運輸申請單分開、批次媒合不處理一般用車單', () => {
     const H = fresh();
     const a = dApp(H); H.ModuleD.approve(a);
     eq(H.ModuleC.applications.length, 0);
     H.ModuleC.runBatch(DAY, 'test');
-    eq(a.status, 'approved', '差旅共乘批次不應改動一般用車單');
+    eq(a.status, 'approved', '人員運輸批次不應改動一般用車單');
     ok(/^GU\d{3}$/.test(a.id), '單號前綴 GU');
   });
 
@@ -1663,7 +1663,7 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     ok(D.dispatch(r, { vehicle: 'V-B03', driver: 'DR4' }).ok);
   });
 
-  test('G84 雙駕駛：同一筆紀錄掛 1～2 位司機，兩位皆佔用；超過 2 位或重複不可', () => {
+  test('G84 雙駕駛：同一筆紀錄掛 1～2 位駕駛，兩位皆佔用；超過 2 位或重複不可', () => {
     const H = fresh(), D = H.ModuleD;
     const a = dApp(H); D.approve(a);
     ok(D.decide(a, { vehicle: 'V-B01', drivers: ['DR3', 'DR4', 'DR5'] }).error, '最多 2 位');
@@ -1671,11 +1671,11 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     ok(D.dispatch(a, { vehicle: 'V-B01', drivers: ['DR3', 'DR4'] }).ok);
     eq(a.drivers.join(), 'DR3,DR4'); eq(a.segs.length, 1, '仍是同一筆派車紀錄');
     const b = dApp(H, { startTime: '11:00', endTime: '13:00' }); D.approve(b);
-    ok(D.driverBusy('DR3', b) && D.driverBusy('DR4', b), '兩位司機都被佔用');
+    ok(D.driverBusy('DR3', b) && D.driverBusy('DR4', b), '兩位駕駛都被佔用');
     eq([...D.dayOccupancy().drv.keys()].sort().join(), 'DR3|2026-10-01,DR4|2026-10-01');
   });
 
-  test('G84 補派司機：自駕出車且勾「願意等待駕駛媒合」才可補派（歸類換司機，保留區間歷史）', () => {
+  test('G84 補派駕駛：自駕出車且勾「願意等待駕駛媒合」才可補派（歸類換駕駛，保留區間歷史）', () => {
     const H = fresh(), D = H.ModuleD;
     allDriversOnLeave(H);
     const a = dApp(H, { selfDrive: true, waitDriver: true }); D.approve(a);
@@ -1686,7 +1686,7 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     H.DB.driverLeaves = H.DB.driverLeaves.filter(l => l.driver !== 'DR5');   // 出發前空出駕駛
     ok(D.reassign(b, { date: DAY, time: '13:00', drivers: ['DR5'] }).error.includes('願意等待'), '未勾願意等待不可補派');
     const r = D.reassign(a, { date: DAY, time: '09:00', drivers: ['DR5'], reason: '出發前空出駕駛' });
-    ok(r.ok); eq(r.kind, '補派司機'); eq(a.outcome, 'withDriver'); eq(a.driver, 'DR5');
+    ok(r.ok); eq(r.kind, '補派駕駛'); eq(a.outcome, 'withDriver'); eq(a.driver, 'DR5');
     eq(D.liveSegs(a).length, 1, '出發前補派：原自駕區間長度為 0 不佔用'); eq(a.segs.length, 2, '歷史仍保留');
   });
 
@@ -1730,18 +1730,18 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
     eq(D.mailsOf(a).map(m => m.kind).join(), '派車結果,換車', '異動以 Email 通知');
   });
 
-  test('G83 雙駕駛單獨換其一、加派第二位；換人不可指派已被佔用的司機', () => {
+  test('G83 雙駕駛單獨換其一、加派第二位；換人不可指派已被佔用的駕駛', () => {
     const H = fresh(), D = H.ModuleD;
     const a = dApp(H); D.approve(a); go(H, a, { vehicle: 'V-B01', driver: 'DR3' });
-    eq(D.reassign(a, { date: DAY, time: '10:00', drivers: ['DR3', 'DR4'] }).kind, '加派司機');
+    eq(D.reassign(a, { date: DAY, time: '10:00', drivers: ['DR3', 'DR4'] }).kind, '加派駕駛');
     const o = dApp(H, { startTime: '11:00', endTime: '12:00' }); D.approve(o); go(H, o, { vehicle: 'V-B03', driver: 'DR5' });
     ok(D.reassign(a, { date: DAY, time: '10:30', drivers: ['DR3', 'DR5'] }).error, 'DR5 已被佔用');
-    eq(D.reassign(a, { date: DAY, time: '10:30', drivers: ['DR3', 'DR6'] }).kind, '換司機');
+    eq(D.reassign(a, { date: DAY, time: '10:30', drivers: ['DR3', 'DR6'] }).kind, '換駕駛');
     eq(a.drivers.join(), 'DR3,DR6'); eq(a.segs.length, 3);
-    ok(D.reassign(a, { date: DAY, time: '11:00', drivers: [] }).error.includes('自駕'), '未勾自駕不可拿掉所有司機');
+    ok(D.reassign(a, { date: DAY, time: '11:00', drivers: [] }).error.includes('自駕'), '未勾自駕不可拿掉所有駕駛');
   });
 
-  test('G83 展延：僅調度、不需簽核；延長區段目前車輛／司機須可用（先佔先贏）', () => {
+  test('G83 展延：僅調度、不需簽核；延長區段目前車輛／駕駛須可用（先佔先贏）', () => {
     const H = fresh(), D = H.ModuleD;
     const a = dApp(H); D.approve(a); go(H, a, { vehicle: 'V-B01', driver: 'DR3' });
     const o = dApp(H, { startTime: '14:00', endTime: '16:00' }); D.approve(o); go(H, o, { vehicle: 'V-B01', driver: 'DR4' });
@@ -1924,7 +1924,7 @@ group('一般用車 · 替補自駕駕駛（G116）', () => {
     eq(r.filled.length, 0); ok(r.skipped[0].reason.includes('閒置'));
   });
 
-  test('其他申請單提前歸還使駕駛閒置 → 替補補派司機、立即生效並留紀錄', () => {
+  test('其他申請單提前歸還使駕駛閒置 → 替補補派駕駛、立即生效並留紀錄', () => {
     const { D, x2, s1, s2 } = setup();
     D.signApprove(s1, '運輸主管'); D.signApprove(s2, '運輸主管');
     ok(D.requestEarlyReturn(x2, { date: T, time: '09:30' }, x2.applicant).ok); ok(D.confirmEarlyReturn(x2, '調度室').ok);
@@ -1932,7 +1932,7 @@ group('一般用車 · 替補自駕駕駛（G116）', () => {
     eq(r.filled.length, 1); eq(r.filled[0].app.id, s1.id);
     eq(s1.outcome, 'withDriver');
     eq(s1.drivers[0], 'DR6', '閒置 DR5（D6）與 DR6（D10）→ 優先與車輛 V-B04（D10）同據點的 DR6'); eq(r.filled[0].sameSite, true);
-    eq(D.lastSeg(s1).kind, '補派司機'); eq(D.lastSeg(s1).from, D.span(s1).start, '尚未出車 → 自用車起始即補派');
+    eq(D.lastSeg(s1).kind, '補派駕駛'); eq(D.lastSeg(s1).from, D.span(s1).start, '尚未出車 → 自用車起始即補派');
     eq(s2.drivers.length, 0, '未勾願意等待者維持自駕');
     eq(D.backfillSelfDrive('調度室', { now }).filled.length, 0, '已替補者不重複');
   });
@@ -2093,7 +2093,7 @@ group('車輛異動實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     ok(Us.save(rec, Object.assign({}, U, { vehicleType: '商務廂車', vehicle: 'V-B01' }), '', opts).error.includes('資源池'), '不可登其他資源池的車');
     ok(Us.save(rec, Object.assign({}, U, { driver1: '' }), '', opts).error.includes('駕駛人1'));
     ok(Us.save(rec, Object.assign({}, U, { driver2: 'DR1' }), '', opts).error.includes('同一人'));
-    ok(Us.save(rec, Object.assign({}, U, { driver1: 'DR3' }), '', opts).error.includes('駕駛名單'), '商務池司機不可登物流單');
+    ok(Us.save(rec, Object.assign({}, U, { driver1: 'DR3' }), '', opts).error.includes('駕駛名單'), '商務池駕駛不可登物流單');
     ok(Us.save(rec, Object.assign({}, U, { endKm: '11999' }), '', opts).error.includes('不可小於'));
     ok(Us.save(rec, Object.assign({}, U, { startKm: '' }), '', opts).error.includes('起始里程'));
     ok(Us.save(rec, U, '調度室', opts).ok);
@@ -2111,7 +2111,7 @@ group('車輛異動實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     ok(Us.inScope(rec), '已實登者派車異動後仍列在清單'); eq(Us.diffs(rec, { vehicle: 'V-L01', drivers: ['DR1'] }).join('/'), '車號/駕駛人');
   });
 
-  test('A：排入班次即可實登（不經簽審），帶出班次車輛／司機；移出班次後不列入', () => {
+  test('A：排入班次即可實登（不經簽審），帶出班次車輛／駕駛；移出班次後不列入', () => {
     const H = fresh(), A = H.ModuleA;
     A.now = () => new Date(2026, 8, 2, 6, 0);
     const app = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
@@ -2122,7 +2122,7 @@ group('車輛異動實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     ok(!A.usageRecords().includes(other), '未排入班次不列入');
     ok(!A.usageSave(other, { vehicleType: '物流貨車', vehicle: 'V-L01', driver1: 'DR1', startKm: 1, endKm: 2 }).ok, '未排入班次不可實登');
     const pl = A.usagePlan(app);
-    ok(pl.vehicle && pl.drivers.length === 1, '派車規劃含班次車輛與司機');
+    ok(pl.vehicle && pl.drivers.length === 1, '派車規劃含班次車輛與駕駛');
     eq(A.usageRecords().map(a => a.id).join(), app.id);
     const v = H.DB.vehicles.find(x => x.id === pl.vehicle);
     ok(A.usageSave(app, { vehicleType: v.type, vehicle: v.id, driver1: pl.drivers[0], startKm: 100, endKm: 142 }, '調度室').ok);
@@ -2139,7 +2139,7 @@ group('車輛異動實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     const date = a1.serviceDate, sh = a1.assignedShift, plan = A.shiftPlan(date, sh);
     eq(A.tripApps(date, sh).length, 2);
     ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 50, endKm: 10 }, '周雅婷').error.includes('結束里程'));
-    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: '', startKm: 1, endKm: 2 }, '周雅婷').error.includes('司機'));
+    ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: '', startKm: 1, endKm: 2 }, '周雅婷').error.includes('駕駛'));
     ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 1, endKm: 2 }, '周雅婷', { dryRun: true }).ok);
     ok(!A.tripUsage(date, sh) && !a1.usage, 'dryRun 不寫入');
     ok(A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 1000, endKm: 1036.5 }, '周雅婷').ok);
@@ -2226,7 +2226,7 @@ group('車輛異動實登（A/B/C/D 派車生效後登打實際車輛／駕駛�
     eq(e.dispatchNo, no, '重新派車沿用同一派車單號'); eq(D.dispatchOrderOf(e).vehicle, 'V-B03');
   });
 
-  test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／司機', () => {
+  test('B：沿用派車單車輛／駕駛，駕駛人1 必填；C：沿用派車車輛／駕駛', () => {
     const H = fresh(), B = H.ModuleB, C = H.ModuleC;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 3000, category: 'BOX', weight: 300, handleMin: 30 });
     B.approve(o); B.dispatch('V-T02', 'greedy'); B.submitDispatch(B.dispatchOf(o)); B.signApprove(o, '運輸主管');
@@ -2397,7 +2397,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     again.hasCargo = 'yes'; again.items = [box]; again.agreeCarpool = 'no'; again.carpoolRejectReason = '攜帶樣品'; again.selfDrive = false;
     const r2 = G.hand(again, rec.id).rec;
     eq(r2, rec, '同一筆紀錄'); eq(G.records.length, 1); eq(rec.unit, 'D');
-    ok(rec.log[rec.log.length - 1].note.includes('差旅共乘申請 → 一般用車申請'), '歷程記錄改判');
+    ok(rec.log[rec.log.length - 1].note.includes('人員運輸申請 → 一般用車申請'), '歷程記錄改判');
     eq(rec.v.hasCargo, 'yes', '保存最新填寫內容');
     let err = ''; try { G.hand(base({ mode: 'goods' })); } catch (e) { err = e.message; }
     ok(err, '未判定不可帶入');
@@ -2504,9 +2504,9 @@ group('疑點修正 · 院區財物轉運急件直達（G131）', () => {
 });
 
 /* =================================================================
-   模組 C 差旅共乘（單程單）
+   模組 C 人員運輸（單程單）
    ================================================================= */
-group('疑點修正 · 差旅共乘（G131）', () => {
+group('疑點修正 · 人員運輸（G131）', () => {
   const D = '2026-10-20';
   const oneway = (H, o) => {
     const a = H.ModuleC.createApp(Object.assign({ applicant: 'X', dept: 'D', ext: '1', type: 'oneway',
@@ -2616,7 +2616,7 @@ group('副作用修正（G132）', () => {
   });
 });
 
-group('差旅共乘申請欄位改版（G133）', () => {
+group('人員運輸申請欄位改版（G133）', () => {
   const D = '2026-10-20';
   const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', applicantPhone: '0912-345-678', reason: '客戶拜訪',
     isOneway: false, route: ['台北總部', '新竹分公司', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2,
@@ -2723,7 +2723,7 @@ group('申請引導：行程是否同意併車、隨行財物 grid（G150）', (
     origin: '台北總部', dest: '高鐵台北站', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 2,
     hasCargo: 'no', agreeCarpool: '', carpoolRejectReason: '', selfDrive: null }, o);
   const box = { name: '樣品箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5, pack: '紙箱' };
-  test('地點都在共乘清單：未選是否同意併車 → 未判定；是 → 差旅共乘；否 → 一般用車', () => {
+  test('地點都在共乘清單：未選是否同意併車 → 未判定；是 → 人員運輸；否 → 一般用車', () => {
     const G = fresh().Guide;
     const r = G.route(p()); ok(!r.unit && r.hint.includes('同意併車'), r.hint);
     eq(G.route(p({ agreeCarpool: 'yes' })).unit, 'C');
@@ -2743,7 +2743,7 @@ group('申請引導：行程是否同意併車、隨行財物 grid（G150）', (
     const d = G.prefill(v); ok(d.data.purpose.includes('不同意併車原因：攜帶機密文件'), d.data.purpose);
     eq(H.ModuleD.validate(d.data).length, 0, H.ModuleD.validate(d.data).join('、'));
   });
-  test('隨行財物有：grid 至少 1 項；同意併車帶入差旅共乘隨身貨物，可建立申請單', () => {
+  test('隨行財物有：grid 至少 1 項；同意併車帶入人員運輸隨身貨物，可建立申請單', () => {
     const H = fresh(), G = H.Guide;
     const v = p({ hasCargo: 'yes', agreeCarpool: 'yes' });
     ok(G.missing(v).some(m => m.includes('隨行財物明細')), '需至少 1 項');
@@ -2752,7 +2752,7 @@ group('申請引導：行程是否同意併車、隨行財物 grid（G150）', (
     eq(JSON.stringify(c.data.personalCargo), JSON.stringify([{ name: '樣品箱', qty: 2, l: 40, w: 30, h: 30, weight: 5, pack: '紙箱' }]));
     ok(c.labels.includes('隨身貨物 1 項'), c.labels.join('、'));
     eq(H.ModuleC.cargoRowError(c.data.personalCargo), null);
-    eq(H.ModuleC.createApp(c.data).personalCargo.length, 1, '差旅共乘保存隨身貨物');
+    eq(H.ModuleC.createApp(c.data).personalCargo.length, 1, '人員運輸保存隨身貨物');
   });
   test('隨行財物有、不同意併車 → 一般用車隨行貨物（含財物外型係數類別、外包裝）', () => {
     const H = fresh(), G = H.Guide;
@@ -2823,7 +2823,7 @@ group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
   });
 });
 
-group('差旅共乘申請：報到地點與隨身貨物（G136）', () => {
+group('人員運輸申請：報到地點與隨身貨物（G136）', () => {
   const D = '2026-10-20';
   const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', reason: '客戶拜訪', isOneway: false,
     route: ['台北總部', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2, reportPlace: '台北總部大門' }, o);
@@ -2872,7 +2872,7 @@ group('巡迴財物轉運申請表單改版（G138）', () => {
   });
 });
 
-group('差旅共乘申請：是否送審（G139）', () => {
+group('人員運輸申請：是否送審（G139）', () => {
   const D = '2026-10-20';
   const form = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', reason: '客戶拜訪', isOneway: false,
     route: ['台北總部', '台中辦公室'], reportAt: `${D}T09:00`, endAt: `${D}T16:00`, passengers: 2, reportPlace: '大門' }, o);
@@ -3117,12 +3117,12 @@ group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位
       const e = bOrder(H, {}); const r2 = H.Flow.returnEditBatch(B, [e, b], '原因', 'x'); ok(!r2.ok); eq(e.status, 'approved', '批次失敗全不執行'); }
     ok(!H.Flow.returnEditBatch(B, [c], ' ', 'x').ok, '原因必填');
   });
-  test('差旅共乘與一般用車：待調度可退回修改', () => {
+  test('人員運輸與一般用車：待調度可退回修改', () => {
     const H = fresh(), D = H.ModuleD; H.Flow._now = NOW;
     const g = dApp(H, {}); D.approve(g); ok(D.returnToEdit(g, '請補行程說明', '調度室').ok); eq(g.status, 'rejected'); eq(g.returnedBy, 'dispatch');
     ok(!D.canReturnEdit(g), '已退回不可再退');
   });
-  test('車輛異動實登：加油公升數、司機工時、司機加班時數選填，需為 0 以上且加班不超過工時', () => {
+  test('車輛異動實登：加油公升數、駕駛工時、駕駛加班時數選填，需為 0 以上且加班不超過工時', () => {
     const H = fresh(), U = H.Usage;
     const rec = { sign: { status: 'approved' } }, base = { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: 'DR1', startKm: 100, endKm: 150 };
     ok(/加油/.test(U.save(rec, Object.assign({ fuelLiters: -1 }, base), 'x', { pool: 'LOGI' }).error));
@@ -3130,6 +3130,32 @@ group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位
     const r = U.save(rec, Object.assign({ fuelLiters: '40.5', workHours: 9, otHours: 1 }, base), 'x', { pool: 'LOGI' });
     ok(r.ok); eq(rec.usage.fuelLiters, 40.5); eq(rec.usage.workHours, 9); eq(rec.usage.otHours, 1);
     ok(U.save(rec, base, 'x', { pool: 'LOGI' }).ok, '三欄皆可不填'); eq(rec.usage.fuelLiters, null);
+  });
+  test('車輛異動實登（G151）：油品、單價、總金額、住宿天數、住宿費、停車費、駕駛加班費', () => {
+    const H = fresh(), U = H.Usage;
+    const rec = { sign: { status: 'approved' } }, base = { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: 'DR1', startKm: 100, endKm: 150 };
+    ok(/油品/.test(U.save(rec, Object.assign({ fuelType: '柴油' }, base), 'x', { pool: 'LOGI' }).error), '油品須為清單內');
+    ok(/單價/.test(U.save(rec, Object.assign({ fuelPrice: -3 }, base), 'x', { pool: 'LOGI' }).error));
+    ok(/住宿天數/.test(U.save(rec, Object.assign({ lodgingDays: 1.5 }, base), 'x', { pool: 'LOGI' }).error), '住宿天數為整數');
+    ok(/停車費/.test(U.save(rec, Object.assign({ parkingFee: 'abc' }, base), 'x', { pool: 'LOGI' }).error));
+    const r = U.save(rec, Object.assign({ fuelType: '超級柴油', fuelLiters: '40.5', fuelPrice: '29.9', fuelAmount: 1, lodgingDays: '2', lodgingFee: 3200,
+      parkingFee: 150, otPay: 800 }, base), 'x', { pool: 'LOGI' });
+    ok(r.ok, r.error);
+    eq(rec.usage.fuelType, '超級柴油'); eq(rec.usage.fuelAmount, 1211, '總金額＝40.5×29.9 四捨五入，不採用輸入值');
+    eq(rec.usage.lodgingDays, 2); eq(rec.usage.lodgingFee, 3200); eq(rec.usage.parkingFee, 150); eq(rec.usage.otPay, 800);
+    eq(rec.usageLog[rec.usageLog.length - 1].snapshot.otPay, 800, '實登歷程同列');
+    ok(U.save(rec, Object.assign({ fuelPrice: 30 }, base), 'x', { pool: 'LOGI' }).ok, '皆可不填');
+    eq(rec.usage.fuelAmount, null, '缺加油公升數不計算總金額'); eq(rec.usage.fuelType, null);
+  });
+  test('巡迴財物轉運車次實登同樣保存新欄位（G151）', () => {
+    const H = fresh(), A = H.ModuleA;
+    A.now = () => new Date(2026, 8, 2, 6, 0);
+    const a = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
+      items: [{ name: '箱', l: 40, w: 40, h: 40, qty: 1, category: 'BOX', weight: 5 }], recvMode: 'asap', handleMin: 15 }).app;
+    const date = a.serviceDate, sh = a.assignedShift, plan = A.shiftPlan(date, sh);
+    const res = A.tripUsageSave(date, sh, { vehicle: plan.vehicle, driver: plan.driver, startKm: 1, endKm: 9,
+      fuelType: '95 無鉛汽油', fuelLiters: 10, fuelPrice: 31, parkingFee: 60, otPay: 500 }, 'x');
+    ok(res.ok, res.error); eq(res.usage.fuelAmount, 310); eq(res.usage.parkingFee, 60); eq(a.usage.otPay, 500, '車次內申請單同步');
   });
   test('押車人僅註記、三聯單單號四模組皆保存', () => {
     const H = fresh(); H.Flow._now = NOW;

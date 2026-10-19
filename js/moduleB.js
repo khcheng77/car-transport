@@ -98,7 +98,7 @@ const ModuleB = {
     this.recompute(o);
     return o;
   },
-  /* 暫存（申請中）：「是否送審」選否時儲存為申請中；退回修編的單選否也回到申請中（比照差旅共乘 G139） */
+  /* 暫存（申請中）：「是否送審」選否時儲存為申請中；退回修編的單選否也回到申請中（比照人員運輸 G139） */
   saveDraft(o, data) {
     if (!['draft', 'rejected'].includes(o.status)) throw new Error('僅「申請中」或「退回修編」的申請可暫存修改');
     if (o.status === 'rejected') {

@@ -2,8 +2,8 @@
    moduleD.js — 模組 D：一般用車（第四模組，含「例行用車」類別）
    PLAN.md Phase 7 / Guardrails G70–G89；規格 docs/一般用車模組_v2.html
    申請 → 主管簽核 → 調度人工確認資源 → 派車結果 → Email 通知
-   調度確認後的異動改用四種生命週期操作：換車／換司機（含補派、雙駕駛）／展延／提前歸還（G83）
-   與差旅共乘（模組 C）共用商務車輛/司機資源池（暫定 G71），先佔先贏（G72）
+   調度確認後的異動改用四種生命週期操作：換車／換駕駛（含補派、雙駕駛）／展延／提前歸還（G83）
+   與人員運輸（模組 C）共用商務車輛/駕駛資源池（暫定 G71），先佔先贏（G72）
    ============================================================ */
 
 const ModuleD = {
@@ -13,7 +13,7 @@ const ModuleD = {
   approveSeq: 1,
 
   CATEGORY: { general: '一般用車', routine: '例行用車' },
-  MAX_DRIVERS: 2,   // 雙駕駛：同一筆派車紀錄掛 1～2 位司機（G84）
+  MAX_DRIVERS: 2,   // 雙駕駛：同一筆派車紀錄掛 1～2 位駕駛（G84）
 
   /* ---- 時間工具：以 UTC 純算術換算，避免時區/日光節約影響比較 ---- */
   absMin(date, time) {
@@ -29,7 +29,7 @@ const ModuleD = {
   span(app) {
     return { start: this.absMin(app.startDate, app.startTime), end: this.absMin(app.endDate, app.endTime) };
   },
-  /* 時段 [start, end) 涵蓋的日期，供與差旅共乘「以日為單位」的佔用比對 */
+  /* 時段 [start, end) 涵蓋的日期，供與人員運輸「以日為單位」的佔用比對 */
   datesBetween(start, end) {
     const out = [];
     const day = m => Math.floor(m / 1440);
@@ -75,7 +75,7 @@ const ModuleD = {
       endDate: data.endDate, endTime: data.endTime,          // 用車迄
       pax: +data.pax,                                        // 人數 ≥ 1（人貨不互斥 G75）
       selfDrive: data.selfDrive,                             // 是否自駕（不做資格檢核 G78）
-      waitDriver: data.selfDrive === true && !!data.waitDriver, // 願意等待駕駛媒合（須同時勾自駕；補派司機前提 G84）
+      waitDriver: data.selfDrive === true && !!data.waitDriver, // 願意等待駕駛媒合（須同時勾自駕；補派駕駛前提 G84）
       holidayOT: !!data.holidayOT,                           // 假日加班需求（僅提示 G87）
       nightOT: !!data.nightOT,                               // 夜間加班需求（僅提示 G87）
       permits: [...new Set(data.permits || [])],             // 所需管制區通行證（交集篩選 G85）
@@ -127,7 +127,7 @@ const ModuleD = {
   /* ---- 調度確認前的撤回（G79）：可撤回修改拿回草稿（重送須重新簽核），或整單撤回 ----
      調度完成確認＝做出任一最終判斷（含無車可派）；確認後不再撤回，改用生命週期操作（G83）。 */
   isConfirmed(app) { return app.dispatchedAt != null; },
-  /* 撤單（G147）：用車起日前一天（含）以前可撤；已派車（含已送審、已簽審通過）者撤回簽審、清除指派區間，釋放車輛與司機 */
+  /* 撤單（G147）：用車起日前一天（含）以前可撤；已派車（含已送審、已簽審通過）者撤回簽審、清除指派區間，釋放車輛與駕駛 */
   departDateOf(app) { return app.startDate || ''; },
   canCancel(app) { return Flow.canCancel(app, this.departDateOf(app)); },
   cancelApp(app, reason, by) {
@@ -178,7 +178,7 @@ const ModuleD = {
     app.reviewNote = ''; app.returnedBy = null;
     return app;
   },
-  /* ---- 指派區間（G88）：每次換車／換司機新增一段，不覆蓋；瞬間切換、不設重疊 ---- */
+  /* ---- 指派區間（G88）：每次換車／換駕駛新增一段，不覆蓋；瞬間切換、不設重疊 ---- */
   segEnd(app, i) { const nx = app.segs[i + 1]; return nx ? nx.from : this.span(app).end; },
   liveSegs(app) {   // 實際生效（長度 > 0）的區間
     return app.segs.map((s, i) => Object.assign({}, s, { to: this.segEnd(app, i) })).filter(s => s.to > s.from);
@@ -192,7 +192,7 @@ const ModuleD = {
   },
 
   /* ---- 共用資源池佔用判斷（G71/G72）----
-     與差旅共乘：以「日」為單位，沿用模組 C 自己排班時的佔用口徑（matched/boarded/completed 的整趟日期）；
+     與人員運輸：以「日」為單位，沿用模組 C 自己排班時的佔用口徑（matched/boarded/completed 的整趟日期）；
      一般用車彼此：依指派區間的實際時段重疊判斷（雙駕駛兩位都算）。保修（G60）與請假（G61）同樣適用。 */
   C_HOLD: ['matched'],
   _cApps() { return (typeof ModuleC !== 'undefined') ? ModuleC.applications : []; },
@@ -213,7 +213,7 @@ const ModuleD = {
     if (m) return { type: 'maint', text: `保修 ${m.from}~${m.to}（${m.reason}）` };
     const c = this._cApps().find(x => this.C_HOLD.includes(x.status) && x.vehicle === vId
       && ModuleC.tripDates(x).some(dt => dates.includes(dt)));
-    if (c) return { type: 'C', ref: c.id, text: `差旅共乘 ${c.id} 佔用（${c.departDate}）` };
+    if (c) return { type: 'C', ref: c.id, text: `人員運輸 ${c.id} 佔用（${c.departDate}）` };
     const h = this._dHolder('vehicle', vId, rng, exceptId);
     if (h) return { type: 'D', ref: h.app.id, text: `一般用車 ${h.app.id} 佔用（${this.fmtAbs(h.seg.from)}~${this.fmtAbs(h.seg.to)}）` };
     return null;
@@ -225,7 +225,7 @@ const ModuleD = {
     if (lv) return { type: 'leave', text: `請假 ${lv.date} ${lv.from}~${lv.to}` };
     const c = this._cApps().find(x => this.C_HOLD.includes(x.status) && ModuleC.driversOf(x).includes(dId)
       && ModuleC.tripDates(x).some(dt => dates.includes(dt)));
-    if (c) return { type: 'C', ref: c.id, text: `差旅共乘 ${c.id} 任務（${c.departDate}）` };
+    if (c) return { type: 'C', ref: c.id, text: `人員運輸 ${c.id} 任務（${c.departDate}）` };
     const h = this._dHolder('driver', dId, rng, exceptId);
     if (h) return { type: 'D', ref: h.app.id, text: `一般用車 ${h.app.id} 任務（${this.fmtAbs(h.seg.from)}~${this.fmtAbs(h.seg.to)}）` };
     return null;
@@ -238,7 +238,7 @@ const ModuleD = {
   permitName(code) { const p = DB.permitTypes.find(x => x.code === code); return p ? p.name : code; },
 
   /* 候選資源（商務池）：缺通行證的車完全不列入（excluded 僅供說明）；座位不足列為不可用（車型由調度人工判斷 G77）
-     rng 預設為整段用車時段；換車／換司機時傳入「生效時點～結束」。 */
+     rng 預設為整段用車時段；換車／換駕駛時傳入「生效時點～結束」。 */
   resources(app, rng) {
     rng = rng || this.span(app);
     const biz = DB.vehicles.filter(v => v.pool === 'BIZ');
@@ -250,7 +250,7 @@ const ModuleD = {
     return { vehicles, drivers, excluded };
   },
 
-  /* 車輛狀態（矩陣列 G76）：withDriver＝有車有司機｜vehicleOnly＝有車沒司機｜none＝沒車（含通行證交集為空 G85）*/
+  /* 車輛狀態（矩陣列 G76）：withDriver＝有車有駕駛｜vehicleOnly＝有車沒駕駛｜none＝沒車（含通行證交集為空 G85）*/
   resourceState(app) {
     const r = this.resources(app);
     const freeV = r.vehicles.filter(x => !x.busy).length, freeD = r.drivers.filter(x => !x.busy).length;
@@ -278,13 +278,13 @@ const ModuleD = {
   },
 
   _checkDrivers(drivers, rng, exceptId) {
-    if (new Set(drivers).size !== drivers.length) return '同一位司機不可重複指派';
-    if (drivers.length > this.MAX_DRIVERS) return `同一筆派車最多 ${this.MAX_DRIVERS} 位司機（雙駕駛）`;
+    if (new Set(drivers).size !== drivers.length) return '同一位駕駛不可重複指派';
+    if (drivers.length > this.MAX_DRIVERS) return `同一筆派車最多 ${this.MAX_DRIVERS} 位駕駛（雙駕駛）`;
     for (const id of drivers) {
       const d = DB.drivers.find(x => x.id === id && x.pool === 'BIZ');
-      if (!d) return `司機 ${id} 不在商務資源池`;
+      if (!d) return `駕駛 ${id} 不在商務資源池`;
       const b = this.driverBusyIn(id, rng, exceptId);
-      if (b) return `司機 ${d.name} 不可用：${b.text}（先佔先贏 G72）`;
+      if (b) return `駕駛 ${d.name} 不可用：${b.text}（先佔先贏 G72）`;
     }
     return null;
   },
@@ -313,7 +313,7 @@ const ModuleD = {
       if (de) return { error: de };
       return { outcome: 'withDriver', vehicle: sel.vehicle, drivers };
     }
-    if (this.resources(app).drivers.some(x => !x.busy)) return { error: '尚有可派司機：依判斷矩陣「有車有司機」應派車＋派司機（G76）' };
+    if (this.resources(app).drivers.some(x => !x.busy)) return { error: '尚有可派駕駛：依判斷矩陣「有車有駕駛」應派車＋派駕駛（G76）' };
     const outcome = this.matrixOutcome('vehicleOnly', app.selfDrive);
     return outcome === 'selfDrive' ? { outcome, vehicle: sel.vehicle, drivers: [] } : { outcome };
   },
@@ -349,10 +349,10 @@ const ModuleD = {
   signSummary(app) {
     if (app.outcome === 'noVehicle') return '判定無車可派';
     const dn = id => (DB.drivers.find(d => d.id === id) || {}).name || id;
-    return `${this.OUTCOME_TEXT[app.outcome]}｜車 ${app.vehicle}｜${app.drivers.length ? '司機 ' + app.drivers.map(dn).join('＋') : '使用者自駕'}`;
+    return `${this.OUTCOME_TEXT[app.outcome]}｜車 ${app.vehicle}｜${app.drivers.length ? '駕駛 ' + app.drivers.map(dn).join('＋') : '使用者自駕'}`;
   },
   /* ---- 派車單（G126）：一般用車一單一派車單。派車判斷（無車退回除外）時系統自動給派車單號（GD###），
-     派遣人／派遣時間＝調度人員／調度確認時間；車種類型、車號、駕駛人1／2 隨申請單目前指派（換車／換司機後同步）。
+     派遣人／派遣時間＝調度人員／調度確認時間；車種類型、車號、駕駛人1／2 隨申請單目前指派（換車／換駕駛後同步）。
      運輸主管退回後重新派車沿用同一派車單號。 ---- */
   dispatches: [], dispatchSeq: 1,   // { id, apps:[appId], usage, usageLog }（其餘欄位由 _refreshDispatch 自申請單帶入）
   _ensureDispatch(app) {
@@ -410,13 +410,13 @@ const ModuleD = {
   },
 
   /* ================= 調度確認後的生命週期操作（G83，兩類別通用）=================
-     換車／換司機／展延：僅調度在系統操作、立即生效、不需簽核（使用者以電話等系統外管道聯繫）；
+     換車／換駕駛／展延：僅調度在系統操作、立即生效、不需簽核（使用者以電話等系統外管道聯繫）；
      提前歸還：唯一由使用者在系統發起，須調度確認後才生效。 */
 
-  /* 換車／換司機（含補派司機、加派第二位、雙駕駛單獨更換其一 G84/G88）
+  /* 換車／換駕駛（含補派駕駛、加派第二位、雙駕駛單獨更換其一 G84/G88）
      o：{ date, time（生效時點）, vehicle?, drivers?, reason, by }；生效時點起新資源、前一刻止舊資源 */
   reassign(app, o) {
-    const ng = this._live(app, '換車／換司機'); if (ng) return { ok: false, error: ng };
+    const ng = this._live(app, '換車／換駕駛'); if (ng) return { ok: false, error: ng };
     const last = this.lastSeg(app), sp = this.span(app);
     if (!o.date || !o.time) return { ok: false, error: '請填寫生效日期與時間' };
     const eff = this.absMin(o.date, o.time);
@@ -426,10 +426,10 @@ const ModuleD = {
     const vehicle = o.vehicle || last.vehicle;
     const drivers = o.drivers ? o.drivers.filter(Boolean) : last.drivers.slice();
     const sameDrivers = drivers.length === last.drivers.length && drivers.every(d => last.drivers.includes(d));
-    if (vehicle === last.vehicle && sameDrivers) return { ok: false, error: '車輛與司機皆未變更' };
-    if (!drivers.length && !app.selfDrive) return { ok: false, error: '使用者未勾選自駕，至少需 1 位司機' };
+    if (vehicle === last.vehicle && sameDrivers) return { ok: false, error: '車輛與駕駛皆未變更' };
+    if (!drivers.length && !app.selfDrive) return { ok: false, error: '使用者未勾選自駕，至少需 1 位駕駛' };
     const supplement = last.drivers.length === 0 && drivers.length > 0;
-    if (supplement && !app.waitDriver) return { ok: false, error: '使用者未勾選「願意等待駕駛媒合」，不可補派司機（G84）' };
+    if (supplement && !app.waitDriver) return { ok: false, error: '使用者未勾選「願意等待駕駛媒合」，不可補派駕駛（G84）' };
     const rng = { start: eff, end: sp.end };
     if (vehicle !== last.vehicle) {
       const ve = this._checkVehicle(app, vehicle, rng);
@@ -439,8 +439,8 @@ const ModuleD = {
     if (de) return { ok: false, error: de };
     const kinds = [];
     if (vehicle !== last.vehicle) kinds.push('換車');
-    if (supplement) kinds.push('補派司機');
-    else if (!sameDrivers) kinds.push(drivers.length > last.drivers.length && last.drivers.every(d => drivers.includes(d)) ? '加派司機' : '換司機');
+    if (supplement) kinds.push('補派駕駛');
+    else if (!sameDrivers) kinds.push(drivers.length > last.drivers.length && last.drivers.every(d => drivers.includes(d)) ? '加派駕駛' : '換駕駛');
     const kind = kinds.join('＋');
     const by = o.by || '調度室';
     app.segs.push({ from: eff, vehicle, drivers, kind, reason: o.reason || '', by, at: new Date() });
@@ -452,9 +452,9 @@ const ModuleD = {
     return { ok: true, kind };
   },
 
-  /* 替補自駕駕駛（G116）：其他申請單撤銷等原因使駕駛閒置時，替「被迫自駕」的已派車單補派司機。
-     對象：已派車且派車結果已生效、目前區間無司機（使用者自駕）且勾選「願意等待駕駛媒合」者（G84）；
-     依調度順序（例行用車優先、再依用車起始）逐單找整段剩餘時間皆空閒的司機，以補派司機（reassign）立即生效。
+  /* 替補自駕駕駛（G116）：其他申請單撤銷等原因使駕駛閒置時，替「被迫自駕」的已派車單補派駕駛。
+     對象：已派車且派車結果已生效、目前區間無駕駛（使用者自駕）且勾選「願意等待駕駛媒合」者（G84）；
+     依調度順序（例行用車優先、再依用車起始）逐單找整段剩餘時間皆空閒的駕駛，以補派駕駛（reassign）立即生效。
      生效時點＝max（目前自駕區間起點, 現在）；已結束者略過。opts.now 供測試指定現在時刻。
      駕駛挑選：優先與該車同一據點（駕駛當前位置＝車輛當前位置，G59），沒有才找其他據點的閒置駕駛。 */
   selfDriveBackfillTargets() {
@@ -487,7 +487,7 @@ const ModuleD = {
     return { filled, skipped };
   },
 
-  /* 展延（G83）：延後用車結束時間；僅調度、不需簽核；延長區段內目前的車輛／司機須仍可用（先佔先贏） */
+  /* 展延（G83）：延後用車結束時間；僅調度、不需簽核；延長區段內目前的車輛／駕駛須仍可用（先佔先贏） */
   extend(app, o) {
     const ng = this._live(app, '展延'); if (ng) return { ok: false, error: ng };
     if (!o.date || !o.time) return { ok: false, error: '請填寫新的用車結束日期與時間' };
@@ -498,7 +498,7 @@ const ModuleD = {
     if (vb) return { ok: false, error: `展延期間車輛 ${last.vehicle} 不可用：${vb.text}；請先換車再展延` };
     for (const d of last.drivers) {
       const b = this.driverBusyIn(d, rng, app.id);
-      if (b) return { ok: false, error: `展延期間司機 ${d} 不可用：${b.text}；請先換司機再展延` };
+      if (b) return { ok: false, error: `展延期間駕駛 ${d} 不可用：${b.text}；請先換駕駛再展延` };
     }
     const by = o.by || '調度室', old = this.fmtAbs(sp.end);
     app.endDate = o.date; app.endTime = o.time;
@@ -548,7 +548,7 @@ const ModuleD = {
   departAt(app) { return Flow.at(app.startDate, app.startTime); },
 
 
-  /* ---- 加班系統介接（G87）：即時查詢司機剩餘可加班工時（雛形以 DB.overtimeRemaining 模擬）。
+  /* ---- 加班系統介接（G87）：即時查詢駕駛剩餘可加班工時（雛形以 DB.overtimeRemaining 模擬）。
      僅供調度參考，系統不計算工時、不據以擋派車。 */
   queryOvertime(dId) {
     /* TODO: 串接加班系統 API（即時查詢，非定期快照）；逾時／異常處理待與加班系統負責單位確認 */
@@ -558,7 +558,7 @@ const ModuleD = {
 
   /* 寄信服務（雛形：空 function，實際寄信待實作 G80）——沿用既有 email 通知路由
      （核准者關係表基礎設施），通知申請人派車結果與生命週期異動；雛形僅留存寄送紀錄供畫面顯示。 */
-  OUTCOME_TEXT: { withDriver: '派車＋派司機', selfDrive: '派車（使用者自行駕駛）', noVehicle: '無車可派' },
+  OUTCOME_TEXT: { withDriver: '派車＋派駕駛', selfDrive: '派車（使用者自行駕駛）', noVehicle: '無車可派' },
   sendResultMail(app) {
     return this.sendMail(app, '派車結果', this.OUTCOME_TEXT[app.outcome], app.outcome);
   },
@@ -571,7 +571,7 @@ const ModuleD = {
   },
   mailsOf(app) { return this.mailLog.filter(m => m.app === app.id); },
 
-  /* 供差旅共乘批次媒合／人工改派讀取：一般用車目前佔用（以日為單位，依指派區間），鍵為 "id|yyyy-mm-dd" */
+  /* 供人員運輸批次媒合／人工改派讀取：一般用車目前佔用（以日為單位，依指派區間），鍵為 "id|yyyy-mm-dd" */
   dayOccupancy() {
     const veh = new Map(), drv = new Map();
     this.applications.filter(a => a.status === 'dispatched').forEach(a => this.liveSegs(a).forEach(s =>

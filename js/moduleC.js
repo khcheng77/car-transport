@@ -206,9 +206,9 @@ const ModuleC = {
     return t != null ? t : null;
   },
 
-  /* 可用車＋司機候選清單（商務池），依「空駛時間總和」升冪排序（C-1）
+  /* 可用車＋駕駛候選清單（商務池），依「空駛時間總和」升冪排序（C-1）
      車次數為次要排序鍵：由呼叫端取第一個可行者即達成「空駛最小優先」。
-     occupied：{ veh:Set, drv:Set }，元素為 "id|yyyy-mm-dd"，避免同一車/司機同日重複指派 */
+     occupied：{ veh:Set, drv:Set }，元素為 "id|yyyy-mm-dd"，避免同一車/駕駛同日重複指派 */
   findResourceCandidates(app, estStart, estEnd, occupied) {
     const dates = this.tripDates(app);
     // G59：以「當前位置」而非「歸屬據點」判斷可用性
@@ -247,7 +247,7 @@ const ModuleC = {
     return (vehicle && DB.bizSiteOrigin[vehicle.homeSite]) || app.origin;
   },
 
-  /* 將指派結果登記進 occupied（整趟日期範圍都佔用）；dId 可為單一司機或陣列（駕駛人1／2）*/
+  /* 將指派結果登記進 occupied（整趟日期範圍都佔用）；dId 可為單一駕駛或陣列（駕駛人1／2）*/
   occupy(occupied, app, vId, dId) {
     const ds = [].concat(dId || []).filter(Boolean);
     this.tripDates(app).forEach(dt => { occupied.veh.add(vId + '|' + dt); ds.forEach(d => occupied.drv.add(d + '|' + dt)); });
@@ -285,22 +285,22 @@ const ModuleC = {
     const targets = this.applications.filter(a => a.status === 'approved' && !a.overridden && inRange(a));
     trace.push(`批次 ${batch.id}｜範圍 ${days ? `${fromDate} 起 ${days} 天內` : `出發日期 ${fromDate}`}、待處理單 ${targets.length} 筆`);
 
-    // 資源佔用表：先納入既有已媒合任務（含前次批次），避免跨批次/跨群組重複指派同一車/司機
+    // 資源佔用表：先納入既有已媒合任務（含前次批次），避免跨批次/跨群組重複指派同一車/駕駛
     const occupied = { veh: new Set(), drv: new Set() };
     this.applications
       .filter(a => a.status === 'matched' && a.vehicle && a.driver)
       .forEach(a => this.occupy(occupied, a, a.vehicle, this.driversOf(a)));
-    // 共用資源池（G71/G72 先佔先贏）：一般用車（D）已派出的車輛/司機，於其用車日期同樣視為已佔用
+    // 共用資源池（G71/G72 先佔先贏）：一般用車（D）已派出的車輛/駕駛，於其用車日期同樣視為已佔用
     [typeof ModuleD !== 'undefined' ? ['一般用車', ModuleD] : null]
       .filter(Boolean).forEach(([label, M]) => {
         const occ = M.dayOccupancy();
         occ.veh.forEach((_, k) => occupied.veh.add(k));
         occ.drv.forEach((_, k) => occupied.drv.add(k));
         const held = [...new Set([...occ.veh.values(), ...occ.drv.values()])];
-        if (held.length) trace.push(`<span class="dim">共用資源池：${label} ${held.join('、')} 佔用之車輛/司機（先佔先贏）不重複指派</span>`);
+        if (held.length) trace.push(`<span class="dim">共用資源池：${label} ${held.join('、')} 佔用之車輛/駕駛（先佔先贏）不重複指派</span>`);
       });
 
-    // 資源檢核透明化：列出本批次範圍內受影響的保修車輛與請假司機（G60/G61）
+    // 資源檢核透明化：列出本批次範圍內受影響的保修車輛與請假駕駛（G60/G61）
     const fromStr = fromDate, toStr = end.toISOString().slice(0, 10);
     const maintInWin = DB.maintenance.filter(m => m.from <= toStr && m.to >= fromStr);
     const leaveInWin = DB.driverLeaves.filter(l => l.date >= fromStr && l.date <= toStr);
@@ -308,7 +308,7 @@ const ModuleC = {
       trace.push(`<span class="dim">資源檢核（本批次範圍內排除）：</span>`);
       maintInWin.forEach(m => trace.push(`  <span class="no">🔧 車輛 ${m.vehicle} 保修 ${m.from}~${m.to}（${m.reason}）→ 該期間不可派</span>`));
       leaveInWin.forEach(l => { const d = DB.drivers.find(x => x.id === l.driver);
-        trace.push(`  <span class="no">🌴 司機 ${d ? d.name : l.driver} 請假 ${l.date} ${l.from}~${l.to} → 重疊任務不可指派</span>`); });
+        trace.push(`  <span class="no">🌴 駕駛 ${d ? d.name : l.driver} 請假 ${l.date} ${l.from}~${l.to} → 重疊任務不可指派</span>`); });
     }
 
     // 分兩型態，不互相混合（G50）
@@ -355,7 +355,7 @@ const ModuleC = {
       }
       if (!res) {
         const why = workFail ? '回程（強制回歸屬據點）預估完成超過工時 20:30'
-                             : '無可用車輛/司機（保修/請假/已被指派/特殊證不符/查無回程車程）';
+                             : '無可用車輛/駕駛（保修/請假/已被指派/特殊證不符/查無回程車程）';
         group.forEach(b => { this._fail(b, batch, trace, why); usedR.add(b.id); });
         continue;
       }
@@ -372,7 +372,7 @@ const ModuleC = {
         batch.items.push({ app: b.id, result: 'matched', group: gid });
       });
       const period = `${a.departDate} ${a.earliestPickup} ~ ${a.returnDate} ${a.earliestReturn}`;
-      trace.push(`  <span class="ok">✓ 合併 ${group.map(g=>g.id).join('+')}｜${totalPax}人｜車 ${res.vehicle.id}/司機 ${res.driver.name}｜空駛 ${res.deadhead} 分（C-1 最小優先）</span>`
+      trace.push(`  <span class="ok">✓ 合併 ${group.map(g=>g.id).join('+')}｜${totalPax}人｜車 ${res.vehicle.id}/駕駛 ${res.driver.name}｜空駛 ${res.deadhead} 分（C-1 最小優先）</span>`
         + (group.length>1 ? ` <span class="dim">(${a.origin}→${a.dest}｜${period} 六項完全相同 G54)</span>` : ''));
       if (multiDay) trace.push(`      <span class="dim">多天任務：最後一天回程終點強制＝${term}（車 ${res.vehicle.id} 歸屬據點 ${res.vehicle.homeSite}，C-3）｜回程完成 ${minToHHMM(retEnd)}</span>`);
     }
@@ -386,13 +386,13 @@ const ModuleC = {
       if (!DB.transferPoints.includes(a.dest)) {
         this._fail(a, batch, trace, '單程單目的地非交通轉運點'); usedO.add(a.id); continue;
       }
-      // 找回程：同一天、同轉運點出發、回司機出發地、回程最早上車在去程送達後 4 小時內（G51 / Q35）
+      // 找回程：同一天、同轉運點出發、回駕駛出發地、回程最早上車在去程送達後 4 小時內（G51 / Q35）
       const arrMin = hhmmToMin(a.earliestPickup) + (this.travelMin(a.origin, a.dest) || 0);
       // 不同意併車（G133）：不與其他申請單配對去回程
       const back = this.noCarpool(a) ? null : oneways.find(b => !usedO.has(b.id) && b.id !== a.id && b.status === 'approved' && !this.noCarpool(b) &&
         b.departDate === a.departDate &&          // 同一天（一趟完整行程；出發前配對）
         b.origin === a.dest && DB.transferPoints.includes(b.origin) &&
-        b.dest === a.origin &&                     // Q35：回程須「從該轉運點回司機出發地」
+        b.dest === a.origin &&                     // Q35：回程須「從該轉運點回駕駛出發地」
         hhmmToMin(b.earliestPickup) >= arrMin &&
         hhmmToMin(b.earliestPickup) <= arrMin + 240);
       const estStart = hhmmToMin(a.earliestPickup);
@@ -404,7 +404,7 @@ const ModuleC = {
       // 座位須同時容納去程與回程人數（修正 C-S2：原本只看去程人數）
       const res = this.findResource({ ...a, pax: Math.max(a.pax, back ? back.pax : 0),
         permitP: a.permitP || !!(back && back.permitP), permitK: a.permitK || !!(back && back.permitK) }, estStart, estEnd, occupied); // 空駛最小優先（C-1）
-      if (!res) { this._fail(a, batch, trace, '無可用車輛/司機（已被指派/特殊證不符）'); usedO.add(a.id); continue; }
+      if (!res) { this._fail(a, batch, trace, '無可用車輛/駕駛（已被指派/特殊證不符）'); usedO.add(a.id); continue; }
       this.occupy(occupied, a, res.vehicle.id, res.driver.id);
       if (back) this.occupy(occupied, back, res.vehicle.id, res.driver.id);
       const gid = 'O' + a.id;
@@ -452,7 +452,7 @@ const ModuleC = {
     trace.push(`  <span class="no">✗ ${app.id} → 未媒合（仍待調度）：${reason}（G52/G58）</span>`);
   },
 
-  /* ---- C-4 人工覆寫：調度室手動改派車輛/司機，記錄調整人、時間、調整前後內容 ----
+  /* ---- C-4 人工覆寫：調度室手動改派車輛/駕駛，記錄調整人、時間、調整前後內容 ----
      覆寫過的排班不得被下一次批次重排（與「已媒合成功不重排」同原則 G53）。 */
   overrideAssign(app, next, by) {
     const before = { vehicle: app.vehicle, driver: app.driver, status: app.status };
@@ -585,10 +585,10 @@ const ModuleC = {
     const others = this.applications.filter(x => x.status === 'matched'
       && !order.apps.includes(x.id) && this.tripDates(x).some(dt => dates.includes(dt)));
     const vHit = others.find(x => x.vehicle === v.id);
-    if (vHit) return `${v.id} 已由差旅共乘 ${vHit.id}（${vHit.departDate}）使用`;
+    if (vHit) return `${v.id} 已由人員運輸 ${vHit.id}（${vHit.departDate}）使用`;
     for (const id of ds) {
       const dHit = others.find(x => this.driversOf(x).includes(id));
-      if (dHit) return `${(DB.drivers.find(d => d.id === id) || {}).name || id} 已有差旅共乘 ${dHit.id}（${dHit.departDate}）任務`;
+      if (dHit) return `${(DB.drivers.find(d => d.id === id) || {}).name || id} 已有人員運輸 ${dHit.id}（${dHit.departDate}）任務`;
       const lv = DB.driverLeaves.find(l => l.driver === id && dates.includes(l.date));
       if (lv) return `${(DB.drivers.find(d => d.id === id) || {}).name || id} 請假 ${lv.date} ${lv.from}~${lv.to}`;
     }
@@ -679,7 +679,7 @@ const ModuleC = {
     return { ok: true };
   },
 
-  /* 已回登（實登里程）後車輛/司機回歸屬據點（C-2/C-3：currentSite 回復 homeSite）*/
+  /* 已回登（實登里程）後車輛/駕駛回歸屬據點（C-2/C-3：currentSite 回復 homeSite）*/
   _returnResourcesHome(app) {
     const v = DB.vehicles.find(x => x.id === app.vehicle);
     if (v && v.homeSite) v.currentSite = v.homeSite;
@@ -727,7 +727,7 @@ const ModuleC = {
   signSummary(a) {
     const nm = id => (DB.drivers.find(x => x.id === id) || {}).name;
     const ds = this.driversOf(a).map(nm).filter(Boolean).join('＋');
-    return `${a.dispatchId ? '派車單 ' + a.dispatchId + '｜' : ''}${a.departDate} ${a.earliestPickup}｜${a.origin} → ${a.dest}｜車 ${a.vehicle || '—'}／司機 ${ds || '—'}`;
+    return `${a.dispatchId ? '派車單 ' + a.dispatchId + '｜' : ''}${a.departDate} ${a.earliestPickup}｜${a.origin} → ${a.dest}｜車 ${a.vehicle || '—'}／駕駛 ${ds || '—'}`;
   },
   /* ---- 車輛異動實登（派車結果生效後登打實際車輛／駕駛／里程）---- */
   USAGE_POOL: 'BIZ',
@@ -738,8 +738,8 @@ const ModuleC = {
     if (r.ok) this._returnResourcesHome(a);   // 已回登：資源回歸屬據點（取代原「行程完成」C-2）
     return r;
   },
-  /* 派車單實登（G125）：差旅共乘以「派車單」為單位實登，規則同院區財物轉運（G124）。派車單送審且運輸主管簽審通過
-     （單內申請單皆生效）後才可實登；儲存即完成，派車單內每張申請單轉「已回登」，車輛／司機回歸屬據點（C-2）。 */
+  /* 派車單實登（G125）：人員運輸以「派車單」為單位實登，規則同院區財物轉運（G124）。派車單送審且運輸主管簽審通過
+     （單內申請單皆生效）後才可實登；儲存即完成，派車單內每張申請單轉「已回登」，車輛／駕駛回歸屬據點（C-2）。 */
   dispatchEffective(d) { const as = this.dispatchApps(d); return !d.cancelled && d.submitted && as.length > 0 && as.every(a => Signoff.effective(a)); },
   usageDispatches() { return this.dispatches.filter(d => d.usage || this.dispatchEffective(d)); },
   dispatchUsageSave(d, data, by, opts) {

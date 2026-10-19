@@ -122,7 +122,7 @@ const ModuleA = {
 
   /* ============================================================
      已排定車次異動（業務單位手動調整）
-     - shiftPlans：以「收貨日期＋班次」為鍵，覆寫該車次的車輛/司機（不動全域班次主檔）。
+     - shiftPlans：以「收貨日期＋班次」為鍵，覆寫該車次的車輛/駕駛（不動全域班次主檔）。
      - reassignShift：將申請單改派到指定班次（同日），重算到站時間。
      - removeFromShift：把申請單移出班次（回未排入，待重新指定）。
      ============================================================ */
@@ -130,13 +130,13 @@ const ModuleA = {
   logiVehicles() { return DB.vehicles.filter(v => v.pool === 'LOGI' && !v.sizeClass); }, // 區域物流車（排除幹線大/小車 sizeClass）
   logiDrivers() { return DB.drivers.filter(d => d.pool === 'LOGI'); },
   defaultVehicleFor(shiftId) { const sh = DB.regionalShifts.find(s => s.id === shiftId); return sh ? sh.vehicle : null; },
-  // 預設司機：物流車與物流司機依序對應（與司機任務單 logiDriverName 一致）
+  // 預設駕駛：物流車與物流駕駛依序對應（與駕駛任務單 logiDriverName 一致）
   defaultDriverFor(vehId) {
     const vs = this.logiVehicles(), ds = this.logiDrivers();
     const i = vs.findIndex(v => v.id === vehId);
     return (i >= 0 && ds.length) ? ds[i % ds.length].id : (ds[0] ? ds[0].id : null);
   },
-  // 取某車次（日期＋班次）目前的車輛/司機（有覆寫取覆寫，否則取預設）
+  // 取某車次（日期＋班次）目前的車輛/駕駛（有覆寫取覆寫，否則取預設）
   shiftPlan(date, shiftId) {
     const p = this.shiftPlans[date + '|' + shiftId];
     if (p) return { vehicle: p.vehicle, driver: p.driver };
@@ -199,9 +199,9 @@ const ModuleA = {
   usageRecords() { return this.applications.filter(a => Usage.inScope(a, this.isScheduled(a))); },
   usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL, effective: this.isScheduled(app) }); },
   /* ---- 車次實登（G123）：巡迴財物轉運以「車次（收貨日期＋班次）」為單位實登 ----
-     車輛／司機預設帶入車次的車輛／司機（可改為實際使用），輸入起始／結束里程儲存即完成實登；
+     車輛／駕駛預設帶入車次的車輛／駕駛（可改為實際使用），輸入起始／結束里程儲存即完成實登；
      實登人員由系統帶入。實登寫入車次（tripUsages）並同步到車次內每張申請單（rec.usage → 已回登）。
-     只記錄實際使用，不改車次的車輛／司機（車次異動仍在「車次追蹤／異動」）。 */
+     只記錄實際使用，不改車次的車輛／駕駛（車次異動仍在「車次追蹤／異動」）。 */
   tripUsages: {}, // key `${date}|${shiftId}` -> { usage, usageLog[] }
   tripApps(date, shiftId) {
     return this.applications.filter(a => this.isScheduled(a) && a.serviceDate === date && a.assignedShift === shiftId);
@@ -213,11 +213,11 @@ const ModuleA = {
     const key = date + '|' + shiftId, apps = this.tripApps(date, shiftId);
     if (!apps.length) return { ok: false, error: '此車次沒有申請單，不可實登' };
     if (!data.vehicle) return { ok: false, error: '請選擇「車輛」' };
-    if (!data.driver) return { ok: false, error: '請選擇「司機」' };
+    if (!data.driver) return { ok: false, error: '請選擇「駕駛」' };
     const v = DB.vehicles.find(x => x.id === data.vehicle);
     const holder = this.tripUsages[key] || { usage: null, usageLog: [] };
     const res = Usage.saveGroup(holder, apps, { vehicleType: v ? v.type : '', vehicle: data.vehicle, driver1: data.driver, driver2: '',
-      startKm: data.startKm, endKm: data.endKm, fuelLiters: data.fuelLiters, workHours: data.workHours, otHours: data.otHours }, by, Object.assign({ pool: this.USAGE_POOL }, opts));
+      startKm: data.startKm, endKm: data.endKm, ...Object.fromEntries(Usage.EXTRA_FIELDS.map(([k]) => [k, data[k]])) }, by, Object.assign({ pool: this.USAGE_POOL }, opts));
     if (res.ok && !(opts && opts.dryRun)) this.tripUsages[key] = holder;
     return res;
   },
@@ -371,7 +371,7 @@ const ModuleA = {
       const departMin = hhmmToMin(sh.depart); // 發車時間（車輛離開基地）
       trace.push(`\n▶ 嘗試班次 <span class="hl">${sh.label}</span>（車 ${veh.id}）發車 ${sh.depart}｜到站約 ${minToHHMM(arr)}`);
 
-      // --- 已發車班次不可媒合：司機出發後無法得知中途新單，故僅「尚未發車」的班次可排（G10/G19）---
+      // --- 已發車班次不可媒合：駕駛出發後無法得知中途新單，故僅「尚未發車」的班次可排（G10/G19）---
       if (departMin <= cutoff) {
         trace.push(`  <span class="no">✗ 本班已於 ${sh.depart} 發車（現在 ${minToHHMM(cutoff)}）→ 車已離開基地、無法插入新單</span>`);
         continue;

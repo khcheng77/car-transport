@@ -11,7 +11,7 @@ const Guide = {
   UNITS: {
     A: { page: 'a_apply', name: '巡迴財物轉運申請', module: '巡迴財物轉運作業' },
     B: { page: 'b_apply', name: '院區財物轉運申請', module: '院區財物轉運作業' },
-    C: { page: 'c_apply', name: '差旅共乘申請', module: '差旅共乘作業' },
+    C: { page: 'c_apply', name: '人員運輸申請', module: '人員運輸作業' },
     D: { page: 'd_apply', name: '一般用車申請', module: '一般用車申請作業' },
   },
 
@@ -34,9 +34,9 @@ const Guide = {
       && DB.bizOrigins.includes(v.origin) && DB.bizDests.includes(v.dest);
   },
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
-  /* 行程（G150）：地點都在共乘清單時問「是否同意併車」——是＝差旅共乘、否＝一般用車（否時填不同意併車原因）；
+  /* 行程（G150）：地點都在共乘清單時問「是否同意併車」——是＝人員運輸、否＝一般用車（否時填不同意併車原因）；
      隨行財物＝有時填「隨行財物」grid（財物名稱、長寬高、財物外型（浪費係數）、重量、數量、財物外包裝），
-     帶入差旅共乘的隨身貨物或一般用車的隨行貨物。原「屬於隨身財物」（G134）移除。 */
+     帶入人員運輸的隨身貨物或一般用車的隨行貨物。原「屬於隨身財物」（G134）移除。 */
   askCarpool(v) { return this.inBizList(v); },
   carryItems(v) { return v.hasCargo === 'yes' ? (v.items || []) : []; },
   /* 收貨日巡迴車上限（G135）：收貨院區當天各班次（含車次覆寫）使用的巡迴車；
@@ -143,7 +143,7 @@ const Guide = {
     if (u === 'C' && v.tripType === 'oneway' && !this.canOneway(v)) out.push('行程型態（單程限目的地為交通轉運點）');
     if (u === 'D') {
       if ((v.origin === this.OTHER || v.dest === this.OTHER) && !(v.otherPlace || '').trim()) out.push('其他地點說明');
-      if (typeof v.selfDrive !== 'boolean') out.push('沒有司機時可否自己開車');
+      if (typeof v.selfDrive !== 'boolean') out.push('沒有駕駛時可否自己開車');
       if (v.startDate === v.endDate && v.departTime && v.backTime && v.backTime <= v.departTime) out.push('結束時間（須晚於出發時間）');
     }
     return out;
@@ -186,7 +186,7 @@ const Guide = {
         data = Object.assign({}, who, { type: round ? 'round' : 'oneway', origin: v.origin, dest: v.dest,
           departDate: v.startDate, earliestPickup: v.departTime,
           returnDate: round ? v.endDate : v.startDate, earliestReturn: round ? v.backTime : '', pax: +v.pax,
-          // 隨行財物 → 差旅共乘「隨身貨物」（該 grid 無類別欄，財物外型不帶入）
+          // 隨行財物 → 人員運輸「隨身貨物」（該 grid 無類別欄，財物外型不帶入）
           personalCargo: this.carryItems(v).map(it => ({ name: it.name, qty: it.qty, l: it.l, w: it.w, h: it.h, weight: it.weight, pack: it.pack || '' })) });
         labels.push('申請人', round ? '來回單' : '單程單', `${v.origin} → ${v.dest}`, `去程 ${v.startDate} ${v.departTime}`);
         if (round) labels.push(`回程 ${v.endDate} ${v.backTime}`);

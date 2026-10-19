@@ -1,10 +1,11 @@
 /* ============================================================
    usage.js — 共用：車輛異動實登（G147 由「車輛使用實登」更名）
-   四模組（A 巡迴財物轉運／B 院區財物轉運／C 差旅共乘／D 一般用車申請）共用。
+   四模組（A 巡迴財物轉運／B 院區財物轉運／C 人員運輸／D 一般用車申請）共用。
    派車結果生效後（B/C/D 經運輸主管簽審通過；A 不經簽審，排入班次即生效），由業務登打車輛實際使用狀況：
      · 實際使用的「車種類型、車號、駕駛人1、駕駛人2（選填）」；
      · 起始里程、結束里程（結束 ≥ 起始，行駛里程＝結束－起始）；
-     · 車輛加油公升數、司機工時、司機加班時數（G147，選填，0 以上的數字）。
+     · 車輛加油公升數、駕駛工時、駕駛加班時數（G147，選填，0 以上的數字）；
+     · 油品、單價、總金額、住宿天數、住宿費、停車費、駕駛加班費（G151，選填；總金額＝加油公升數×單價，系統計算）。
    實登可修改，每次儲存都留歷程（rec.usageLog），不覆蓋前一次紀錄。
    本檔只處理實登紀錄本身（rec.usage），派車規劃值由各模組的 usagePlan() 提供。
    ============================================================ */
@@ -12,8 +13,12 @@
 const Usage = {
   STATUS: { todo: ['待實登', 'b-amber'], done: ['已實登', 'b-green'] },
   SELF: 'SELF',   // 駕駛人代碼：使用者自駕（一般用車）
-  // G147 新增欄位：[欄位, 名稱, 單位]
-  EXTRA_FIELDS: [['fuelLiters', '車輛加油公升數', '公升'], ['workHours', '司機工時', '小時'], ['otHours', '司機加班時數', '小時']],
+  // 實登附加欄位（G147／G151）：[欄位, 名稱, 單位, 類型]；類型 select＝油品下拉、calc＝系統計算、int＝整數，其餘為 0 以上數字
+  EXTRA_FIELDS: [['fuelType', '油品', '', 'select'], ['fuelLiters', '車輛加油公升數', '公升'], ['fuelPrice', '單價', '元/公升'],
+    ['fuelAmount', '總金額', '元', 'calc'], ['workHours', '駕駛工時', '小時'], ['otHours', '駕駛加班時數', '小時'],
+    ['lodgingDays', '住宿天數', '天', 'int'], ['lodgingFee', '住宿費', '元'], ['parkingFee', '停車費', '元'], ['otPay', '駕駛加班費', '元']],
+  // 總金額＝加油公升數×單價（四捨五入到元）；任一未填為 null
+  fuelAmount(liters, price) { return liters != null && price != null ? Math.round(liters * price) : null; },
 
   // 車種類型（依資源池；A/B 物流池、C/D 商務池）
   types(pool) {
@@ -53,15 +58,22 @@ const Usage = {
     if (!Number.isFinite(s) || s < 0) return { ok: false, error: '「起始里程」須為 0 以上的數字' };
     if (!Number.isFinite(e) || e < 0) return { ok: false, error: '「結束里程」須為 0 以上的數字' };
     if (e < s) return { ok: false, error: '「結束里程」不可小於「起始里程」' };
-    // G147：車輛加油公升數、司機工時、司機加班時數（選填；有填須為 0 以上的數字）
+    // G147／G151 附加欄位（皆選填）：油品須為清單內；數字須為 0 以上，住宿天數為整數；總金額由系統計算
     const extra = {};
-    for (const [k, label] of this.EXTRA_FIELDS) {
+    for (const [k, label, , type] of this.EXTRA_FIELDS) {
+      if (type === 'calc') continue;
       if (d[k] === '' || d[k] == null) { extra[k] = null; continue; }
+      if (type === 'select') {
+        if (!DB.fuelTypes.includes(d[k])) return { ok: false, error: `「${label}」須為：${DB.fuelTypes.join('／')}` };
+        extra[k] = d[k]; continue;
+      }
       const n = Number(d[k]);
       if (!Number.isFinite(n) || n < 0) return { ok: false, error: `「${label}」須為 0 以上的數字` };
+      if (type === 'int' && !Number.isInteger(n)) return { ok: false, error: `「${label}」須為整數` };
       extra[k] = n;
     }
-    if (extra.otHours != null && extra.workHours != null && extra.otHours > extra.workHours) return { ok: false, error: '「司機加班時數」不可大於「司機工時」' };
+    extra.fuelAmount = this.fuelAmount(extra.fuelLiters, extra.fuelPrice);
+    if (extra.otHours != null && extra.workHours != null && extra.otHours > extra.workHours) return { ok: false, error: '「駕駛加班時數」不可大於「駕駛工時」' };
     const first = !rec.usage;
     rec.usage = Object.assign({ vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2 || '',
       startKm: s, endKm: e, distance: Math.round((e - s) * 10) / 10 }, extra, { by: by || '調度室', at: new Date() });
