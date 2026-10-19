@@ -21,6 +21,7 @@ function toast(msg, type = '') {
 // opts.wide：寬版視窗（放含 grid 的區塊，如派車單明細）
 function openModal(title, bodyHtml, opts) {
   $('#modal-mask .modal').classList.toggle('wide', !!(opts && opts.wide));
+  $('#modal-mask .modal').classList.toggle('mid', !!(opts && opts.mid));
   $('#modal-title').textContent = title;
   $('#modal-body').innerHTML = bodyHtml;
   $('#modal-mask').classList.add('show');
@@ -369,29 +370,31 @@ function openCargoEditor(item, onSave, opts) {
   const nameLbl = ext || gc ? '財物名稱' : '品名';
   const catOpts = DB.wasteFactors.map(f => `<option value="${f.code}" ${f.code === it.category ? 'selected' : ''}>${f.name}（係數 ${f.factor}）</option>`).join('');
   if (gc) return openCarryEditor(it, !!item, catOpts, onSave);
+  // 視窗欄位標題置於上方、一列三欄依序排列，下拉（類別／浪費係數）等欄位完整呈現（G152）
+  const st = { stack: true };
   openModal(item ? '編輯貨物內容' : '新增貨物', `
-    ${infoGrid('ce-fields', [
-      ext ? fInput('計畫名稱', `<input type="text" id="ce-plan" value="${gEsc(it.plan)}">`) : '',
-      ext ? fInput('工令號碼', `<input type="text" id="ce-workno" value="${gEsc(it.workNo)}">`) : '',
-      fInput(nameLbl, `<input type="text" id="ce-name" value="${it.name}">`, { full: !bc }),
-      bc ? fInput('財物外型', `<input type="text" id="ce-shape" value="${gEsc(it.shape)}">`) : '',
-      fInput(bc ? '長' : '長 (cm)', `<input type="number" id="ce-l" value="${it.l}"${bc ? ' placeholder="cm"' : ''}>`),
-      fInput(bc ? '寬' : '寬 (cm)', `<input type="number" id="ce-w" value="${it.w}"${bc ? ' placeholder="cm"' : ''}>`),
-      fInput(bc ? '高' : '高 (cm)', `<input type="number" id="ce-h" value="${it.h}"${bc ? ' placeholder="cm"' : ''}>`),
-      fInput('類別 <span class="hint">浪費係數查表 G03</span>', `<select id="ce-cat">${catOpts}</select>`),
-      fInput('數量', `<input type="number" id="ce-qty" value="${it.qty}">`),
-      fInput(bc ? '重量' : '單件重 (kg)', `<input type="number" id="ce-wt" value="${it.weight}"${bc ? ' placeholder="kg（單件）"' : ''}>`),
+    ${infoGridRow('ce-fields', [
+      ext ? fInput('計畫名稱', `<input type="text" id="ce-plan" value="${gEsc(it.plan)}">`, st) : '',
+      ext ? fInput('工令號碼', `<input type="text" id="ce-workno" value="${gEsc(it.workNo)}">`, st) : '',
+      fInput(nameLbl, `<input type="text" id="ce-name" value="${gEsc(it.name)}">`, st),
+      bc ? fInput('財物外型', `<input type="text" id="ce-shape" value="${gEsc(it.shape)}">`, st) : '',
+      fInput('長 (cm)', `<input type="number" id="ce-l" value="${it.l}">`, st),
+      fInput('寬 (cm)', `<input type="number" id="ce-w" value="${it.w}">`, st),
+      fInput('高 (cm)', `<input type="number" id="ce-h" value="${it.h}">`, st),
+      fInput('類別（浪費係數）', `<select id="ce-cat" style="width:100%;">${catOpts}</select>`, st),
+      fInput('數量', `<input type="number" id="ce-qty" value="${it.qty}">`, st),
+      fInput('單件重 (kg)', `<input type="number" id="ce-wt" value="${it.weight}">`, st),
+      ext ? fInput('財物外包裝', `<input type="text" id="ce-pack" value="${gEsc(it.pack)}" placeholder="例：紙箱">`, st) : '',
       opts.hazard ? fInput('是否為危險品 <span class="hint">僅供調度判斷，系統不自動限制（G78）</span>', `
         <div class="radio-group">
           <label class="radio-pill${it.hazardous ? '' : ' sel'}" id="ce-hz-no-pill"><input type="radio" name="ce-hz" value="no"${it.hazardous ? '' : ' checked'}>否</label>
           <label class="radio-pill${it.hazardous ? ' sel' : ''}" id="ce-hz-yes-pill"><input type="radio" name="ce-hz" value="yes"${it.hazardous ? ' checked' : ''}>是</label>
         </div>`, { stack: true, full: true }) : '',
-      ext ? fInput('財物外包裝', `<input type="text" id="ce-pack" value="${gEsc(it.pack)}" placeholder="例：紙箱">`) : '',
     ].join(''))}
     <div style="text-align:center;margin-top:20px;">
       <button class="btn btn-primary" id="ce-ok">▶ 送出</button>
       <button class="btn btn-ghost" id="ce-cancel">取消</button>
-    </div>`);
+    </div>`, { mid: true });   // 中寬視窗：一列三欄時下拉選單文字可完整顯示（G152）
   $('#ce-cancel').onclick = closeModal;
   $$('#modal-body input[name=ce-hz]').forEach(r => r.onchange = () => {
     const yes = $('#modal-body input[name=ce-hz][value=yes]').checked;
@@ -586,22 +589,33 @@ const _memberOpts = (buId, groupId, sel) => { const b = DB.orgUnits.find(x => x.
 const _campusOpts = sel => ['<option value="">請選擇院區</option>'].concat(DB.branches.map(b => `<option value="${b.id}"${b.id === sel ? ' selected' : ''}>${b.name}</option>`)).join('');
 const _hallOpts = sel => ['<option value="">請選擇館別</option>'].concat(DB.halls.map(h => `<option value="${h}"${h === sel ? ' selected' : ''}>${h}</option>`)).join('');
 
-// 人員欄位（回傳 infoGrid 內用的 items 字串）；prefix＝欄位 id 前綴、role＝角色中文
-// opts.noUnit：不顯示「單位」欄；opts.extLabel：分機改為可輸入（選姓名時預帶分機，可改填手機），以此為標籤（G138）
-function personFieldItems(prefix, role, opts) {
+// 依欄位順序左→右排列的一列欄位（G152：表單「同一列」的欄位各自成一個 grid，列與列之間自然換行）
+const infoGridRow = (id, itemsHtml) => infoGrid(id, itemsHtml).replace('class="fgrid"', 'class="fgrid fgrid-ordered"');
+// 人員欄位（委運人／接收人／接收代理人共用同一排版，G152）：院區＋館別一列、姓名（事業部→組別→姓名三段下拉）一列、手機一列；
+// 欄位名稱前加角色名稱。選姓名時手機預帶人事資料的分機，可改填手機。opts.required：手機必填（標示＊）
+function personFields(prefix, role, opts) {
   opts = opts || {};
   const b0 = DB.orgUnits[0].id, g0 = DB.orgUnits[0].groups[0].id;
-  return [
-    fInput(`${role}姓名 <span class="hint">事業部／組別／姓名</span>`,
-      `<select id="${prefix}-bu" style="margin-bottom:4px;">${_buOpts(b0)}</select>
-       <select id="${prefix}-group" style="margin-bottom:4px;">${_groupOpts(b0, g0)}</select>
-       <select id="${prefix}-member">${_memberOpts(b0, g0)}</select>`, { stack: true, full: true }),
-    opts.noUnit ? `<span id="${prefix}-unit" hidden></span>` : fItem(`${role}單位`, `<span id="${prefix}-unit" class="muted">—</span>`),
-    opts.extLabel ? fInput(opts.extLabel, `<input type="text" id="${prefix}-ext" placeholder="分機或手機">`)
-      : fItem(`${role}分機`, `<span id="${prefix}-ext" class="muted">—</span>`),
-    fInput(`${role}院區`, `<select id="${prefix}-campus">${_campusOpts()}</select>`),
-    fInput(`${role}館別`, `<select id="${prefix}-hall">${_hallOpts()}</select>`),
-  ].join('');
+  const req = opts.required ? '<span style="color:#c0392b;">＊</span>' : '';
+  const sel = 'style="flex:1;min-width:130px;"';
+  return infoGridRow(prefix + '-r1', [
+      fInput(`${role}院區`, `<select id="${prefix}-campus">${_campusOpts()}</select>`),
+      fInput(`${role}館別`, `<select id="${prefix}-hall">${_hallOpts()}</select>`),
+    ].join(''))
+    + infoGridRow(prefix + '-r2', fInput(`${role}姓名 <span class="hint">事業部／組別／姓名</span>`,
+      `<span style="display:flex;gap:8px;flex-wrap:wrap;"><select id="${prefix}-bu" ${sel}>${_buOpts(b0)}</select>
+       <select id="${prefix}-group" ${sel}>${_groupOpts(b0, g0)}</select>
+       <select id="${prefix}-member" ${sel}>${_memberOpts(b0, g0)}</select></span>`, { full: true }))
+    + infoGridRow(prefix + '-r3', fInput(`${role}手機${req}`, `<input type="text" id="${prefix}-ext" placeholder="手機（或分機）">`))
+    + `<span id="${prefix}-unit" hidden></span>`;
+}
+// 明細：人員三列（院區＋館別／姓名／手機），與新增畫面同排版（G152）
+function personDetail(id, role, pn) {
+  pn = pn || {};
+  const dash = '<span class="muted">—</span>';
+  return infoGridRow(id + '-r1', [fItem(`${role}院區`, pn.campus ? brName(pn.campus) : dash), fItem(`${role}館別`, pn.hall || dash)].join(''))
+    + infoGridRow(id + '-r2', fItem(`${role}姓名`, pn.name ? gEsc(pn.name) + (pn.unit ? `<span class="hint">（${gEsc(pn.unit)}）</span>` : '') : dash, { full: true }))
+    + infoGridRow(id + '-r3', fItem(`${role}手機`, pn.ext ? gEsc(pn.ext) : dash));
 }
 // 掛連動：切事業部→重填組別→重填組員；選組員→自動帶單位/分機
 function wirePerson(prefix, relayoutRoot) {
@@ -740,7 +754,7 @@ function renderAGrid() {
   $('#aq-count').textContent = `${rows.length} 筆`;
   $('#aq-grid').innerHTML = rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的申請紀錄</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>財物運輸單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>模式</th><th>班次</th><th>財物運輸單狀態</th><th>申請日期</th></tr></thead><tbody>
+      <th></th><th>財物運輸單號</th><th>申請人</th><th>目的地</th><th>日期</th><th>模式</th><th>班次</th><th>駕駛（車號｜姓名｜電話）</th><th>財物運輸單狀態</th><th>申請日期</th></tr></thead><tbody>
       ${rows.map(a => { const st = DB.stations.find(s => s.id === a.station);
         const sh = DB.regionalShifts.find(s => s.id === a.assignedShift);
         return `<tr>
@@ -749,7 +763,7 @@ function renderAGrid() {
           <td>${brName(a.branch)}·${aDestText(a)}</td>
           <td>${a.serviceDate || '—'}</td>
           <td>${a.recvMode === 'exact' ? '指定期望時間' : '越快越好'}</td>
-          <td>${sh ? sh.label : '—'}</td><td>${Flow.badge(a)}</td>
+          <td>${sh ? sh.label : '—'}</td><td>${sh ? aDriverInfo(a.serviceDate, a.assignedShift) : '<span class="muted">—（尚未排班）</span>'}</td><td>${Flow.badge(a)}</td>
           <td class="muted">${fmtTime(a.createdAt)}</td></tr>`; }).join('')}
     </tbody></table></div>
     <div class="muted" style="margin-top:8px;">點擊左側「細節」可跳轉至申請單明細。</div>`;
@@ -814,21 +828,29 @@ function renderAApplyDetail(p, id) {
     <div class="section-h">巡迴財物轉運申請明細 · ${a.id}</div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>基本資料</span><span>${Flow.badge(a)}</span></div>
-      ${infoGrid('ad-basic', [
-        fItem('財物運輸單狀態', a.transportStatus || '開單'),
+      ${infoGridRow('ad-b1', [
         fItem('財物運輸單號', `<b style="color:var(--navy);">${a.id}</b>`),
+        fItem('財物運輸單狀態', a.transportStatus || '開單'),
         fItem('申請人', a.applicant),
+      ].join(''))}
+      ${infoGridRow('ad-b2', [
         fItem('申請單位/委運單位', a.applyUnit || '<span class="muted">—</span>'),
-        fItem('申請人分機', a.applyExt || '<span class="muted">—</span>'),
         fItem('申請日期', a.applyDate || ModuleA.rocDate(new Date(a.createdAt))),
-        fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'),
-        fItem('危險品運輸', a.hazardTransport === 'yes' ? '<span class="badge b-red">是</span>' : '否'),
+        fItem('申請人分機', a.applyExt || '<span class="muted">—</span>'),
+      ].join(''))}
+      ${infoGridRow('ad-b3', fItem('危險品運輸', a.hazardTransport === 'yes' ? '<span class="badge b-red">是</span>' : '否'))}
+      ${infoGridRow('ad-b4', [
         fItem('車屬院區', brName(a.branch)),
         fItem('收貨站點', a.pickupLoc || '<span class="muted">—</span>'),
         fItem('送貨站點', aDestText(a)),
+      ].join(''))}
+      ${infoGridRow('ad-b5', fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'))}
+      ${infoGridRow('ad-b6', [
         fItem('收貨模式', a.recvMode === 'exact' ? '指定期望時間' : '越快越好（離現在最近）'),
         fItem('排班日期', `<b>${a.serviceDate || '—'}</b>${a.serviceDate === ModuleA.todayStr() ? ' <span class="badge b-navy">今天</span>' : ''}`),
         fItem('期望收貨時間', a.deliverTime || '<span class="muted">—</span>'),
+      ].join(''))}
+      ${infoGridRow('ad-b7', [
         fItem('裝貨 / 卸貨所需時間', `${a.loadMin || 0} 分 / ${a.unloadMin || 0} 分（合計 ${a.handleMin} 分）`),
         fItem('備註', gEsc(a.remark || '—')),
         fItem('建立時間', fmtTime(a.createdAt)),
@@ -836,14 +858,13 @@ function renderAApplyDetail(p, id) {
     </div>
     <div class="card">
       <div class="card-title">委運人資訊</div>
-      ${infoGrid('ad-cons', fItem('委運人', personDisplay(a.consignor), { full: true, tall: true }))}
-    </div>
-    <div class="card">
+      ${personDetail('ad-cons', '委運人', a.consignor)}
+      <div class="divider"></div>
       <div class="card-title">接收人資訊</div>
-      ${infoGrid('ad-recv', [
-        fItem('接收人', personDisplay(a.recipient), { full: true, tall: true }),
-        fItem('接收代理人', personDisplay(a.recipientAgent), { full: true, tall: true }),
-      ].join(''))}
+      ${personDetail('ad-recv', '接收人', a.recipient)}
+      <div class="divider"></div>
+      <div class="card-title">接收代理人資訊</div>
+      ${personDetail('ad-rag', '接收代理人', a.recipientAgent)}
     </div>
     <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目（總體積約 ${totalVol.toFixed(0)}L）</span>
@@ -905,56 +926,64 @@ function renderAApplyNew(p) {
   p.innerHTML = `
     <div class="section-h">新增巡迴財物轉運申請單</div>
     <div class="card">
-      <div class="card-title">填寫巡迴財物轉運申請單 <span class="g-tag">G13/G19/G138</span></div>
-      ${infoGrid('aa-fields', [
+      <div class="card-title">填寫巡迴財物轉運申請單 <span class="g-tag">G13/G19/G138/G152</span></div>
+      ${infoGridRow('aa-r1', [
+        fItem('財物運輸單號', `${ModuleA.nextNo()} <span class="hint">（送出後產生）</span>`),
         fItem('財物運輸單狀態', '開單'),
-        fItem('財物運輸單號', `${ModuleA.nextNo()} <span class="hint">（儲存後產生）</span>`),
         fItem('申請人', DB.currentUser.name),
+      ].join(''))}
+      ${infoGridRow('aa-r2', [
         fInput(`申請單位/委運單位${req}`, `<input type="text" id="aa-unit" value="${gEsc(DB.currentUser.unit)}">`),
-        fItem('申請人分機', DB.currentUser.ext),
         fItem('申請日期', ModuleA.rocDate()),
-        fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('aa-tripno')),
-        fInput('危險品運輸', `<div class="radio-group" id="aa-hz-wrap">
-            <label class="radio-pill"><input type="radio" name="aa-hz" value="yes">是</label>
-            <label class="radio-pill sel"><input type="radio" name="aa-hz" value="no" checked>否</label></div>`),
+        fItem('申請人分機', DB.currentUser.ext),
+      ].join(''))}
+      ${infoGridRow('aa-r3', fInput('危險品運輸', `<div class="radio-group yn"><label class="radio-pill" id="aa-hz-pill"><input type="checkbox" id="aa-hz">是</label></div>`))}
+      ${infoGridRow('aa-r4', [
         fInput('車屬院區', `<select id="aa-branch">${brOpts}</select>`),
         fInput('收貨站點', `<select id="aa-pickuploc">${stOpts}</select>`),
         fInput('送貨站點', `<select id="aa-station">${stOpts}</select>`),
-        fInput('收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span>', `
+      ].join(''))}
+      ${infoGridRow('aa-r5', fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('aa-tripno')))}
+      ${infoGridRow('aa-r6', fInput('收貨時間模式 <span class="hint">兩種皆不享班次內插隊優先權 G19</span>', `
           <div class="radio-group">
             <label class="radio-pill sel" id="aa-mode-asap"><input type="radio" name="aa-recv" value="asap" checked>越快越好（離現在最近）</label>
             <label class="radio-pill" id="aa-mode-exact"><input type="radio" name="aa-recv" value="exact">指定期望時間</label>
-          </div>`, { stack: true, full: true }),
-      ].join(''))}
+          </div>`, { stack: true, full: true }))}
       <div class="row" id="aa-deliver-wrap" style="display:none;">
         <div class="field"><label>期望日期 <span class="hint">今天或未來日期</span></label><input type="date" id="aa-date"></div>
         <div class="field"><label>期望收貨時間 <span class="hint">僅用於挑選最接近的班次，非硬性截止（4.1）</span></label><input type="time" id="aa-deliver" value="14:00"></div>
       </div>
       <div class="callout info" id="aa-today-hint" style="display:none;margin-bottom:10px;">選擇<b>今天</b>時，<b>已經出發的班次不會被媒合</b>；若今日班次都已過，請改選未來日期。</div>
-      ${infoGrid('aa-fields2', [
+      ${infoGridRow('aa-r7', [
         fInput('裝貨所需時間 <span class="hint">分</span>', `<input type="number" id="aa-load" value="10">`),
         fInput('卸貨所需時間 <span class="hint">分</span>', `<input type="number" id="aa-unload" value="5">`),
-        fInput('備註', `<input type="text" id="aa-remark">`, { full: true }),
-        fInput('是否送出', `<div class="radio-group" id="aa-send-wrap">
-            <label class="radio-pill"><input type="radio" name="aa-send" value="yes">是</label>
-            <label class="radio-pill sel"><input type="radio" name="aa-send" value="no" checked>否</label></div>`),
       ].join(''))}
       <div class="divider"></div>
       <div class="card-title">委運人資訊</div>
-      ${infoGrid('aa-cons', personFieldItems('acon', '委運人', { noUnit: true, extLabel: `委運人分機${req}/手機` }))}
+      ${personFields('acon', '委運人', { required: true })}
       <div class="divider"></div>
       <div class="card-title">接收人資訊</div>
-      ${infoGrid('aa-recv', personFieldItems('arec', '接收人', { noUnit: true }))}
-      <div class="card-title" style="font-size:14px;margin-top:6px;">接收代理人資訊 <span class="hint">選填</span></div>
-      ${infoGrid('aa-rag', personFieldItems('arag', '接收代理人', { noUnit: true, extLabel: `接收代理人分機${req}/手機` }))}
+      ${personFields('arec', '接收人')}
       <div class="divider"></div>
+      <div class="card-title">接收代理人資訊</div>
+      ${personFields('arag', '接收代理人', { required: true })}
+    </div>
+    <div class="card">
       <div class="card-title" style="justify-content:space-between;"><span>貨物項目</span>
         <button class="btn btn-accent btn-sm" id="aa-add">＋ 新增</button></div>
       <div id="aa-items"></div>
-      <div class="divider"></div>
-      <div class="callout info" style="margin-bottom:10px;">「是否送出」選<b>是</b>：儲存後系統<b>立即自動媒合</b>（無需主管核准、無需業務按鈕），並直接告知媒合到的<b>班次時間與車號</b>；選<b>否</b>：暫存為「申請中」，之後可於明細頁送出。</div>
-      <button class="btn btn-primary" id="aa-save">💾 儲存</button>
-      <button class="btn btn-ghost" id="aa-cancel">取消</button>
+    </div>
+    <div class="card">
+      <div class="card-title">是否送審</div>
+      ${infoGridRow('aa-r8', fInput('備註', `<input type="text" id="aa-remark">`, { full: true }))}
+      ${infoGridRow('aa-r9', fInput('是否送出', `<div class="radio-group yn" id="aa-send-wrap">
+            <label class="radio-pill"><input type="radio" name="aa-send" value="yes">是</label>
+            <label class="radio-pill sel"><input type="radio" name="aa-send" value="no" checked>否</label></div>`))}
+      <div class="callout info" style="margin:6px 0 12px;">「是否送出」選<b>是</b>：按「送出」後系統<b>立即自動媒合</b>（無需主管核准、無需業務按鈕），並直接告知媒合到的<b>班次時間與車號</b>；選<b>否</b>：暫存為「申請中」，之後可於明細頁送出。</div>
+      <div style="text-align:center;">
+        <button class="btn btn-primary" id="aa-save">▶ 送出</button>
+        <button class="btn btn-ghost" id="aa-cancel">取消</button>
+      </div>
     </div>
     ${backBar('an-back')}`;
   $('#an-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
@@ -964,9 +993,10 @@ function renderAApplyNew(p) {
     $('#aa-pickuploc').innerHTML = opts; $('#aa-station').innerHTML = opts;
     initMasonry(p);
   };
-  // 是／否單選膠囊樣式（危險品運輸、是否送出）
-  ['aa-hz', 'aa-send'].forEach(n => $$(`#page-a_apply input[name=${n}]`).forEach(r => r.onchange = () =>
-    $$(`#${n}-wrap .radio-pill`).forEach(l => l.classList.toggle('sel', $('input', l).checked))));
+  // 危險品運輸只有「是」一個勾選項（未勾＝否，G152）；是否送出為是／否單選膠囊
+  $('#aa-hz').onchange = () => $('#aa-hz-pill').classList.toggle('sel', $('#aa-hz').checked);
+  $$('#page-a_apply input[name=aa-send]').forEach(r => r.onchange = () =>
+    $$('#aa-send-wrap .radio-pill').forEach(l => l.classList.toggle('sel', $('input', l).checked)));
   $$('#page-a_apply input[name=aa-recv]').forEach(r => r.onchange = () => {
     const exact = $('#page-a_apply input[value=exact]').checked;
     $('#aa-mode-asap').classList.toggle('sel', !exact);
@@ -986,7 +1016,7 @@ function renderAApplyNew(p) {
   guideApply('A', aApply, p); // 申請引導帶入（若有）
   $('#aa-add').onclick = () => openCargoEditor(null, it => { aaItems.push(it); renderAaItems(); }, A_CARGO_OPTS);
   $('#aa-cancel').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
-  // 儲存：依「是否送出」— 是＝送出並自動媒合、否＝暫存為申請中（G138）
+  // 送出：依「是否送出」— 是＝送出並自動媒合、否＝暫存為申請中（G138／G152）
   $('#aa-save').onclick = () => ($('#page-a_apply input[name=aa-send]:checked').value === 'yes' ? aaSubmit() : aaDraft());
   const aaDraft = async () => {
     const data = aaFormData(); if (!data) return;
@@ -1029,8 +1059,8 @@ function aaFormData() {
   const applyUnit = $('#aa-unit').value.trim();
   if (!applyUnit) { toast('請填寫「申請單位/委運單位」', 'err'); return null; }
   const consignor = personVal('acon'), agent = personVal('arag');
-  if (!consignor.ext) { toast('請填寫「委運人分機/手機」', 'err'); return null; }
-  if (!agent.ext) { toast('請填寫「接收代理人分機/手機」', 'err'); return null; }
+  if (!consignor.ext) { toast('請填寫「委運人手機」', 'err'); return null; }
+  if (!agent.ext) { toast('請填寫「接收代理人手機」', 'err'); return null; }
   if (mode === 'exact') {
     const d = $('#aa-date').value;
     if (!d) { toast('請選擇期望日期', 'err'); return null; }
@@ -1038,7 +1068,7 @@ function aaFormData() {
   }
   return {
     applicant: DB.currentUser.name, applyUnit, applyExt: DB.currentUser.ext, tripleNo: $('#aa-tripno').value.trim(),
-    hazardTransport: $('#page-a_apply input[name=aa-hz]:checked').value, remark: $('#aa-remark').value.trim(),
+    hazardTransport: $('#aa-hz').checked ? 'yes' : 'no', remark: $('#aa-remark').value.trim(),
     branch: $('#aa-branch').value, station: $('#aa-station').value,
     building: '',
     pickStation: $('#aa-pickuploc').value,
@@ -1063,7 +1093,7 @@ function renderAaList() { if ($('#aq-grid')) renderAGrid(); }
    自「車次追蹤」拆出：各分公司據點固定 9 站路線 + 每小時班次／車輛對應。
    ============================================================ */
 RENDER.a_route = function () {
-  const p = $('#page-a_route');
+  const p = $('#page-a_route'), today = ModuleA.todayStr();
   // 每個分公司據點各有 9 站固定路線（100~900）與專屬 5 班班次（獨立路線）
   const perBranch = DB.branches.map(b => {
     const sts = DB.stations.filter(s => s.branch === b.id);
@@ -1074,9 +1104,9 @@ RENDER.a_route = function () {
       <div class="card-desc">固定地理順序（站點 100→900）、無貨跳過、不重排。同站先卸後裝、多單時間加總。</div>
       <div class="route">${sts.map(s => `<div class="stop"><div class="s-name">${s.name}</div><div class="s-meta">建物 ${s.buildings[0]}–${s.buildings[s.buildings.length - 1]}</div></div>`).join('')}</div>
       <div class="card-title" style="font-size:14px;margin-top:14px;">今日班次 · 車輛對應 <span class="g-tag">G18</span></div>
-      <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>出發</th><th>車輛</th><th>車廂（長×寬×高）</th><th>地板面積</th><th>重量上限</th></tr></thead><tbody>
-        ${shs.map(sh => { const v = DB.vehicles.find(x => x.id === sh.vehicle);
-          return `<tr><td>${sh.label}</td><td>${sh.depart}</td><td>${v.name}</td><td>${v.dims.l}×${v.dims.w}×${v.dims.h}cm</td><td>${m2(floorCap(v))}m²</td><td>${v.weight}kg</td></tr>`; }).join('')}
+      <div class="table-wrap"><table class="dt"><thead><tr><th>班次</th><th>出發</th><th>車輛</th><th>駕駛（車號｜姓名｜電話）</th><th>車廂（長×寬×高）</th><th>地板面積</th><th>重量上限</th></tr></thead><tbody>
+        ${shs.map(sh => { const plan = ModuleA.shiftPlan(today, sh.id), v = DB.vehicles.find(x => x.id === plan.vehicle) || DB.vehicles.find(x => x.id === sh.vehicle);
+          return `<tr><td>${sh.label}</td><td>${sh.depart}</td><td>${v.name}</td><td>${aDriverInfo(today, sh.id)}</td><td>${v.dims.l}×${v.dims.w}×${v.dims.h}cm</td><td>${m2(floorCap(v))}m²</td><td>${v.weight}kg</td></tr>`; }).join('')}
       </tbody></table></div>
     </div>`;
   }).join('');
@@ -1105,6 +1135,18 @@ function dispatchGroups() {
   return map;
 }
 const drvName = id => { const d = DB.drivers.find(x => x.id === id); return d ? d.name : (id || '—'); };
+// 車號｜駕駛姓名｜電話（一欄，G152）：依收貨日期＋班次的車次安排（含車次覆寫）
+function aDriverInfo(date, shiftId) {
+  if (!date || !shiftId) return '<span class="muted">—（尚未排班）</span>';
+  const plan = ModuleA.shiftPlan(date, shiftId), d = DB.drivers.find(x => x.id === plan.driver);
+  return `<b style="color:var(--navy);">${plan.vehicle || '—'}</b>｜${d ? d.name : '待指派'}｜${d && d.phone ? d.phone : '—'}`;
+}
+// 車次內的委運人／接收人（去重；姓名＋手機）
+function aTripPeople(apps, key) {
+  const seen = new Set(), out = [];
+  apps.forEach(a => { const p = a[key]; if (p && p.name && !seen.has(p.name)) { seen.add(p.name); out.push(gEsc(p.name) + (p.ext ? `<span class="hint">（${gEsc(p.ext)}）</span>` : '')); } });
+  return out.length ? out.join('<br>') : '<span class="muted">—</span>';
+}
 const vehName = id => { const v = DB.vehicles.find(x => x.id === id); return v ? v.name : (id || '—'); };
 
 RENDER.a_dispatch = function () {
@@ -1188,7 +1230,7 @@ function aTripRows(q) {
 function aTripTable(rows, btn) {
   return rows.length === 0 ? `<div class="empty"><div class="big">🔍</div>查無符合條件的已排定車次</div>` : `
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th></th><th>收貨日期</th><th>車輛</th><th>駕駛</th><th>班次</th><th>單數</th><th>車次狀態</th></tr></thead><tbody>
+      <th></th><th>收貨日期</th><th>車輛</th><th>駕駛</th><th>班次</th><th>委運人</th><th>接收人</th><th>單數</th><th>車次狀態</th></tr></thead><tbody>
       ${rows.map(r => {
         const badge = r.logged === r.n ? '<span class="badge b-green">已回登</span>'
           : r.dep ? '<span class="badge b-green">已出車</span>' : '<span class="badge b-navy">待出車</span>';
@@ -1198,6 +1240,7 @@ function aTripTable(rows, btn) {
         <td><b style="color:var(--navy);">${r.plan.vehicle || '—'}</b>（${vehName(r.plan.vehicle)}）</td>
         <td>${drvName(r.plan.driver)}</td>
         <td>${r.sh ? brName(r.sh.branch) + '·' + r.sh.label : r.shiftId}</td>
+        <td>${aTripPeople(r.apps, 'consignor')}</td><td>${aTripPeople(r.apps, 'recipient')}</td>
         <td>${r.n}</td><td>${badge}</td></tr>`; }).join('')}
     </tbody></table></div>`;
 }
@@ -3636,17 +3679,18 @@ function aDriverCard(date, shiftId, list) {
     ensure(dropSt.order, dropSt.name).drops.push(a);                                     // 卸貨（迄）
   });
   const ordered = Object.values(stops).sort((x, y) => x.order - y.order);
+  // 一列＝一項作業（G152）：停靠站的順序／站點／抵達以合併儲存格呈現，作業內容拆成單號、地點、財物、聯絡人、電話、狀態各欄
+  const pn = x => x && x.name ? gEsc(x.name) : '<span class="muted">—</span>';
+  const ph = x => x && x.ext ? gEsc(x.ext) : '<span class="muted">—</span>';
   const body = ordered.map((stp, i) => {
     const t = minToHHMM(ModuleA.shiftArrivalAtStation(sh, stp.order, date === '—' ? null : date));   // 含前面各站停站時間（G131）
-    const dropLines = stp.drops.map(a => {
-      const del = ['departed', 'logged'].includes(Flow.of(a)) ? ' ' + Flow.badge(a) : '';
-      return `<div style="margin:2px 0;"><span class="badge b-amber">卸貨</span> ${a.id}｜${aDestText(a)}｜接收：${personDisplay(a.recipient)}${del}</div>`;
-    }).join('');
-    const pickLines = stp.picks.map(a =>
-      `<div style="margin:2px 0;"><span class="badge b-navy">取貨</span> ${a.id}｜${a.pickupLoc || stp.name}｜${itemsSummary(a.items)}</div>`).join('');
-    return `<tr><td>${i + 1}</td><td><b>${stp.name}</b></td>
-      <td><b style="color:var(--navy);">${t}</b></td>
-      <td style="text-align:left;">${dropLines}${pickLines}</td></tr>`;
+    const jobs = stp.drops.map(a => ({ a, kind: '<span class="badge b-amber">卸貨</span>', place: aDestText(a), who: a.recipient, role: '接收人' }))
+      .concat(stp.picks.map(a => ({ a, kind: '<span class="badge b-navy">取貨</span>', place: a.pickupLoc || stp.name, who: a.consignor, role: '委運人' })));
+    const n = jobs.length;
+    return jobs.map((j, k) => `<tr>
+      ${k === 0 ? `<td rowspan="${n}">${i + 1}</td><td rowspan="${n}"><b>${stp.name}</b></td><td rowspan="${n}"><b style="color:var(--navy);">${t}</b></td>` : ''}
+      <td>${j.kind}</td><td>${j.a.id}</td><td>${gEsc(j.place)}</td><td>${itemsSummary(j.a.items)}</td>
+      <td>${pn(j.who)}<span class="hint">（${j.role}）</span></td><td>${ph(j.who)}</td><td>${Flow.badge(j.a)}</td></tr>`).join('');
   }).join('');
   return `<div class="card">
     <div class="card-title" style="justify-content:space-between;">
@@ -3654,7 +3698,7 @@ function aDriverCard(date, shiftId, list) {
       <span class="badge b-navy">駕駛：${logiDriverName(veh.id)}</span></div>
     <div class="card-desc">沿分公司固定 9 站路線<b>一次通過</b>，於 <b>${ordered.length}</b> 個停靠站依序<b>卸貨／取貨</b>；本班 <b>${list.length}</b> 筆、總貨量約 <b>${totalVol.toFixed(0)}L</b>。</div>
     <div class="table-wrap"><table class="dt"><thead><tr>
-      <th>順序</th><th>停靠站</th><th>抵達</th><th>作業（卸貨／取貨）</th>
+      <th>順序</th><th>停靠站</th><th>抵達</th><th>作業</th><th>財物運輸單號</th><th>地點</th><th>財物</th><th>聯絡人</th><th>電話</th><th>狀態</th>
     </tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 RENDER.a_driver = function () {

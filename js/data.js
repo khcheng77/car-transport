@@ -176,14 +176,14 @@ const DB = {
   ],
 
   /* ---- 駕駛主檔（獨立資源 G61）---- */
-  // homeSite＝歸屬據點（C-2）；currentSite＝當前位置（G59）
+  // homeSite＝歸屬據點（C-2）；currentSite＝當前位置（G59）；phone＝聯絡電話（示意，G152）
   drivers: [
-    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10' },
-    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10' },
-    { id: 'DR3', name: '王建國', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
-    { id: 'DR4', name: '張美華', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
-    { id: 'DR5', name: '李俊宏', pool: 'BIZ',  homeSite: 'D6',  currentSite: 'D6' },
-    { id: 'DR6', name: '許雅雯', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10' },
+    { id: 'DR1', name: '陳大文', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10', phone: '0912-345-101' },
+    { id: 'DR2', name: '林志明', pool: 'LOGI', homeSite: 'D10', currentSite: 'D10', phone: '0912-345-102' },
+    { id: 'DR3', name: '王建國', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10', phone: '0912-345-103' },
+    { id: 'DR4', name: '張美華', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10', phone: '0912-345-104' },
+    { id: 'DR5', name: '李俊宏', pool: 'BIZ',  homeSite: 'D6',  currentSite: 'D6', phone: '0912-345-105' },
+    { id: 'DR6', name: '許雅雯', pool: 'BIZ',  homeSite: 'D10', currentSite: 'D10', phone: '0912-345-106' },
   ],
 
   /* ---- 車輛保修排程（G60）示意 ---- */
