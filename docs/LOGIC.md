@@ -29,13 +29,13 @@
 | 調度主管審 | 派車單送審（運輸主管簽審待審） | — | 簽審 pending | 簽審 pending | `dispatched`＋簽審 pending |
 | 待出車 | 調度主管同意（A：排入班次） | `matched` | 簽審通過 | 簽審通過 | 簽審通過 |
 | 已出車 | 系統時間 ≥ 出車時間 | 收貨日期＋班次出發 | 派車日＋收貨時間 | 出發日期＋去程上車 | 用車起時 |
-| 已回登 | 車輛使用實登已登錄里程 | `usage` | `usage` | `usage`（車／司機回歸屬據點） | `usage` |
+| 已回登 | 車輛異動實登已登錄里程 | `usage` | `usage` | `usage`（車／司機回歸屬據點） | `usage` |
 | 已刪除 | 申請人取消申請（結案，G133；G140 由「已取消」改名） | — | — | `cancelled`（派車單送審前） | — |
 
 - 調度主管退回：B／C 整張派車單回「調度中」（未送審）；D 回「待調度」。已出車後派車單不可再異動。
 - 已刪除（G122）：已派車、已交貨（交貨確認）、已駁回，以及 C 待人工協調／已上車／行程完成／逾期作廢，D 整單撤回／已歸還（整段提前歸還）／行程完成。
 - 下方各模組「狀態流轉」為內部 status 的實作說明。
-- 車輛使用實登單位（G123–G126）：A 以**車次**（`ModuleA.tripUsageSave`）、B／C／D 以**派車單**（`M.usageDispatches()`／`M.dispatchUsageSave(d, data, by)`）登打，經 `Usage.saveGroup` 同步寫入單內每張申請單 `usage` → 已回登。D 一單一派車單：`dispatch()` 非無車退回時給 `app.dispatchNo`（GD###，退回後重派沿用），派車單欄位由 `_refreshDispatch` 依申請單目前指派帶入（`dispatchOrderOf(app)`；刻意不命名 `dispatchOf`，避免 Flow 推導出 D 沒有的「調度中」）。
+- 車輛異動實登單位（G123–G126）：A 以**車次**（`ModuleA.tripUsageSave`）、B／C／D 以**派車單**（`M.usageDispatches()`／`M.dispatchUsageSave(d, data, by)`）登打，經 `Usage.saveGroup` 同步寫入單內每張申請單 `usage` → 已回登。D 一單一派車單：`dispatch()` 非無車退回時給 `app.dispatchNo`（GD###，退回後重派沿用），派車單欄位由 `_refreshDispatch` 依申請單目前指派帶入（`dispatchOrderOf(app)`；刻意不命名 `dispatchOf`，避免 Flow 推導出 D 沒有的「調度中」）。
 
 ---
 
@@ -46,7 +46,7 @@
 - 係數示意：標準紙箱 1.10、棧板貨 1.20、長條/管材 1.45、不規則件 1.65、桶裝/圓形 1.35、易碎/需空隙 1.55。
 
 ### 不堆疊裝載（G145，2026-10-08 與業務單位確認：A、B、申請引導**同一套演算法**）
-條件＝「**物品不堆疊、能夠裝入的最大量**」。取代原 Level 1 體積加總、形狀懲罰與 Level 2 六方向旋轉（不堆疊時體積必然 ≤ 地板×高，不另檢查）。
+條件＝「**財物不堆疊、能夠裝入的最大量**」。取代原 Level 1 體積加總、形狀懲罰與 Level 2 六方向旋轉（不堆疊時體積必然 ≤ 地板×高，不另檢查）。
 
 - **單件擺放** `itemFitsFloor(it, dims)`：每件平放地板、不堆疊，**只能水平轉向**（高度固定為申請填的「高」）→ `高 ≤ 車廂高` 且底面 `(長,寬)` 或 `(寬,長)` 放得進車廂地板 `(長,寬)`。
 - **單品有效值** `itemEffective(it)`：底面積 `base = l×w`；**有效地板面積** `floor = base × 數量 × 類別浪費係數`（cm²）；重量 `weight = 單件重 × 數量`；`vol` 僅供顯示。
@@ -92,11 +92,11 @@ draft（申請中）──(送出 submitDraft)──▶ submitted ──(自動�
 - **無「主管核准」「業務媒合按鈕」「確認接受排班」「交貨確認」**；媒合成功即待出車，到班次出發時間即已出車，實登後已回登（G122）。實登以**車次**為單位（`ModuleA.tripUsageSave(date, shiftId, {vehicle, driver, startKm, endKm}, by)`），儲存後車次內每張申請單同步寫入 `usage` → 已回登；異常回報 `ModuleA.setIncident(app, '' | '使用者不準時' | '使用者沒出現')`（G123）。
 
 ### 申請單主要欄位（`createApp`）
-- `id`＝**物品運輸單號**（G138）：`car`＋民國年 3 碼＋流水號 5 碼（`nextNo()`，例 `car11500001`，取代 LA###）；`Flow.moduleOf` 以前綴 `ca`（及舊 `LA`）辨識模組 A。`transportStatus`＝「開單」、`applyDate`＝民國年申請日期（`rocDate()`，例 `115/10/10`）、`hazardTransport`（`yes`／`no`，僅記錄）、`remark`。
+- `id`＝**財物運輸單號**（G138）：`car`＋民國年 3 碼＋流水號 5 碼（`nextNo()`，例 `car11500001`，取代 LA###）；`Flow.moduleOf` 以前綴 `ca`（及舊 `LA`）辨識模組 A。`transportStatus`＝「開單」、`applyDate`＝民國年申請日期（`rocDate()`，例 `115/10/10`）、`hazardTransport`（`yes`／`no`，僅記錄）、`remark`。
 - `pickStation`(收貨站點) + `pickupLoc`（站點名稱）、`station`(送貨站點) + `building`（G138 表單移除建物，新單為空字串；舊資料仍顯示）、`applyUnit`（申請單位/委運單位，必填）、`consignor`／`recipient`／`recipientAgent`（姓名、分機、院區、館別；委運人與接收代理人分機可改填手機且必填）。
 - `deliverTime`(**期望收貨時間**，僅 `exact` 模式用於挑班次，**非硬性截止**)、`expectDiffMin`(排定到站與期望的差，僅供顯示)。
 - `serviceDate`(**排班日期**)：`exact` 可指定今天或未來日期（表單 `min` 擋過去）；`asap` 即當天。
-- `items[]`(逐件尺寸/類別/數量/重量；G138 加 `plan` 計畫名稱、`workNo` 工令號碼、`pack` 物品外包裝，僅記錄)、`recvMode`(`asap` 越快越好 / `exact` 指定期望時間)。
+- `items[]`(逐件尺寸/類別/數量/重量；G138 加 `plan` 計畫名稱、`workNo` 工令號碼、`pack` 財物外包裝，僅記錄)、`recvMode`(`asap` 越快越好 / `exact` 指定期望時間)。
 - `loadMin`+`unloadMin`（表單「裝貨／卸貨所需時間」）= `handleMin`（站內佔用時間）、`submitSeq`(送出序，決定同站處理先後)。
 - 表單「是否送出」（G138）：是 → `submit`（建立並立即媒合）；否 → `saveDraft`（申請中）。
 
@@ -170,8 +170,8 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 ### 託運單主要欄位（`createOrder`）
 - `pickSite`(收貨據點/起)、`dropSite`(送貨據點/迄)。**無 `leg` 欄位**——行程方向由起迄相對順序推導（`isSouthbound`：迄點較南＝南下，較北＝北上），不由申請人勾選。
 - `pickupLoc`/`deliverLoc`(建物)、`deliverTime`(交貨時間)、`recipient`(接收人)、`direct`(直達與否)。
-- `items[]`(逐件尺寸；G143 加 `plan` 計畫名稱、`workNo` 工令號碼、`shape` 物品外型、`pack` 物品外包裝，僅記錄)、`loadMin`(裝貨所需時間)+`unloadMin`(卸貨所需時間) = `handleMin`。
-- G143 新欄位：`transportStatus`(開單)、`applyDate`(民國年)、`tripleFormNo`、`applyUnit`＊、`applyExt`＊、`consignor{name＊,campus,ext＊}`（館別＝`pickupLoc`）、`recipient` 加 `campus`／`agentCampus`＊／`agentHall`＊（接收人館別＝`deliverLoc`＊）、`unloadReadyTime`、`delayReceiveTime`（預設＝可卸貨時間）、`nightOT`／`holidayOT`／`oneway`／`keepMatchDriver`（`yes`/`no`，預設 no）、`hazardTransport`（`yes`/`no`）、`agreeCarpool`（預設 true；false 時 `carpoolRejectReason` 必填）、`remark`、`changeReason`（修改時必填）、`captain`、`captainPhone`。`wantReceiveTime` 畫面名稱改為「可裝貨時間」。除 `hazardTransport` 外僅記錄，`agreeCarpool=false` **不等同** `direct`。
+- `items[]`(逐件尺寸；G143 加 `plan` 計畫名稱、`workNo` 工令號碼、`shape` 財物外型、`pack` 財物外包裝，僅記錄)、`loadMin`(裝貨所需時間)+`unloadMin`(卸貨所需時間) = `handleMin`。
+- G143 新欄位：`transportStatus`(開單)、`applyDate`(民國年)、`tripleNo`（三聯單單號，G148 整併原 `tripleFormNo`）、`escort`（押車人，G147）、`applyUnit`＊、`applyExt`＊、`consignor{name＊,campus,ext＊}`（館別＝`pickupLoc`）、`recipient` 加 `campus`／`agentCampus`＊／`agentHall`＊（接收人館別＝`deliverLoc`＊）、`unloadReadyTime`、`delayReceiveTime`（預設＝可卸貨時間）、`nightOT`／`holidayOT`／`oneway`／`keepMatchDriver`（`yes`/`no`，預設 no）、`hazardTransport`（`yes`/`no`）、`agreeCarpool`（預設 true；false 時 `carpoolRejectReason` 必填）、`remark`、`changeReason`（修改時必填）、`captain`、`captainPhone`。`wantReceiveTime` 畫面名稱改為「可裝貨時間」。除 `hazardTransport` 外僅記錄，`agreeCarpool=false` **不等同** `direct`。
 - `formError(data, {editing})`：＊欄位、希望收貨日期、不同意併車須填事由、修改須填異動事由，最後套 `routeError`。是否送審：否＝`createOrder(data,{draft:true})`／`saveDraft`（申請中或退回修編 → 申請中，退回者保留 `revisions`）；是＝`createOrder`／`resubmit`（待二級審）。
 - `recompute`：由 items 加總 → `volume`(申報貨量，僅顯示)、`weight`、`effFloor`(**有效地板面積** cm²，容量計算基準，G145)、`legacyEffVol`(只有申報體積的舊項目)。
 
@@ -268,11 +268,11 @@ G122 已刪除：coordinate（待人工協調）、boarded／completed（已上�
 > 實登以**派車單**為單位（G125）：`ModuleC.usageDispatches()` 列出簽審通過的派車單；`ModuleC.dispatchUsageSave(d, data, by)` 經 `Usage.saveGroup` 寫入派車單並同步到單內每張申請單 `usage` → 已回登，再對各單 `_returnResourcesHome`（當前位置回復歸屬據點）。
 
 ### 申請單主要欄位（`createApp` → `_fields`，G133 改版）
-- **表單存檔欄位**：`applicant`（登入者帶入）、`dept`、`applicantPhone`、`reason`（必填）、`projectCode`、`captain`、`captainPhone`、`homeBase`、`isOneway`、`route`（車輛起迄地點，最多 `ROUTE_MAX`=8 點）、`reportAt`／`endAt`（`yyyy-mm-ddTHH:MM`，單程 `endAt` 為空）、`passengers`、`agreeCarpool`（未指定＝true）、`baseShuttle`、`permitP`、`permitK`、`crossCampus`、`enterTaipei`、`hasCargo`、`manifestNo`／`escortNo`（無載運品不存）、`remark`、`reportPlace`（報到地點，G136）、`personalCargo[]`（隨身貨物 `{name, qty, l, w, h, weight, pack}`，`_cargoRows` 數字欄轉數值，G136）；`changeReason`＋`changeLog[]`（`_change`：修改／取消的異動事由）。
+- **表單存檔欄位**：`applicant`（登入者帶入）、`dept`、`applicantPhone`、`reason`（必填）、`projectCode`、`captain`、`captainPhone`、`homeBase`、`isOneway`、`route`（車輛起迄地點，最多 `ROUTE_MAX`=8 點）、`reportAt`／`endAt`（`yyyy-mm-ddTHH:MM`，單程 `endAt` 為空）、`passengers`、`agreeCarpool`（未指定＝true）、`baseShuttle`、`permitP`、`permitK`、`crossCampus`、`enterTaipei`、`hasCargo`、`tripleNo`（三聯單單號，原 `manifestNo`）／`escortNo`（無載運品不存）、`remark`、`reportPlace`（報到地點，G136）、`personalCargo[]`（隨身貨物 `{name, qty, l, w, h, weight, pack}`，`_cargoRows` 數字欄轉數值，G136）；`changeReason`＋`changeLog[]`（`_change`：修改／取消的異動事由）。
 - **媒合內部欄位（推導）**：`type`＝`isOneway ? 'oneway' : 'round'`、`origin`＝`route[0]`、`dest`＝`route` 最後一點、`departDate`／`earliestPickup`＝`reportAt` 拆開、`returnDate`／`earliestReturn`＝`endAt` 拆開（單程＝出發日）、`pax`＝`passengers`、`ext`＝`applicantPhone`。經過地點不參與媒合與車程。
 - `_fields` 也接受舊欄位（`origin`／`dest`／`departDate`…，供範例資料、申請引導帶入與測試）並反推表單欄位；同時給新舊欄位時以新欄位為準。
 - 車輛起迄地點畫面為 grid（G137）：`caRoute` 陣列＋`caRouteEdit`（同時只編輯一列），儲存時依「順序」移到指定位置；有編輯中的列不可送出。
-- `formError(data, {editing})`：事由必填；起迄至少 2 點、最多 8 點、相鄰不重複、起訖不同；報到必填；非單程時結束必填且不早於報到；乘客數 ≥ 1；有載運品時三聯單表單編號、護運單號必填；報到地點必填；隨身貨物有填列時 `cargoRowError`（名稱必填、數量 ≥ 1 整數、長寬高與重量 > 0）；修改時異動事由必填。隨身貨物不參與媒合。
+- `formError(data, {editing})`：事由必填；起迄至少 2 點、最多 8 點、相鄰不重複、起訖不同；報到必填；非單程時結束必填且不早於報到；乘客數 ≥ 1；有載運品時三聯單單號、護運單號必填；報到地點必填；隨身貨物有填列時 `cargoRowError`（名稱必填、數量 ≥ 1 整數、長寬高與重量 > 0）；修改時異動事由必填。隨身貨物不參與媒合。
 - 車程 `travelMin = bizTravel[起|迄] + bizBuffer(15)`（車程表**對稱**，查無正向則查反向）；`latestArrival` 最晚抵達為**唯讀參考，不參與媒合**。
 
 ### 歸屬據點與當前位置（v4 語意區分）

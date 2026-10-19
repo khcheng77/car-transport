@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>巡迴物品轉運作業 — 完整需求討論報告</title>
+<title>巡迴財物轉運作業 — 完整需求討論報告</title>
 <style>
   :root {
     --ink: #1c1f26;
@@ -339,23 +339,24 @@
 
 <header class="hero">
   <div class="wrap">
-    <div class="eyebrow">巡迴物品轉運作業 · 完整需求討論報告</div>
+    <div class="eyebrow">巡迴財物轉運作業 · 完整需求討論報告</div>
     <h1>從貨物裝載判定到收貨排班與異常回報</h1>
     <p class="hero-sub">
-      本文件彙整巡迴物品轉運作業的完整需求討論歷程，涵蓋貨物裝載判定演算法、
+      本文件彙整巡迴財物轉運作業的完整需求討論歷程，涵蓋貨物裝載判定演算法、
       端到端排班架構、系統整體架構（資源池、審批、路線設計、容量判定），
-      以及收貨時間指定邏輯與駕駛異常回報機制。院區物品轉運作業模組另立文件，不含於本報告。
+      以及收貨時間指定邏輯與駕駛異常回報機制。院區財物轉運作業模組另立文件，不含於本報告。
     </p>
     <div class="hero-meta">
-      <span>範圍：<b>巡迴物品轉運作業（10 站固定路線）</b></span>
-      <span>不含：<b>院區物品轉運作業模組（另文）</b></span>
+      <span>範圍：<b>巡迴財物轉運作業（10 站固定路線）</b></span>
+      <span>不含：<b>院區財物轉運作業模組（另文）</b></span>
       <span>狀態：<b>核心邏輯已定案；本版修訂審批流程與排序基準</b></span>
       <span>模組名稱已於 2026-10-02 更名（原名：區域內物流貨運子系統）</span>
       <span>申請單狀態名稱已於 2026-10-03 對齊</span>
-      <span>車輛使用實登已於 2026-10-03 改以車次為單位（G123）</span>
+      <span>車輛異動實登已於 2026-10-03 改以車次為單位（G123）</span>
       <span>申請表單欄位已於 2026-10-07 改版（G138，見 3.2A）</span>
       <span>司機任務單已於 2026-10-08 改為查詢頁＋細節頁（G142，見 4.6）</span>
-      <span>裝載判定已於 2026-10-08 改為「物品不堆疊、能夠裝入的最大量」，與院區物品轉運、申請引導一致（G145，見 1.0）</span>
+      <span>業管會議修訂已於 2026-10-19 納入：財物用語、撤單、三聯單單號、車輛異動實登欄位（G147／G148，見 4.7）</span>
+      <span>裝載判定已於 2026-10-08 改為「財物不堆疊、能夠裝入的最大量」，與院區財物轉運、申請引導一致（G145，見 1.0）</span>
     </div>
   </div>
 </header>
@@ -363,7 +364,7 @@
 <div style="border:2px solid #1f3a5f;border-radius:10px;padding:16px 20px;margin:20px 0;background:#f6f9fc;color:#1f2a37;">
   <div style="font-weight:700;font-size:1.05em;margin-bottom:6px;">申請單狀態（2026-10-03 狀態名稱對齊）</div>
   <div style="font-size:.92em;margin-bottom:10px;">四個作業模組的申請單一律只使用下列 10 種狀態（G122）。本文件中的舊狀態名稱已依此對齊；刪除的狀態以「已刪除」註記。</div>
-  <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，申請人修改後重送</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛使用實登登錄里程完畢</td></tr></table>
+  <table style="border-collapse:collapse;width:100%;font-size:.92em;"><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>申請中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">申請人暫存、尚未送出</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待二級審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">已送出，等待單位主管審核</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>退回修編</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管退回，申請人修改後重送</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待調度</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">單位主管同意，等待調度派車</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>無車退回</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度將待調度的申請單退回（原因必填），結案不可再動</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度中</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度產生派車單、申請單併入，派車單尚未送審</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>調度主管審</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">派車單送審給調度主管（運輸主管簽審）</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>待出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">調度主管同意</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已出車</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">系統時間到達收貨／出發時間</td></tr><tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;white-space:nowrap;"><b>已回登</b></td><td style="padding:6px 10px;border-bottom:1px solid #ddd;">車輛異動實登登錄里程完畢</td></tr></table>
   <div style="font-size:.92em;margin-top:10px;"><b>本模組流程</b>：申請中（暫存）→ 送出即自動媒合（本模組無二級審、無調度主管）：媒合成功＝待出車；未排入＝待調度（調度可於車次追蹤／異動改派班次，或無車退回）→ 已出車（收貨日期＋班次出發時間）→ 已回登。</div>
   <div style="font-size:.92em;margin-top:6px;"><b>舊名稱對照</b>：已排班→待出車｜未排入·請改期→待調度｜已交貨（交貨確認）→已刪除，改以「已出車／已回登」表達。</div>
 </div>
@@ -374,12 +375,13 @@
   <div class="lead-box" style="margin-top:8px;border-left:4px solid var(--accent)">
     <p><b>本版修訂摘要（依實作回填）</b></p>
     <p>
-      ・<b>1.0 新增（2026-10-08，G145）</b>——與業務單位確認裝載判定<b>巡迴物品轉運、院區物品轉運、申請引導一致</b>，條件為「<b>物品不堆疊、能夠裝入的最大量</b>」：單件平放（只能水平轉向）＋有效地板面積（底面積×類別浪費係數）加總＋重量。取代 1.2／1.3 的 Level 1 體積加總、長寬比形狀懲罰與 Level 2 六方向旋轉。<br>
+      ・<b>4.7 新增（2026-10-19，G147／G148 業管會議修訂）</b>——用語「物品」改「財物」；車輛出發日前一天（含）以前可撤單；新增三聯單單號（物籌處介接）；車輛使用實登更名車輛異動實登並新增加油公升數、司機工時、司機加班時數。<br>
+      ・<b>1.0 新增（2026-10-08，G145）</b>——與業務單位確認裝載判定<b>巡迴財物轉運、院區財物轉運、申請引導一致</b>，條件為「<b>財物不堆疊、能夠裝入的最大量</b>」：單件平放（只能水平轉向）＋有效地板面積（底面積×類別浪費係數）加總＋重量。取代 1.2／1.3 的 Level 1 體積加總、長寬比形狀懲罰與 Level 2 六方向旋轉。<br>
       ・<b>4.6 新增（2026-10-08，G142）</b>——司機任務單改為查詢頁（日期起迄、司機；grid＝細節、日期、出發時間、司機名稱）＋細節頁（原班次任務卡）；貨物欄位「工命號碼」更正為「<b>工令號碼</b>」。<br>
       ・<b>到站時間修正（2026-10-04，G131）</b>——預計到站時間改為「發車＋站間行駛＋<b>前面各站的停站時間</b>」（同班次各單上貨計收貨站、卸貨計送貨站），
       不再只算行駛時間；同班次有單排入、改派或移出時重算整班到站與「與期望時間差」（G132），司機任務單同一套時間。挑選班次時的「到站與期望時間差」也以此計算。
       <b>待業務決定</b>：申請人送出時即看到預計到站時間，後來排進同班的單可能把它往後推，目前不另行通知申請人。<br>
-      ・<b>4.5 新增（2026-10-03，G123）</b>——「車輛使用實登」改以<b>車次</b>（收貨日期＋班次）為單位：查詢頁改列已排定車次；明細頁於班次車輛資訊輸入起訖里程即完成實登，
+      ・<b>4.5 新增（2026-10-03，G123）</b>——「車輛異動實登」改以<b>車次</b>（收貨日期＋班次）為單位：查詢頁改列已排定車次；明細頁於班次車輛資訊輸入起訖里程即完成實登，
       並在「本車次申請單」逐單回報異常（正常運送／不準時／沒出現）、以「明細」視窗回報貨品狀態。4.3／4.4 的回報位置與流程一併更新。<br>
       ・<b>3.1 修訂</b>——取消兩層審批，申請單送出即自動媒合、媒合成功即完成排班；業務端角色改為車次追蹤與異常處理。<br>
       ・<b>3.6 / 4.1 連帶修訂</b>——站內處理順序的排序基準由「審核通過時間」改為「<b>送出時間</b>」。<br>
@@ -403,11 +405,11 @@
   <!-- ============ PART 1 ============ -->
   <h1 class="part" id="part1"><span class="part-num">01</span> 貨物裝載判定演算法</h1>
 
-  <h2><span class="num">1.0</span> 裝載判定：物品不堆疊、能夠裝入的最大量（2026-10-08 · G145）</h2>
+  <h2><span class="num">1.0</span> 裝載判定：財物不堆疊、能夠裝入的最大量（2026-10-08 · G145）</h2>
   <div class="decision-card">
     <div class="label">決策（取代 1.1～1.3 的分層快篩）</div>
     <div class="content">
-      與業務單位確認：巡迴物品轉運、院區物品轉運與申請引導的裝載判定<b>演算法一致</b>，條件皆為「<b>物品不堆疊、能夠裝入的最大量</b>」。三項條件<b>全部</b>通過才算裝得下：
+      與業務單位確認：巡迴財物轉運、院區財物轉運與申請引導的裝載判定<b>演算法一致</b>，條件皆為「<b>財物不堆疊、能夠裝入的最大量</b>」。三項條件<b>全部</b>通過才算裝得下：
     </div>
   </div>
   <table>
@@ -436,7 +438,7 @@
       必須採用啟發式或近似解法。系統需求是「快速媒合」，因此放棄真實的 3D 空間碰撞模擬，
       改以<b>分層快篩</b>取代：Level 1 體積篩選 + Level 2 單品維度檢查。
     </p>
-    <p><b>（2026-10-08 G145：已改為 1.0「物品不堆疊、能夠裝入的最大量」，本節以下 1.1～1.3 為原設計沿革。）</b></p>
+    <p><b>（2026-10-08 G145：已改為 1.0「財物不堆疊、能夠裝入的最大量」，本節以下 1.1～1.3 為原設計沿革。）</b></p>
   </div>
 
   <h2><span class="num">1.2</span> 三層準確度模型</h2>
@@ -470,7 +472,7 @@
       在不做碰撞檢測的前提下，為求「最保險」，以<b>地板面積瓶頸法</b>與<b>長寬比形狀懲罰係數</b>取代單純體積加總，
       降低因形狀不規則造成的誤判風險。<b>（G145 起地板面積成為主要判定，改以「底面積×類別浪費係數」計算；長寬比形狀懲罰取消。）</b>
     </div>
-    <div class="why">純體積加總容易高估可裝載量（例如細長物品實際佔用地板面積遠大於其體積比例），地板面積與形狀懲罰能在不做碰撞模擬的情況下，提供更保守、更貼近實際的估算。</div>
+    <div class="why">純體積加總容易高估可裝載量（例如細長財物實際佔用地板面積遠大於其體積比例），地板面積與形狀懲罰能在不做碰撞模擬的情況下，提供更保守、更貼近實際的估算。</div>
   </div>
 
   <h2><span class="num">1.4</span> 浪費係數與貨物類別</h2>
@@ -611,15 +613,15 @@
   <div class="decision-card">
     <div class="label">決策（修訂 · 取代上一條）</div>
     <div class="content">
-      巡迴物品轉運作業<b>取消兩層審批</b>：申請單<b>送出即由系統自動媒合</b>，不經部門主管核准，也不設派車辦公室的「確認排班」按鈕；
-      媒合成功即視為排班完成（狀態「待出車」），到收貨時間即「已出車」，車輛使用實登後「已回登」（2026-10-03 狀態對齊：刪除原「已交貨」）。
+      巡迴財物轉運作業<b>取消兩層審批</b>：申請單<b>送出即由系統自動媒合</b>，不經部門主管核准，也不設派車辦公室的「確認排班」按鈕；
+      媒合成功即視為排班完成（狀態「待出車」），到收貨時間即「已出車」，車輛異動實登後「已回登」（2026-10-03 狀態對齊：刪除原「已交貨」）。
       <div style="margin-top:8px">・<b>使用者端</b>：填單 → 送出 → 同步看到排班結果（待出車：班次、預計到站時間）或未排入原因（待調度）。</div>
-      <div>・<b>業務端</b>：角色由「核准／媒合」轉為<b>追蹤已排定車次</b>、以車次為單位登打<b>車輛使用實登</b>並處理駕駛異常回報（見 4.5），不介入單張申請單的准駁。</div>
+      <div>・<b>業務端</b>：角色由「核准／媒合」轉為<b>追蹤已排定車次</b>、以車次為單位登打<b>車輛異動實登</b>並處理駕駛異常回報（見 4.5），不介入單張申請單的准駁。</div>
       <div>・<b>影響範圍</b>：3.6 與 4.1 原以「審核通過時間」為排序基準者，一併改為「送出時間」，見下方修訂。</div>
     </div>
     <div class="why">
-      巡迴物品轉運作業為廠區內短程收送，單張申請單金額與風險低，逐張走主管核准會讓行政成本高於運送本身；且審批延遲會直接壓縮可排入的班次數，
-      反而降低車輛利用率。<b>院區物品轉運作業（跨據點、跨天、成本高）與差旅共乘作業仍維持主管准駁，此處不一致為刻意設計。</b>
+      巡迴財物轉運作業為廠區內短程收送，單張申請單金額與風險低，逐張走主管核准會讓行政成本高於運送本身；且審批延遲會直接壓縮可排入的班次數，
+      反而降低車輛利用率。<b>院區財物轉運作業（跨據點、跨天、成本高）與差旅共乘作業仍維持主管准駁，此處不一致為刻意設計。</b>
     </div>
   </div>
 
@@ -636,13 +638,13 @@
   <h2><span class="num">3.2A</span> 申請表單欄位（2026-10-07 · G138）</h2>
   <div class="decision-card">
     <div class="label">決策</div>
-    <div class="content">巡迴物品轉運申請新增畫面依下表排列（由上到下）。<b>移除</b>：收貨建物、送貨建物、委運人單位、接收單位、接收代理人單位。<b>＊</b>＝必填。</div>
+    <div class="content">巡迴財物轉運申請新增畫面依下表排列（由上到下）。<b>移除</b>：收貨建物、送貨建物、委運人單位、接收單位、接收代理人單位。<b>＊</b>＝必填。</div>
   </div>
   <table>
     <thead><tr><th>欄位</th><th>輸入方式</th><th>說明</th></tr></thead>
     <tbody>
-      <tr><td>物品運輸單狀態</td><td>唯讀</td><td><b>新增</b>；新單為「開單」</td></tr>
-      <tr><td>物品運輸單號</td><td>唯讀（系統產生）</td><td><b>新增</b>；<code>car</code>＋民國年 3 碼＋流水號 5 碼，例 <code>car11500001</code>（取代原 LA###）；新增畫面先預覽下一個號碼，儲存後產生</td></tr>
+      <tr><td>財物運輸單狀態</td><td>唯讀</td><td><b>新增</b>；新單為「開單」</td></tr>
+      <tr><td>財物運輸單號</td><td>唯讀（系統產生）</td><td><b>新增</b>；<code>car</code>＋民國年 3 碼＋流水號 5 碼，例 <code>car11500001</code>（取代原 LA###）；新增畫面先預覽下一個號碼，儲存後產生</td></tr>
       <tr><td>申請人</td><td>唯讀</td><td>登入者</td></tr>
       <tr><td>申請單位/委運單位＊</td><td>文字</td><td>原「申請單位」；預帶登入者單位，可修改，必填（取代已移除的委運人單位）</td></tr>
       <tr><td>申請人分機</td><td>唯讀</td><td>登入者</td></tr>
@@ -659,16 +661,16 @@
       <tr><td>委運人姓名／分機＊/手機／院區／館別</td><td>下拉＋文字</td><td>「委運人分機」改為「委運人分機＊/手機」：選姓名時預帶分機，可改填手機，必填；不再顯示委運人單位</td></tr>
       <tr><td>接收人姓名／分機／院區／館別</td><td>下拉</td><td>不再顯示接收單位；分機仍自動帶入</td></tr>
       <tr><td>接收代理人姓名／分機＊/手機／院區／館別</td><td>下拉＋文字</td><td>「接收代理人分機」改為「接收代理人分機＊/手機」（同委運人）；不再顯示接收代理人單位</td></tr>
-      <tr><td>貨物項目 grid</td><td>新增／編輯視窗</td><td>欄位順序：<b>計畫名稱</b>、<b>工令號碼</b>（新增）、物品名稱（原「品名」）、長×寬×高、類別、數量、單件重、<b>物品外包裝</b>（新增）；新增三欄皆文字、選填</td></tr>
+      <tr><td>貨物項目 grid</td><td>新增／編輯視窗</td><td>欄位順序：<b>計畫名稱</b>、<b>工令號碼</b>（新增）、財物名稱（原「品名」）、長×寬×高、類別、數量、單件重、<b>財物外包裝</b>（新增）；新增三欄皆文字、選填</td></tr>
     </tbody>
   </table>
   <div class="decision-card">
     <div class="label">待確認</div>
     <div class="content">
-      ・查詢頁清單原有一欄「物品運輸單狀態」顯示流程狀態（申請中、待出車…），與新增欄位「物品運輸單狀態」（開單）同名不同義，待決定是否改名或定義「開單」之後的狀態。<br>
+      ・查詢頁清單原有一欄「財物運輸單狀態」顯示流程狀態（申請中、待出車…），與新增欄位「財物運輸單狀態」（開單）同名不同義，待決定是否改名或定義「開單」之後的狀態。<br>
       ・接收人分機未列入「分機＊/手機」改名，維持自動帶入、不可修改，待確認是否比照。<br>
       ・接收代理人資訊標示「選填」，但其分機為必填（＊），待確認。<br>
-      ・危險品運輸目前僅記錄；申請引導已將危險品運輸導向院區物品轉運（R6），本表單選「是」是否要阻擋或提示，待確認。
+      ・危險品運輸目前僅記錄；申請引導已將危險品運輸導向院區財物轉運（R6），本表單選「是」是否要阻擋或提示，待確認。
     </div>
   </div>
 
@@ -749,7 +751,7 @@
     <div class="why">媒合為系統自動產生的建議，實務仍需業務因應臨時狀況（併班、換車、換司機、抽單）微調；以車次為單位的異動介面，比逐張改單直覺且不影響班次主檔。</div>
   </div>
 
-  <h2><span class="num">3.8</span> 巡迴物品轉運作業路線示意</h2>
+  <h2><span class="num">3.8</span> 巡迴財物轉運作業路線示意</h2>
   <div class="flow">
 起點站
   │  <span class="dir">固定地理順序 →</span> 逐站檢查是否有貨物需求
@@ -814,7 +816,7 @@
   <div class="decision-card">
     <div class="label">決策（回報介面）</div>
     <div class="content">
-      回報位置為<b>「車輛使用實登」明細頁的「本車次申請單」grid</b>（2026-10-03 起，見 4.5）。grid 的<b>「異常回報」欄</b>每張申請單<b>預設為「正常運送」</b>；
+      回報位置為<b>「車輛異動實登」明細頁的「本車次申請單」grid</b>（2026-10-03 起，見 4.5）。grid 的<b>「異常回報」欄</b>每張申請單<b>預設為「正常運送」</b>；
       如有異常，點該筆最前欄的<b>編輯</b>鈕，該列「異常回報」欄即變為<b>下拉選單</b>（正常運送／不準時／沒出現），選取後按<b>儲存</b>並確認：
       <div style="margin-top:8px">・儲存即<b>存檔</b>（寫回申請單層級的異常狀態）；按取消則不變更。</div>
       <div>・選為<b>異常</b>時，同時<b>立即自動寄信</b>通知申請人＋直屬主管（一單一信）；改回正常運送則僅存檔、不寄信。</div>
@@ -842,7 +844,7 @@
 駕駛完成整趟路線 → 回到總部
   │
   ▼
-業務開啟「車輛使用實登」→ 已排定車次 → 該車次「明細」
+業務開啟「車輛異動實登」→ 已排定車次 → 該車次「明細」
   │
   ▼
 「本車次申請單」grid 列出本車次每張申請單（異常回報預設：正常運送）
@@ -854,11 +856,11 @@
       存檔備查         立即自動寄信（申請人 + 直屬主管）
   </div>
 
-  <h2><span class="num">4.5</span> 車輛使用實登（以車次為單位）</h2>
+  <h2><span class="num">4.5</span> 車輛異動實登（以車次為單位）</h2>
   <div class="decision-card">
     <div class="label">決策（2026-10-03 · G123）</div>
     <div class="content">
-      巡迴物品轉運的「車輛使用實登」以<b>車次</b>（收貨日期＋班次）為單位登打，而非逐張申請單登打。
+      巡迴財物轉運的「車輛異動實登」以<b>車次</b>（收貨日期＋班次）為單位登打，而非逐張申請單登打。
       同一車次的申請單共用同一台車、同一位司機、同一段里程，逐單登打只會重複輸入相同數字。
       「車次追蹤／異動」單元<b>維持不變</b>，仍負責改派班次、修改車次車輛／司機、新增／移出申請單。
     </div>
@@ -892,7 +894,7 @@
   <div class="decision-card">
     <div class="label">決策（明細頁 · 本車次申請單）</div>
     <div class="content">
-      沿用「車次追蹤／異動」明細頁的<b>本車次申請單</b> grid（物品運輸單號、申請人、收貨站點（起）、送貨站點（迄）、貨物），差異如下：
+      沿用「車次追蹤／異動」明細頁的<b>本車次申請單</b> grid（財物運輸單號、申請人、收貨站點（起）、送貨站點（迄）、貨物），差異如下：
       <div style="margin-top:8px">・新增<b>異常回報</b>欄，預設「正常運送」。</div>
       <div>・最前欄的<b>刪除</b>鈕改為<b>編輯</b>鈕（實登頁不移出申請單）；點編輯後該列異常回報欄變為下拉選單（正常運送／不準時／沒出現），儲存規則見 4.3。</div>
       <div>・新增<b>明細</b>鈕：點擊後跳出視窗，顯示該申請單的<b>貨物清單</b>（品名、長×寬×高、類別、數量、單件重、回報狀態）。
@@ -905,7 +907,7 @@
     <div class="why">一頁只呈現一個車次：上方登打這台車實際跑了多少里程，下方逐單處理異常與貨品狀態，業務回總部後在同一頁完成整趟的回報。</div>
   </div>
   <div class="flow">
-車輛使用實登（查詢頁）── 已排定車次 grid ──▶ 明細
+車輛異動實登（查詢頁）── 已排定車次 grid ──▶ 明細
   │
   ├─ 班次車輛資訊：確認車輛／司機 → 輸入起始／結束里程 → 儲存 ──▶ 車次內各單「已回登」
   │
@@ -925,10 +927,22 @@
     </div>
   </div>
 
+  <h2><span class="num">4.7</span> 業管會議修訂：撤單、三聯單單號、車輛異動實登欄位（2026-10-19 · G147／G148）</h2>
+  <div class="decision-card">
+    <div class="label">決策</div>
+    <div class="content">
+      ・<b>用語</b>：系統中「物品」一律改稱「<b>財物</b>」（本文件同步）。<br>
+      ・<b>撤單</b>：車輛出發日前一天（含）以前，申請人可於申請明細頁<b>撤單</b>：「是否撤單」是／否（預設否），選是須填<b>撤單原因</b>，回上一頁旁「送出」先確認。<b>已派車、已送簽審或簽審通過者亦可撤</b>：撤回簽審並移出已排定的班次（該班次各站到站時間重算），釋放車輛與司機；狀態「已刪除」（結案）。出發日以<b>收貨日期</b>為準；出發當天起、無車退回、已刪除、已完成車輛異動實登者不可撤。<br>
+      ・<b>三聯單單號</b>：新增「<b>三聯單單號</b>」：與物籌處財物介接，比照與三聯單系統相同的介接資料；可直接輸入也可下拉選擇，原型下拉為示意資料，正式版資料來源由介接實作提供。放在申請表單基本資訊（申請日期之後），明細頁顯示。<br>
+      ・<b>車輛異動實登</b>：「車輛使用實登」更名「<b>車輛異動實登</b>」；實登新增「<b>車輛加油公升數</b>」「<b>司機工時</b>」「<b>司機加班時數</b>」三欄（選填；填寫須為 0 以上數字，加班時數不可大於工時），實登歷程同列。（以車次為單位，見 4.5）<br>
+      ・<b>退回修改</b>：本模組送出即自動排班、沒有派車調度單元，調度室退回修改（B／C／D）不適用；未排入者仍可由車次追蹤／異動處理或無車退回。
+    </div>
+  </div>
+
   <h1 class="part" id="part5"><span class="part-num">05</span> 名詞定義總表</h1>
   <dl class="term-list">
     <dt>不堆疊裝載判定（G145）</dt>
-    <dd>「物品不堆疊、能夠裝入的最大量」：每件平放車廂地板、只能水平轉向（高 ≤ 車廂高、底面放得進地板），有效地板面積（底面積×件數×類別浪費係數）加總 ≤ 車廂地板面積，重量 ≤ 載重上限。巡迴物品轉運、院區物品轉運、申請引導共用。</dd>
+    <dd>「財物不堆疊、能夠裝入的最大量」：每件平放車廂地板、只能水平轉向（高 ≤ 車廂高、底面放得進地板），有效地板面積（底面積×件數×類別浪費係數）加總 ≤ 車廂地板面積，重量 ≤ 載重上限。巡迴財物轉運、院區財物轉運、申請引導共用。</dd>
     <dt>有效地板面積</dt>
     <dd>貨物底面積（長×寬）×件數×類別浪費係數，與車廂地板面積（車長×車寬）比較。</dd>
     <dt>Level 1（體積加總）</dt>
@@ -958,7 +972,7 @@
     <dt>越快越好模式</dt>
     <dd>收貨時間欄位的另一種選項（與「指定期望時間」二選一），代表不指定確切時間，系統直接嘗試安排最早可行班次。</dd>
     <dt>駕駛異常回報</dt>
-    <dd>駕駛完成整趟路線、回到總部後，針對本趟路線中「使用者不準時」或「使用者沒出現」的申請單所做的回報，記錄到申請單層級；於車輛使用實登明細頁「本車次申請單」的異常回報欄操作。</dd>
+    <dd>駕駛完成整趟路線、回到總部後，針對本趟路線中「使用者不準時」或「使用者沒出現」的申請單所做的回報，記錄到申請單層級；於車輛異動實登明細頁「本車次申請單」的異常回報欄操作。</dd>
     <dt>車次</dt>
     <dd>同一收貨日期、同一班次的出車，由一台車、一位司機跑完整條路線；車次內可含多張申請單。</dd>
     <dt>車次實登</dt>
@@ -974,7 +988,7 @@
   <table>
     <thead><tr><th>項目</th><th>決策內容</th><th>狀態</th></tr></thead>
     <tbody>
-      <tr><td>判定方法</td><td><b>物品不堆疊、能夠裝入的最大量</b>：單件平放（只能水平轉向）＋有效地板面積（底面積×類別係數）＋重量；巡迴、院區、申請引導一致；不做 Level 3 碰撞檢測</td><td><span class="badge done">已定案（2026-10-08 G145）</span></td></tr>
+      <tr><td>判定方法</td><td><b>財物不堆疊、能夠裝入的最大量</b>：單件平放（只能水平轉向）＋有效地板面積（底面積×類別係數）＋重量；巡迴、院區、申請引導一致；不做 Level 3 碰撞檢測</td><td><span class="badge done">已定案（2026-10-08 G145）</span></td></tr>
       <tr><td>保險強化方案</td><td><s>地板面積瓶頸法 + 長寬比形狀懲罰係數</s> → 由不堆疊判定取代（地板面積成為主判定、形狀懲罰取消）</td><td><span class="badge done">已取代（G145）</span></td></tr>
       <tr><td>浪費係數</td><td>依貨物類別對應係數表，使用者填單時勾選類別</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>係數表儲存</td><td>資料庫存值 + 程式端記憶體快取 + 保底值機制</td><td><span class="badge done">已定案</span></td></tr>
@@ -1008,6 +1022,9 @@
       <tr><td>上下貨時間</td><td>申請人自填，同站多單加總計算</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>容量判定</td><td>不堆疊判定：單件平放＋有效地板面積＋總重量上限（逐站加總比較）</td><td><span class="badge done">已定案（2026-10-08 G145）</span></td></tr>
       <tr><td>浪費係數校正</td><td>不堆疊時係數同時代表貨間空隙與擺放不完美，建議以實際裝車紀錄回測校正；如有可堆疊類別，另議於係數表加「可堆疊層數」</td><td><span class="badge pending">待業務決定</span></td></tr>
+      <tr><td>撤單</td><td>收貨日期前一天（含）以前可撤，已排入班次者移出並重算到站；狀態已刪除</td><td><span class="badge done">已定案（2026-10-19 G147）</span></td></tr>
+      <tr><td>三聯單單號</td><td>物籌處財物介接，可輸入也可下拉；資料來源待介接實作</td><td><span class="badge done">已定案（2026-10-19 G147／G148）</span></td></tr>
+      <tr><td>車輛異動實登欄位</td><td>更名車輛異動實登；新增加油公升數、司機工時、司機加班時數（選填）</td><td><span class="badge done">已定案（2026-10-19 G147）</span></td></tr>
       <tr><td>站內時間額度</td><td>依<b>送出時間</b>逐張判斷，額度用完的較晚申請單跳過</td><td><span class="badge done">已定案（本版修訂）</span></td></tr>
       <tr><td>跳過後處理</td><td>自動順延下一班，當天排不進去則提醒改期</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>車輛指派</td><td>路線固定分組車輛，每日由人工手動排班次</td><td><span class="badge done">已定案</span></td></tr>
@@ -1028,22 +1045,22 @@
       <tr><td>異常記錄用途</td><td>存檔備查 + 立即自動寄信通知</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>通知收件人</td><td>申請人本人 + 直屬主管（沿用既有審批對應關係）</td><td><span class="badge done">已定案</span></td></tr>
       <tr><td>通知信具體格式</td><td>單張申請單對應單封信，內容含站點/原因/日期</td><td><span class="badge pending">待後續設計</span></td></tr>
-      <tr><td>異常回報位置</td><td>車輛使用實登明細頁「本車次申請單」異常回報欄（編輯→下拉選單：正常運送／不準時／沒出現）</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
+      <tr><td>異常回報位置</td><td>車輛異動實登明細頁「本車次申請單」異常回報欄（編輯→下拉選單：正常運送／不準時／沒出現）</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
       <tr><td>實登單位</td><td>以車次（收貨日期＋班次）為單位，儲存起訖里程即完成，車次內各單已回登</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
       <tr><td>實登車輛／司機</td><td>預設帶入車次，可改為實際使用；只記錄實登，不改車次安排</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
       <tr><td>實登人員</td><td>系統自動帶入登入者</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
       <tr><td>預計到站時間</td><td>發車＋站間行駛＋前面各站停站時間；班次組成異動時重算到站與期望時間差</td><td><span class="badge done">已定案（2026-10-04）</span></td></tr>
       <tr><td>到站推後通知</td><td>到站時間被後排的單推後時是否通知申請人</td><td><span class="badge pending">待業務決定</span></td></tr>
       <tr><td>貨物清單回報</td><td>本車次申請單「明細」視窗，逐項回報正常運送／不運送／不接收</td><td><span class="badge done">已定案（2026-10-03）</span></td></tr>
-      <tr><td>物品運輸單號</td><td>car＋民國年 3 碼＋流水號 5 碼（例 car11500001），取代 LA###</td><td><span class="badge done">已定案（2026-10-07）</span></td></tr>
-      <tr><td>申請表單欄位</td><td>移除建物與單位欄；新增單狀態、單號、申請日期、危險品運輸、備註、是否送出；貨物 grid 新增計畫名稱、工令號碼、物品外包裝（見 3.2A）</td><td><span class="badge done">已定案（2026-10-07）</span></td></tr>
-      <tr><td>物品運輸單狀態名稱</td><td>清單欄位與表單欄位同名不同義</td><td><span class="badge pending">待業務決定</span></td></tr>
+      <tr><td>財物運輸單號</td><td>car＋民國年 3 碼＋流水號 5 碼（例 car11500001），取代 LA###</td><td><span class="badge done">已定案（2026-10-07）</span></td></tr>
+      <tr><td>申請表單欄位</td><td>移除建物與單位欄；新增單狀態、單號、申請日期、危險品運輸、備註、是否送出；貨物 grid 新增計畫名稱、工令號碼、財物外包裝（見 3.2A）</td><td><span class="badge done">已定案（2026-10-07）</span></td></tr>
+      <tr><td>財物運輸單狀態名稱</td><td>清單欄位與表單欄位同名不同義</td><td><span class="badge pending">待業務決定</span></td></tr>
       <tr><td>司機任務單</td><td>查詢頁（日期起迄、司機）＋細節頁；一列＝一個日期＋班次，出發時間＝班次發車時間，司機依車輛推定</td><td><span class="badge done">已定案（2026-10-08）</span></td></tr>
     </tbody>
   </table>
 
   <footer>
-    巡迴物品轉運作業 · 完整需求討論報告 · 內部文件，供業務單位確認用 · 不含院區物品轉運作業模組
+    巡迴財物轉運作業 · 完整需求討論報告 · 內部文件，供業務單位確認用 · 不含院區財物轉運作業模組
   </footer>
 
 </div>

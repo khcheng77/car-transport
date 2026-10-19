@@ -20,7 +20,7 @@
 | 每日在勤上限 | 單日在勤時數天花板 | `DB.dailyDutyMin` |
 | 待勤 | 上班至出勤 | 併入 `DB.prepMin` |
 | 緩衝（前） | 車輛檢查及前往報到地點 | `DB.prepMin` |
-| 裝貨／卸貨 | 物品裝卸時間（**由申請單位自填**） | 單上 `loadMin` / `unloadMin` |
+| 裝貨／卸貨 | 財物裝卸時間（**由申請單位自填**） | 單上 `loadMin` / `unloadMin` |
 | 開車 | 出發地至目的地車程 | `ModuleB.travelMin()` 查表 |
 | 休息 | 連續駕駛之休息與用餐 | `DB.driverBreaks` |
 | 緩衝（後） | 任務完成後車輛檢整＋返回休息地 | `DB.closeMin` ＋ `returnToRestMin()` |
