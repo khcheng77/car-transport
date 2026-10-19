@@ -1,9 +1,10 @@
 /* ============================================================
-   usage.js — 共用：車輛使用實登
-   四模組（A 巡迴物品轉運／B 院區物品轉運／C 差旅共乘／D 一般用車申請）共用。
+   usage.js — 共用：車輛異動實登（G147 由「車輛使用實登」更名）
+   四模組（A 巡迴財物轉運／B 院區財物轉運／C 差旅共乘／D 一般用車申請）共用。
    派車結果生效後（B/C/D 經運輸主管簽審通過；A 不經簽審，排入班次即生效），由業務登打車輛實際使用狀況：
      · 實際使用的「車種類型、車號、駕駛人1、駕駛人2（選填）」；
-     · 起始里程、結束里程（結束 ≥ 起始，行駛里程＝結束－起始）。
+     · 起始里程、結束里程（結束 ≥ 起始，行駛里程＝結束－起始）；
+     · 車輛加油公升數、司機工時、司機加班時數（G147，選填，0 以上的數字）。
    實登可修改，每次儲存都留歷程（rec.usageLog），不覆蓋前一次紀錄。
    本檔只處理實登紀錄本身（rec.usage），派車規劃值由各模組的 usagePlan() 提供。
    ============================================================ */
@@ -11,6 +12,8 @@
 const Usage = {
   STATUS: { todo: ['待實登', 'b-amber'], done: ['已實登', 'b-green'] },
   SELF: 'SELF',   // 駕駛人代碼：使用者自駕（一般用車）
+  // G147 新增欄位：[欄位, 名稱, 單位]
+  EXTRA_FIELDS: [['fuelLiters', '車輛加油公升數', '公升'], ['workHours', '司機工時', '小時'], ['otHours', '司機加班時數', '小時']],
 
   // 車種類型（依資源池；A/B 物流池、C/D 商務池）
   types(pool) {
@@ -22,7 +25,7 @@ const Usage = {
   driversOf(pool) { return DB.drivers.filter(d => d.pool === pool); },
 
   // 派車結果已生效才可實登；已實登者即使之後派車結果異動仍保留紀錄
-  // eff：模組自行判定的「已生效」（巡迴物品轉運不經簽審，排入班次即生效）；未給則以運輸主管簽審通過為準
+  // eff：模組自行判定的「已生效」（巡迴財物轉運不經簽審，排入班次即生效）；未給則以運輸主管簽審通過為準
   eligible(rec, eff) { return eff != null ? !!eff : Signoff.effective(rec); },
   inScope(rec, eff) { return this.eligible(rec, eff) || !!rec.usage; },
   stateOf(rec) { return rec.usage ? 'done' : 'todo'; },
@@ -50,9 +53,18 @@ const Usage = {
     if (!Number.isFinite(s) || s < 0) return { ok: false, error: '「起始里程」須為 0 以上的數字' };
     if (!Number.isFinite(e) || e < 0) return { ok: false, error: '「結束里程」須為 0 以上的數字' };
     if (e < s) return { ok: false, error: '「結束里程」不可小於「起始里程」' };
+    // G147：車輛加油公升數、司機工時、司機加班時數（選填；有填須為 0 以上的數字）
+    const extra = {};
+    for (const [k, label] of this.EXTRA_FIELDS) {
+      if (d[k] === '' || d[k] == null) { extra[k] = null; continue; }
+      const n = Number(d[k]);
+      if (!Number.isFinite(n) || n < 0) return { ok: false, error: `「${label}」須為 0 以上的數字` };
+      extra[k] = n;
+    }
+    if (extra.otHours != null && extra.workHours != null && extra.otHours > extra.workHours) return { ok: false, error: '「司機加班時數」不可大於「司機工時」' };
     const first = !rec.usage;
-    rec.usage = { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2 || '',
-      startKm: s, endKm: e, distance: Math.round((e - s) * 10) / 10, by: by || '調度室', at: new Date() };
+    rec.usage = Object.assign({ vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2 || '',
+      startKm: s, endKm: e, distance: Math.round((e - s) * 10) / 10 }, extra, { by: by || '調度室', at: new Date() });
     (rec.usageLog = rec.usageLog || []).push({ at: rec.usage.at, action: first ? '實登' : '修改實登', by: rec.usage.by,
       snapshot: Object.assign({}, rec.usage) });
     return { ok: true, usage: rec.usage };

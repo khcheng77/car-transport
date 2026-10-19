@@ -15,7 +15,7 @@ const ModuleA = {
 
   /* ---- 現在時間（可於測試注入固定值）與日期工具 ---- */
   now() { return new Date(); },
-  /* 物品運輸單號（G138）：car＋民國年 3 碼＋流水號 5 碼，例 car11500001；申請日期以民國年 115/10/07 表示 */
+  /* 財物運輸單號（G138）：car＋民國年 3 碼＋流水號 5 碼，例 car11500001；申請日期以民國年 115/10/07 表示 */
   rocYear(d) { return (d || this.now()).getFullYear() - 1911; },
   rocDate(d) { d = d || this.now(); return `${this.rocYear(d)}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; },
   nextNo() { return 'car' + this.rocYear() + String(this.seq).padStart(5, '0'); },
@@ -31,11 +31,12 @@ const ModuleA = {
     const unloadMin = +(data.unloadMin || 0);
     const handleMin = split ? (loadMin + unloadMin) : (+data.handleMin || 0);
     const app = {
-      id: this.nextNo(),                // 物品運輸單號（G138）
-      transportStatus: '開單',          // 物品運輸單狀態（G138）
+      id: this.nextNo(),                // 財物運輸單號（G138）
+      transportStatus: '開單',          // 財物運輸單狀態（G138）
       applyDate: this.rocDate(),        // 申請日期（民國年，G138）
       hazardTransport: data.hazardTransport === 'yes' ? 'yes' : 'no',   // 危險品運輸（G138，僅記錄）
       remark: data.remark || '',        // 備註（G138）
+      tripleNo: data.tripleNo || '',    // 三聯單號單號（G147 物籌處介接，可輸入下拉）
       applicant: data.applicant,
       applyUnit: data.applyUnit || '',  // 申請單位／委運單位（預帶登入使用者，G138 可修改、必填）
       applyExt: data.applyExt || '',    // 申請人分機（登入使用者）
@@ -82,7 +83,7 @@ const ModuleA = {
     app.status = 'submitted';
     const r = this.match(app);
     app.matchTrace = r.trace;
-    if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }   // 成功即排班生效（巡迴物品轉運不送運輸主管簽審）
+    if (!r.ok) { app.status = 'unscheduled'; app.note = r.msg; }   // 成功即排班生效（巡迴財物轉運不送運輸主管簽審）
     return { app, result: r };
   },
 
@@ -96,7 +97,7 @@ const ModuleA = {
     return r;
   },
 
-  // 媒合成功即完成排班（待出車）；到收貨時間即「已出車」、車輛使用實登登錄里程後「已回登」（Flow 推導）
+  // 媒合成功即完成排班（待出車）；到收貨時間即「已出車」、車輛異動實登登錄里程後「已回登」（Flow 推導）
   /* 無車退回（G122）：調度可將「待調度」（未排入班次）的申請單退回，原因必填，結案不可再動 */
   returnNoCar(app, note, by) {
     note = (note || '').trim();
@@ -166,6 +167,20 @@ const ModuleA = {
     return app;
   },
 
+  /* ---- 撤單（G147）：收貨日期（班次出發日）前一天（含）以前可撤，已排入班次者移出並重算該班到站 ---- */
+  departDateOf(app) { return app.serviceDate || ''; },
+  canCancel(app) { return Flow.canCancel(app, this.departDateOf(app)); },
+  cancelApp(app, reason, by) {
+    reason = (reason || '').trim();
+    if (!this.canCancel(app)) return { ok: false, error: Flow.cancelError(app, this.departDateOf(app)) };
+    if (!reason) return { ok: false, error: '撤單時「撤單原因」為必填' };
+    const from = app.assignedShift;
+    app.assignedShift = null; app.arrival = null; app.expectDiffMin = null;
+    Flow._cancelled(app, reason, by);
+    if (from) this.refreshArrivals(from, app.serviceDate);   // 原班次少了本單的停站時間
+    return { ok: true };
+  },
+
   /* ---- 狀態推導（Flow）：A 不經調度主管簽審；已出車＝收貨日期＋班次出發時間已到 ---- */
   signed: false,
   departAt(app) {
@@ -173,7 +188,7 @@ const ModuleA = {
     return app.assignedShift ? Flow.at(app.serviceDate, sh ? sh.depart : app.arrival) : null;
   },
 
-  /* ---- 車輛使用實登（已排入班次即可登打實際車輛／駕駛／里程；巡迴物品轉運不經運輸主管簽審）---- */
+  /* ---- 車輛異動實登（已排入班次即可登打實際車輛／駕駛／里程；巡迴財物轉運不經運輸主管簽審）---- */
   USAGE_POOL: 'LOGI',
   isScheduled(app) { return app.status === 'matched' && !!app.assignedShift; },
   usagePlan(app) {
@@ -183,7 +198,7 @@ const ModuleA = {
   },
   usageRecords() { return this.applications.filter(a => Usage.inScope(a, this.isScheduled(a))); },
   usageSave(app, data, by) { return Usage.save(app, data, by, { pool: this.USAGE_POOL, effective: this.isScheduled(app) }); },
-  /* ---- 車次實登（G123）：巡迴物品轉運以「車次（收貨日期＋班次）」為單位實登 ----
+  /* ---- 車次實登（G123）：巡迴財物轉運以「車次（收貨日期＋班次）」為單位實登 ----
      車輛／司機預設帶入車次的車輛／司機（可改為實際使用），輸入起始／結束里程儲存即完成實登；
      實登人員由系統帶入。實登寫入車次（tripUsages）並同步到車次內每張申請單（rec.usage → 已回登）。
      只記錄實際使用，不改車次的車輛／司機（車次異動仍在「車次追蹤／異動」）。 */
@@ -202,7 +217,7 @@ const ModuleA = {
     const v = DB.vehicles.find(x => x.id === data.vehicle);
     const holder = this.tripUsages[key] || { usage: null, usageLog: [] };
     const res = Usage.saveGroup(holder, apps, { vehicleType: v ? v.type : '', vehicle: data.vehicle, driver1: data.driver, driver2: '',
-      startKm: data.startKm, endKm: data.endKm }, by, Object.assign({ pool: this.USAGE_POOL }, opts));
+      startKm: data.startKm, endKm: data.endKm, fuelLiters: data.fuelLiters, workHours: data.workHours, otHours: data.otHours }, by, Object.assign({ pool: this.USAGE_POOL }, opts));
     if (res.ok && !(opts && opts.dryRun)) this.tripUsages[key] = holder;
     return res;
   },
@@ -214,7 +229,7 @@ const ModuleA = {
     return { ok: true, incident: this.reportIncident(app, reason) };
   },
 
-  /* 貨品回報狀態（G121）：同院區物品轉運（G120），A 排入班次即生效 */
+  /* 貨品回報狀態（G121）：同院區財物轉運（G120），A 排入班次即生效 */
   ITEM_REPORTS: Usage.ITEM_REPORTS,
   itemReport(it) { return Usage.itemReport(it); },
   setItemReport(app, idx, status, by) { return Usage.setItemReport(app, idx, status, by, this.isScheduled(app)); },

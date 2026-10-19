@@ -44,20 +44,15 @@ const ModuleC = {
     app.changeReason = reason;
     (app.changeLog = app.changeLog || []).push({ at: new Date(), action, reason, by: by || app.applicant });
   },
-  /* 取消申請（G133）：申請人於派車單送審前可取消，異動事由必填；已併入未送審派車單者自派車單移出
-     （派車單空了即取消）。派車單已送審、已出車、無車退回、已取消者不可取消。 */
-  canCancel(app) {
-    if (['draft', 'submitted', 'approved', 'rejected'].includes(app.status)) return true;
-    if (app.status !== 'matched') return false;
-    const order = this.dispatchOf(app);
-    return !Signoff.isPending(app) && !Signoff.effective(app) && !Flow.departed(app, this) && !(order && order.submitted);
-  },
+  /* 取消申請（G133；G147 起期限改為出發日期前一天（含）以前）：異動事由必填；已併入派車單者（含已送審、
+     已簽審通過）撤回簽審並自派車單移出（派車單空了即取消），釋放車輛與駕駛。無車退回、已刪除、已實登者不可取消。 */
+  departDateOf(app) { return app.departDate || ''; },
+  canCancel(app) { return Flow.canCancel(app, this.departDateOf(app)); },
   cancelApp(app, reason, by) {
     reason = (reason || '').trim();
-    if (!this.canCancel(app)) return { ok: false, error: app.status === 'matched'
-      ? '派車單已送審或已出車，不可取消；請聯繫調度處理' : '此申請單目前狀態不可取消' };
+    if (!this.canCancel(app)) return { ok: false, error: Flow.cancelError(app, this.departDateOf(app)) };
     if (!reason) return { ok: false, error: '取消申請時「異動事由」為必填' };
-    if (app.status === 'matched') this._detach(app, '申請人取消申請', by || app.applicant);
+    if (app.status === 'matched') { Signoff.release(app, '申請人取消申請', by || app.applicant); this._detach(app, '申請人取消申請', by || app.applicant); }
     this._change(app, '取消', reason, by);
     app.status = 'cancelled'; app.cancelledAt = new Date(); app.cancelledBy = by || app.applicant; app.approvedAt = null;
     return { ok: true };
@@ -91,7 +86,7 @@ const ModuleC = {
     const hasCargo = !!data.hasCargo;
     const f = {
       applicant: data.applicant, dept: data.dept, applicantPhone,
-      reason: data.reason || '', projectCode: data.projectCode || '',
+      reason: data.reason || '', projectCode: data.projectCode || '', tripleNo: data.tripleNo || '',   // 三聯單號單號（G147）
       captain: data.captain || '', captainPhone: data.captainPhone || '', homeBase: data.homeBase || '',
       isOneway, route, reportAt, endAt, passengers,
       reportPlace: data.reportPlace || '',            // 報到地點（G136）
@@ -110,7 +105,7 @@ const ModuleC = {
     this.YESNO.forEach(k => { f[k] = !!data[k]; });
     return f;
   },
-  /* 隨身貨物（G136）：物品名稱、數量、長、寬、高（cm）、重量（kg）、物品外包裝；僅記錄，不參與媒合 */
+  /* 隨身貨物（G136）：財物名稱、數量、長、寬、高（cm）、重量（kg）、財物外包裝；僅記錄，不參與媒合 */
   CARGO_PACKS: ['紙箱', '塑膠箱', '木箱', '袋裝', '桶裝', '無外包裝'],
   _cargoRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(r => ({ name: String(r.name || '').trim(), qty: +r.qty || 0,
@@ -119,7 +114,7 @@ const ModuleC = {
   cargoRowError(rows) {
     for (let i = 0; i < (rows || []).length; i++) {
       const r = rows[i], n = `隨身貨物第 ${i + 1} 列`;
-      if (!String(r.name || '').trim()) return `${n}：請填寫「物品名稱」`;
+      if (!String(r.name || '').trim()) return `${n}：請填寫「財物名稱」`;
       if (!(Number.isInteger(+r.qty) && +r.qty >= 1)) return `${n}：「數量」至少 1`;
       if (!(+r.l > 0 && +r.w > 0 && +r.h > 0)) return `${n}：「長、寬、高」須大於 0`;
       if (!(+r.weight > 0)) return `${n}：「重量(KG)」須大於 0`;
@@ -158,7 +153,7 @@ const ModuleC = {
   approve(app, note) { app.status = 'approved'; app.approvedAt = this.approveSeq++; if (note != null) app.reviewNote = note; },
   reject(app, note) { app.status = 'rejected'; app.approvedAt = null; if (note != null) app.reviewNote = note; },
 
-  /* 狀態推導（Flow）：已出車＝出發日期＋去程上車時間已到；已回登＝車輛使用實登 */
+  /* 狀態推導（Flow）：已出車＝出發日期＋去程上車時間已到；已回登＝車輛異動實登 */
   departAt(app) { return Flow.at(app.departDate, app.earliestPickup); },
 
   /* 車程表查詢 + 緩衝（G62）；車程表為對稱，查無正向則查反向（回程/強制回歸屬據點用 C-3）*/
@@ -648,6 +643,21 @@ const ModuleC = {
     }
     app.dispatchId = null; app.vehicle = null; app.driver = null; app.driver2 = null; app.groupId = null;
   },
+  /* 調度室退回使用者修改（G147）：待調度，或所在派車單尚未送審、未簽審、未出車；已併入派車單者先移出 */
+  canReturnEdit(app) {
+    if (app.status === 'approved') return true;
+    if (app.status !== 'matched') return false;
+    const order = this.dispatchOf(app);
+    return !!order && !order.submitted && !Signoff.isPending(app) && !Signoff.effective(app) && !Flow.departed(app, this);
+  },
+  returnToEdit(app, note, by) {
+    note = (note || '').trim();
+    if (!this.canReturnEdit(app)) return { ok: false, error: `${app.id} 目前狀態不可退回修改` };
+    if (!note) return { ok: false, error: '退回修改時「退回原因」為必填' };
+    if (app.status === 'matched') this._detach(app, `調度室退回修改：${note}`, by);
+    Flow._returned(app, note, by);
+    return { ok: true };
+  },
   /* 無車退回（G122）：僅「待調度」的申請單；原因必填，結案不可再動 */
   canReturn(app) { return app.status === 'approved'; },
   returnApp(app, note, by) {
@@ -718,7 +728,7 @@ const ModuleC = {
     const ds = this.driversOf(a).map(nm).filter(Boolean).join('＋');
     return `${a.dispatchId ? '派車單 ' + a.dispatchId + '｜' : ''}${a.departDate} ${a.earliestPickup}｜${a.origin} → ${a.dest}｜車 ${a.vehicle || '—'}／司機 ${ds || '—'}`;
   },
-  /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程）---- */
+  /* ---- 車輛異動實登（派車結果生效後登打實際車輛／駕駛／里程）---- */
   USAGE_POOL: 'BIZ',
   usagePlan(a) { return { vehicle: a.vehicle || null, drivers: this.driversOf(a) }; },
   usageRecords() { return this.applications.filter(a => Usage.inScope(a)); },
@@ -727,7 +737,7 @@ const ModuleC = {
     if (r.ok) this._returnResourcesHome(a);   // 已回登：資源回歸屬據點（取代原「行程完成」C-2）
     return r;
   },
-  /* 派車單實登（G125）：差旅共乘以「派車單」為單位實登，規則同院區物品轉運（G124）。派車單送審且運輸主管簽審通過
+  /* 派車單實登（G125）：差旅共乘以「派車單」為單位實登，規則同院區財物轉運（G124）。派車單送審且運輸主管簽審通過
      （單內申請單皆生效）後才可實登；儲存即完成，派車單內每張申請單轉「已回登」，車輛／司機回歸屬據點（C-2）。 */
   dispatchEffective(d) { const as = this.dispatchApps(d); return !d.cancelled && d.submitted && as.length > 0 && as.every(a => Signoff.effective(a)); },
   usageDispatches() { return this.dispatches.filter(d => d.usage || this.dispatchEffective(d)); },

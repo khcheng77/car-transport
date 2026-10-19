@@ -78,7 +78,7 @@ const ModuleB = {
     const err = this.routeError(data);
     if (err) throw new Error(err);
     const o = Object.assign({ id: 'LB' + String(this.seq++).padStart(3, '0') }, this._fields(data), {
-      transportStatus: '開單',                       // 物品運輸單狀態（G143）
+      transportStatus: '開單',                       // 財物運輸單狀態（G143）
       applyDate: data.applyDate || this.rocDate(),   // 申請日期（民國年，G143）
       approvedAt: null,
       status: opts && opts.draft ? 'draft' : 'submitted',  // draft（申請中）→ submitted（待二級審）→ approved（待調度）/rejected（退回修編）/noCar（無車退回）→（媒合派車）loaded；顯示狀態由 Flow 推導
@@ -110,6 +110,18 @@ const ModuleB = {
     return o;
   },
   canEdit(o) { return ['draft', 'rejected'].includes(o.status); },
+  /* 撤單（G147）：派車日（未派車者為希望收貨日期）前一天（含）以前可撤；已併入派車單者（含已送審、已簽審通過）
+     撤回簽審並自派車單移出（派車單已無申請單即自動取消），釋放車輛與駕駛 */
+  departDateOf(o) { const d = this.dispatchOf(o); return (d && d.date) || o.wantReceiveDate || ''; },
+  canCancel(o) { return Flow.canCancel(o, this.departDateOf(o)); },
+  cancelOrder(o, reason, by) {
+    reason = (reason || '').trim();
+    if (!this.canCancel(o)) return { ok: false, error: Flow.cancelError(o, this.departDateOf(o)) };
+    if (!reason) return { ok: false, error: '撤單時「撤單原因」為必填' };
+    if (o.dispatchId) { Signoff.release(o, '申請人撤單', by || o.applicant); this._detach(o, '申請人撤單', by || o.applicant); }
+    Flow._cancelled(o, reason, by);
+    return { ok: true };
+  },
   /* 危險品運輸（G144）：hazardTransport＝是 的託運單只能派給車輛主檔 hazmat（可載危險品）的車；
      媒合派車不排入不合格車輛、手動指派／異動派車單亦檢核 */
   isHazard(o) { return o.hazardTransport === 'yes'; },
@@ -161,6 +173,7 @@ const ModuleB = {
       recipient: data.recipient || {},     // 接收人資訊：{ unit, name, phone, campus, agentName, agentPhone, agentCampus, agentHall }
       // ---- G143 新增欄位（除危險品運輸 G144 外目前僅記錄，不影響媒合派車；不同意併車不等同直達）----
       tripleFormNo: data.tripleFormNo || '',            // 三聯單表單編號
+      tripleNo: data.tripleNo || '',                    // 三聯單號單號（G147 物籌處介接，可輸入下拉）
       applyUnit: data.applyUnit || '',                  // 申請單位/委運單位＊
       applyExt: data.applyExt || '',                    // 申請人分機＊
       consignor: data.consignor || {},                  // 委運人：{ name＊, campus, ext＊（分機/手機） }；館別＝pickupLoc
@@ -174,6 +187,7 @@ const ModuleB = {
       oneway: data.oneway || 'no',                      // 是否單程運輸（是 yes／否 no）
       remark: data.remark || '', changeReason: data.changeReason || '',   // 備註、異動事由
       captain: data.captain || '', captainPhone: data.captainPhone || '', // 車長、車長分機/手機
+      escort: data.escort || '',                        // 押車人（G147：僅註記，不參與媒合）
       direct: !!data.direct,   // 3.2 急件直達（申請人指定）＝派車輸入條件，觸發獨立派車與回程鎖定
       items,                 // 貨物項目清單
       loadMin, unloadMin,    // 上貨/下貨時間（分）
@@ -239,12 +253,12 @@ const ModuleB = {
     const nm = id => (this.siteById(id) || {}).name || id;
     return `${o.dispatchId ? '派車單 ' + o.dispatchId + '｜' : ''}${o.dispatchVehicle}｜${o.dispatchMode || ''}｜${o.dispatchDir === 'north' ? '北返' : '南下'}｜${nm(o.pickSite)} → ${nm(o.dropSite)}`;
   },
-  /* ---- 車輛使用實登（派車結果生效後登打實際車輛／駕駛／里程；B 派車只指定車輛）---- */
+  /* ---- 車輛異動實登（派車結果生效後登打實際車輛／駕駛／里程；B 派車只指定車輛）---- */
   USAGE_POOL: 'LOGI',
   usagePlan(o) { return { vehicle: o.dispatchVehicle || null, drivers: this.driversOf(o) }; },
   usageRecords() { return this.orders.filter(o => Usage.inScope(o)); },
   usageSave(o, data, by) { return Usage.save(o, data, by, { pool: this.USAGE_POOL }); },
-  /* 派車單實登（G124）：院區物品轉運以「派車單」為單位實登。派車單送審且運輸主管簽審通過（各託運單皆生效）後才可實登；
+  /* 派車單實登（G124）：院區財物轉運以「派車單」為單位實登。派車單送審且運輸主管簽審通過（各託運單皆生效）後才可實登；
      實際車種類型／車號／駕駛人1／駕駛人2 預設帶入派車單（可改為實際使用，不改派車單），輸入起訖里程儲存即完成，
      派車單內每張託運單轉「已回登」；實登存於派車單 d.usage／d.usageLog（歷程不覆蓋）。 */
   dispatchEffective(d) { const os = this.dispatchOrders(d); return !d.cancelled && d.submitted && os.length > 0 && os.every(o => Signoff.effective(o)); },
@@ -253,7 +267,7 @@ const ModuleB = {
     if (!d.usage && !this.dispatchEffective(d)) return { ok: false, error: '派車單尚未經運輸主管簽審通過，不可實登' };
     return Usage.saveGroup(d, this.dispatchOrders(d), data, by, Object.assign({ pool: this.USAGE_POOL }, opts));
   },
-  /* 貨品回報狀態（G120）：車輛使用實登的貨物清單逐項回報；共用 Usage，生效依運輸主管簽審 */
+  /* 貨品回報狀態（G120）：車輛異動實登的貨物清單逐項回報；共用 Usage，生效依運輸主管簽審 */
   ITEM_REPORTS: Usage.ITEM_REPORTS,
   itemReport(it) { return Usage.itemReport(it); },
   setItemReport(o, idx, status, by) { return Usage.setItemReport(o, idx, status, by); },
@@ -405,7 +419,7 @@ const ModuleB = {
     };
   },
 
-  /* 不堆疊裝載（G145，與巡迴物品轉運共用 loadengine）：容量判斷一律以「有效地板面積」＋重量。
+  /* 不堆疊裝載（G145，與巡迴財物轉運共用 loadengine）：容量判斷一律以「有效地板面積」＋重量。
      有效地板面積＝Σ 底面積×件數×類別浪費係數；舊資料只有申報體積的項目，以「有效體積÷車廂高」換算（滿高平放）。 */
   effFloor(o, veh) {
     const h = veh && veh.dims ? veh.dims.h : 200;
@@ -1003,6 +1017,20 @@ const ModuleB = {
     this._applyManual(o); this._applyToOrders(d);
     this._dlog(d, '手動併入', by, o.id);
     return { ok: true, dispatch: d };
+  },
+  /* 調度室退回使用者修改（G147）：待調度，或所在派車單尚未送審、未出車；已併入派車單者先移出 */
+  canReturnEdit(o) {
+    if (o.status === 'approved') return true;
+    const d = o.status === 'loaded' ? this.dispatchOf(o) : null;
+    return !!d && !d.submitted && !this.started(d);
+  },
+  returnToEdit(o, note, by) {
+    note = (note || '').trim();
+    if (!this.canReturnEdit(o)) return { ok: false, error: `${o.id} 目前狀態不可退回修改` };
+    if (!note) return { ok: false, error: '退回修改時「退回原因」為必填' };
+    if (o.dispatchId) this._detach(o, `調度室退回修改：${note}`, by);
+    Flow._returned(o, note, by);
+    return { ok: true };
   },
   /* 無車退回（G122）：僅「待調度」的託運單；原因必填，結案不可再動 */
   canReturn(o) { return o.status === 'approved'; },

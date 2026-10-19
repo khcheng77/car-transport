@@ -9,8 +9,8 @@ const Guide = {
   OTHER: '__other',     // 出發地／目的地選「其他地點」
 
   UNITS: {
-    A: { page: 'a_apply', name: '巡迴物品轉運申請', module: '巡迴物品轉運作業' },
-    B: { page: 'b_apply', name: '院區物品轉運申請', module: '院區物品轉運作業' },
+    A: { page: 'a_apply', name: '巡迴財物轉運申請', module: '巡迴財物轉運作業' },
+    B: { page: 'b_apply', name: '院區財物轉運申請', module: '院區財物轉運作業' },
     C: { page: 'c_apply', name: '差旅共乘申請', module: '差旅共乘作業' },
     D: { page: 'd_apply', name: '一般用車申請', module: '一般用車申請作業' },
   },
@@ -28,18 +28,18 @@ const Guide = {
       && DB.bizOrigins.includes(v.origin) && DB.bizDests.includes(v.dest);
   },
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
-  /* 隨行物品（G134）：有隨行物品時再問「屬於隨身物品」（是／否）。
-     bulkCargo＝有物品且非隨身物品（需填貨物清單、走一般用車）；noCargoForShare＝沒有物品或只有隨身物品（可走差旅共乘）。 */
+  /* 隨行財物（G134）：有隨行財物時再問「屬於隨身財物」（是／否）。
+     bulkCargo＝有財物且非隨身財物（需填貨物清單、走一般用車）；noCargoForShare＝沒有財物或只有隨身財物（可走差旅共乘）。 */
   /* 收貨日巡迴車上限（G135）：寄件據點當天各班次（含車次覆寫）使用的巡迴車；
      貨物清單合計＝體積 Σ長×寬×高×件數（公升，不含浪費係數）、重量 Σ單件重×件數。 */
-  // 貨物合計：有效地板面積（底面積×件數×類別浪費係數，cm²）與重量——與巡迴／院區物品轉運同一套不堆疊算法（G145）
+  // 貨物合計：有效地板面積（底面積×件數×類別浪費係數，cm²）與重量——與巡迴／院區財物轉運同一套不堆疊算法（G145）
   cargoTotals(items) { const e = effectiveLoad(items || []); return { floor: e.floor, weight: e.weight, volume: e.volume }; },
   patrolVehicles(site, date) {
     if (typeof ModuleA === 'undefined') return [];
     const ids = [...new Set(DB.regionalShifts.filter(s => s.branch === site).map(s => ModuleA.shiftPlan(date || '', s.id).vehicle))];
     return ids.map(id => DB.vehicles.find(x => x.id === id)).filter(Boolean);
   },
-  /* 貨物是否裝得進收貨日的巡迴車（G145）：以巡迴物品轉運同一套裝載判定 checkLoad 對「空車」試裝——
+  /* 貨物是否裝得進收貨日的巡迴車（G145）：以巡迴財物轉運同一套裝載判定 checkLoad 對「空車」試裝——
      不堆疊、只能水平轉向；有效地板面積（×類別係數）與重量皆不超過上限。任一台裝得下即可走巡迴。
      回傳 { fits, total, vehicle（地板最大的一台，供說明）, overItem（任何巡迴車都放不進的單件） } */
   patrolFit(v) {
@@ -65,7 +65,7 @@ const Guide = {
       out.push('K4');
       if (this.days(v.startDate, v.endDate) != null) {
         out.push('K6');
-        if (this.bulkCargo(v)) out.push('K3');   // 非隨身物品才需貨物清單（G134）
+        if (this.bulkCargo(v)) out.push('K3');   // 非隨身財物才需貨物清單（G134）
       }
     }
     out.push('K7');
@@ -73,24 +73,24 @@ const Guide = {
   },
 
   /* ---- 判定決策表（規格 6）：依序比對，第一條符合者為結果；未判定時回傳下一步提示
-     （R3 期間 ≥30 天 → 例行用車，已隨例行用車功能移除；多天用車依地點／物品走 R4/R5）---- */
+     （R3 期間 ≥30 天 → 例行用車，已隨例行用車功能移除；多天用車依地點／財物走 R4/R5）---- */
   route(v) {
     if (!v.mode) return { unit: null, hint: '請先在「需求」卡片選擇運送內容。' };
     if (v.mode === 'goods') {
       if (!v.fromSite || !v.toSite) return { unit: null, hint: '請選擇寄件據點與收件據點。' };
       if (v.fromSite !== v.toSite) {
-        return { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由院區物品轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。` };
+        return { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由院區財物轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。` };
       }
-      // 同據點（G135）：危險品運輸 → 院區物品轉運；貨物超過收貨日巡迴車上限 → 院區物品轉運；否則巡迴物品轉運
+      // 同據點（G135）：危險品運輸 → 院區財物轉運；貨物超過收貨日巡迴車上限 → 院區財物轉運；否則巡迴財物轉運
       if (v.hazardTransport !== 'yes' && v.hazardTransport !== 'no') return { unit: null, hint: '寄件與收件在同一據點。請選擇是否為危險品運輸。' };
       if (v.hazardTransport === 'yes') {
-        return { unit: 'B', rule: 'R6', reason: `危險品運輸，不走院區內巡迴班次，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。` };
+        return { unit: 'B', rule: 'R6', reason: `危險品運輸，不走院區內巡迴班次，改由院區財物轉運派車，需經二級審（單位主管審核）後由調度派車。` };
       }
       const f = this.patrolFit(v), t = f.total, fmt = n => Math.round(n * 10) / 10;
       const cap = f.vehicle ? `收貨日 ${v.recvDate || '—'} 巡迴車上限 地板 ${m2(floorCap(f.vehicle))}m²／${fmt(f.vehicle.weight)}kg、車廂高 ${f.vehicle.dims.h}cm` : '收貨日無巡迴車';
       if (!f.fits) {
         const why = f.overItem ? `「${f.overItem.name}」無法平放進巡迴車或單件超重（不堆疊、只能水平轉向），${cap}` : `貨物有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 超過${cap}`;
-        return { unit: 'B', rule: 'R7', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，但${why}，改由院區物品轉運派車，需經二級審（單位主管審核）後由調度派車。` };
+        return { unit: 'B', rule: 'R7', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，但${why}，改由院區財物轉運派車，需經二級審（單位主管審核）後由調度派車。` };
       }
       return { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」、非危險品，貨物不堆疊有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 裝得進${cap}，由院區內固定班次巡迴收送，送出即自動排入最近班次。` };
     }
@@ -101,14 +101,14 @@ const Guide = {
     if (!this.inBizList(v)) {
       return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；地點不在共乘清單（${this.placeName(v.origin)} → ${this.placeName(v.dest)}），由調度人工確認資源後派車，可自駕。` };
     }
-    if (v.hasCargo !== 'no' && v.hasCargo !== 'yes') return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內。請選擇是否有隨行物品。` };
+    if (v.hasCargo !== 'no' && v.hasCargo !== 'yes') return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內。請選擇是否有隨行財物。` };
     if (v.hasCargo === 'yes' && v.personalItems !== 'yes' && v.personalItems !== 'no') {
-      return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內且有隨行物品。請選擇隨行物品是否屬於隨身物品。` };
+      return { unit: null, hint: `用車期間 ${n} 天，地點都在共乘清單內且有隨行財物。請選擇隨行財物是否屬於隨身財物。` };
     }
     if (this.bulkCargo(v)) {
-      return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；隨行物品不屬於隨身物品，出差共乘不處理貨物，改由一般用車派車，可自駕。` };
+      return { unit: 'D', rule: 'R5', days: n, reason: `用車期間 ${n} 天；隨行財物不屬於隨身財物，出差共乘不處理貨物，改由一般用車派車，可自駕。` };
     }
-    return { unit: 'C', rule: 'R4', days: n, reason: `用車期間 ${n} 天；往返共乘清單內的地點（${v.origin} → ${v.dest}）且${v.hasCargo === 'yes' ? '隨行物品屬於隨身物品' : '未攜帶物品'}，由系統自動併車共乘。` };
+    return { unit: 'C', rule: 'R4', days: n, reason: `用車期間 ${n} 天；往返共乘清單內的地點（${v.origin} → ${v.dest}）且${v.hasCargo === 'yes' ? '隨行財物屬於隨身財物' : '未攜帶財物'}，由系統自動併車共乘。` };
   },
 
   /* ---- 判定後仍缺少的欄位（全部填齊才可「前往並帶入」）---- */
@@ -128,8 +128,8 @@ const Guide = {
       const needBack = !(u === 'C' && v.tripType === 'oneway');
       if (needBack && !v.backTime) out.push(u === 'C' ? '回程上車時間' : '結束時間');
       if (!(Number.isInteger(+v.pax) && +v.pax >= 1)) out.push('人數（至少 1 人）');
-      if (!v.hasCargo) out.push('隨行物品');
-      else if (v.hasCargo === 'yes' && !v.personalItems) out.push('屬於隨身物品');
+      if (!v.hasCargo) out.push('隨行財物');
+      else if (v.hasCargo === 'yes' && !v.personalItems) out.push('屬於隨身財物');
     }
     if (u === 'C' && v.tripType === 'oneway' && !this.canOneway(v)) out.push('行程型態（單程限目的地為交通轉運點）');
     if (u === 'D') {
@@ -184,11 +184,11 @@ const Guide = {
         labels.push('申請人', `用車 ${v.startDate} ${v.departTime} ～ ${v.endDate} ${v.backTime}`, `${v.pax} 人`,
           `自駕：${v.selfDrive ? '可以' : '不行'}`, '行程說明');
         if (this.bulkCargo(v)) labels.push(`隨行貨物 ${items.length} 項`);
-        else if (v.hasCargo === 'yes') labels.push('隨行物品屬隨身物品（不帶貨物清單）');
+        else if (v.hasCargo === 'yes') labels.push('隨行財物屬隨身財物（不帶貨物清單）');
         break;
       }
     }
-    // 危險品（G144）：院區物品轉運帶入「危險品運輸＝是」，派車限可載危險品的車輛
+    // 危險品（G144）：院區財物轉運帶入「危險品運輸＝是」，派車限可載危險品的車輛
     if ((r.unit === 'A' || r.unit === 'B') && (items.some(it => it.hazardous) || v.hazardTransport === 'yes')) {
       warnings.push(r.unit === 'B' ? '已帶入「危險品運輸＝是」：調度派車時只能使用可載危險品的車輛。'
         : `${this.UNITS[r.unit].name}含危險品，請確認「危險品運輸」並聯絡調度。`);
@@ -204,7 +204,7 @@ const Guide = {
   _log(rec, action, by, note) { rec.log.push({ at: new Date(), action, by: by || '—', note: note || '' }); },
   summary(v) {
     if (v.mode === 'goods') {
-      return `物品 ${this.siteName(v.fromSite)} → ${this.siteName(v.toSite)}｜貨物 ${(v.items || []).length} 項`;
+      return `財物 ${this.siteName(v.fromSite)} → ${this.siteName(v.toSite)}｜貨物 ${(v.items || []).length} 項`;
     }
     if (v.mode === 'people') {
       const n = this.days(v.startDate, v.endDate);

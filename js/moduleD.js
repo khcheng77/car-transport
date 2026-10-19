@@ -81,6 +81,7 @@ const ModuleD = {
       permits: [...new Set(data.permits || [])],             // 所需管制區通行證（交集篩選 G85）
       enterTaipei: !!data.enterTaipei,                       // 是否會進入台北市（噸位提示 G86）
       purpose: data.purpose || '',                           // 行程說明（選填：上車地點／目的地／事由）
+      tripleNo: data.tripleNo || '',                         // 三聯單號單號（G147 物籌處介接，可輸入下拉）
       items: (data.items || []).map(it => Object.assign({ hazardous: false }, it)), // 隨行貨物（選填）
     };
   },
@@ -126,6 +127,28 @@ const ModuleD = {
   /* ---- 調度確認前的撤回（G79）：可撤回修改拿回草稿（重送須重新簽核），或整單撤回 ----
      調度完成確認＝做出任一最終判斷（含無車可派）；確認後不再撤回，改用生命週期操作（G83）。 */
   isConfirmed(app) { return app.dispatchedAt != null; },
+  /* 撤單（G147）：用車起日前一天（含）以前可撤；已派車（含已送審、已簽審通過）者撤回簽審、清除指派區間，釋放車輛與司機 */
+  departDateOf(app) { return app.startDate || ''; },
+  canCancel(app) { return Flow.canCancel(app, this.departDateOf(app)); },
+  cancelApp(app, reason, by) {
+    reason = (reason || '').trim();
+    if (!this.canCancel(app)) return { ok: false, error: Flow.cancelError(app, this.departDateOf(app)) };
+    if (!reason) return { ok: false, error: '撤單時「撤單原因」為必填' };
+    if (app.status === 'dispatched') { Signoff.release(app, '申請人撤單', by || app.applicant); app.segs = []; this._sync(app); }
+    this._log(app, '撤單', by || app.applicant, reason);
+    Flow._cancelled(app, reason, by);
+    return { ok: true };
+  },
+  /* 調度室退回使用者修改（G147）：待調度（尚未做出派車判斷）的申請單；退回原因必填 → 退回修編，修改後重送單位主管審 */
+  canReturnEdit(app) { return app.status === 'approved'; },
+  returnToEdit(app, note, by) {
+    note = (note || '').trim();
+    if (!this.canReturnEdit(app)) return { ok: false, error: `${app.id} 目前狀態不可退回修改` };
+    if (!note) return { ok: false, error: '退回修改時「退回原因」為必填' };
+    this._log(app, '調度室退回修改', by || '調度室', note);
+    Flow._returned(app, note, by);
+    return { ok: true };
+  },
   canWithdrawToEdit(app) { return ['submitted', 'approved'].includes(app.status) && !this.isConfirmed(app); },
   withdrawToEdit(app, by) {
     if (!this.canWithdrawToEdit(app)) return false;
@@ -152,7 +175,7 @@ const ModuleD = {
     Object.assign(app, this._fields(data));
     app.status = 'submitted';
     this._log(app, '修改後重新送出', data.applicant, wasReturned ? `退回修編意見：${app.reviewNote || '—'}` : '');
-    app.reviewNote = '';
+    app.reviewNote = ''; app.returnedBy = null;
     return app;
   },
   /* ---- 指派區間（G88）：每次換車／換司機新增一段，不覆蓋；瞬間切換、不設重疊 ---- */
@@ -356,7 +379,7 @@ const ModuleD = {
     return Usage.saveGroup(d, apps, data, by, Object.assign({ pool: this.USAGE_POOL, allowSelf: apps.some(a => a.selfDrive) }, opts));
   },
 
-  /* ---- 車輛使用實登（派車結果生效後登打；無車可派者不需實登；自駕者駕駛人1 可登「使用者自駕」）---- */
+  /* ---- 車輛異動實登（派車結果生效後登打；無車可派者不需實登；自駕者駕駛人1 可登「使用者自駕」）---- */
   USAGE_POOL: 'BIZ',
   usagePlan(app) { return { vehicle: app.vehicle || null, drivers: (app.drivers || []).slice() }; },
   usageRecords() { return this.applications.filter(a => a.outcome !== 'noVehicle' && Usage.inScope(a)); },
@@ -521,7 +544,7 @@ const ModuleD = {
     return { ok: true };
   },
 
-  /* 狀態推導（Flow）：已出車＝用車起時間已到；已回登＝車輛使用實登 */
+  /* 狀態推導（Flow）：已出車＝用車起時間已到；已回登＝車輛異動實登 */
   departAt(app) { return Flow.at(app.startDate, app.startTime); },
 
 

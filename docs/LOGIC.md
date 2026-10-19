@@ -6,6 +6,13 @@
 
 ---
 
+## 業管會議修訂（G147，2026-10-19，四模組共用）
+- **用語**：系統中「物品」一律改稱「財物」；「車輛使用實登」更名「車輛異動實登」。
+- **撤單** `Flow.canCancel(rec, departDate)`：系統日期 < 出發日期（＝出發日前一天（含）以前），且非已刪除／無車退回、未實登。各模組 `departDateOf`：A `serviceDate`、B 派車單 `date`（未派車取 `wantReceiveDate`）、C `departDate`、D `startDate`。撤單 `cancelApp`／B `cancelOrder`：原因必填；已派車者 `Signoff.release` 撤回簽審並移出（A 清班次並 `refreshArrivals`、B／C `_detach`、D 清 `segs`）；`Flow._cancelled` → `status='cancelled'`（已刪除），記 `cancelReason`／`changeLog`。
+- **調度室退回修改** `M.canReturnEdit`／`M.returnToEdit`（B／C：待調度或所在派車單未送審、未簽審、未出車；D：待調度）；`Flow.returnEditBatch(M, list, note, by)` 全部可退才執行；`Flow._returned` → `rejected`、`returnedBy='dispatch'`、`reviewNote`＝退回原因；`resubmit` 回 `submitted`（再經單位主管審）並清 `returnedBy`。
+- **車輛異動實登**：`Usage.EXTRA_FIELDS`＝加油公升數 `fuelLiters`、司機工時 `workHours`、司機加班時數 `otHours`（選填、≥0、加班 ≤ 工時），存於 `usage` 與實登歷程。
+- **欄位**：B `escort`（押車人，僅註記）；A／B／C／D `tripleNo`（三聯單號單號，物籌處介接；`DB.tripleNoOptions` 為示意下拉選項，`<datalist id="tripleno-list">`）。
+
 ## 申請單狀態（G122，2026-10-03 四模組對齊，`flow.js`）
 
 畫面一律只顯示下列 11 種狀態，由 `Flow.of(rec)` 依「內部 status＋派車單＋簽審＋時間＋實登」推導；各模組內部 status 僅為實作用值。

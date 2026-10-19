@@ -166,7 +166,7 @@ group('模組 A 區域內物流（G10–G19 / 送出即自動媒合）', () => {
     eq(app.status, 'matched', '媒合成功即已排班');
     ok(typeof H.ModuleA.acceptSchedule === 'undefined', '不應再有確認接受排班步驟');
     ok(typeof H.ModuleA.confirmDelivery === 'undefined', 'G122 刪除已交貨');
-    ok(!app.sign, '巡迴物品轉運不送運輸主管簽審（排班即生效）');
+    ok(!app.sign, '巡迴財物轉運不送運輸主管簽審（排班即生效）');
     eq(H.Flow.of(app), 'ready');
     H.Flow._now = new Date(H.ModuleA.departAt(app).getTime() + 60000); eq(H.Flow.of(app), 'departed');
     const pl = H.ModuleA.usagePlan(app), v = H.DB.vehicles.find(x => x.id === pl.vehicle);
@@ -1772,7 +1772,7 @@ group('模組 D 一般用車（G70–G89，規格 v2）', () => {
 /* =================================================================
    模組 B：派車調度 · 派車單（G117–G120）
    ================================================================= */
-group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送審／退回／貨品回報）', () => {
+group('院區財物轉運 · 派車單（G117–G120 單一媒合／異動／送審／退回／貨品回報）', () => {
   const DD = '2026-12-31';
   const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false,
     volume: 1000, category: 'BOX', weight: 100, handleMin: 20 }, o)); H.ModuleB.approve(x); return x; };
@@ -1867,7 +1867,7 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     eq(a.status, 'approved'); eq(H.Flow.of(a), 'todo'); eq(a.dispatchVehicle, null); eq(d.cancelled, true);
   });
 
-  test('G120 車輛使用實登貨品回報：預設正常運送，可改為不運送／不接收並留紀錄；未生效不可回報', () => {
+  test('G120 車輛異動實登貨品回報：預設正常運送，可改為不運送／不接收並留紀錄；未生效不可回報', () => {
     const H = fresh(), B = H.ModuleB;
     const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
       items: [{ name: '紙箱', l: 50, w: 40, h: 30, qty: 2, weight: 5, category: 'BOX' }, { name: '儀器', l: 80, w: 60, h: 60, qty: 1, weight: 30, category: 'FRAGILE' }] });
@@ -1881,7 +1881,7 @@ group('院區物品轉運 · 派車單（G117–G120 單一媒合／異動／送
     eq(o.itemReportLog[0].before, '正常運送'); eq(o.itemReportLog[0].after, '不接收'); eq(o.itemReportLog[0].by, '調度室-王');
   });
 
-  test('G121 巡迴物品轉運實登貨品回報：排入班次即可回報；移出班次（未生效）不可回報', () => {
+  test('G121 巡迴財物轉運實登貨品回報：排入班次即可回報；移出班次（未生效）不可回報', () => {
     const H = fresh(), A = H.ModuleA;
     A.now = () => new Date(2026, 8, 2, 6, 0);
     const app = A.submit({ applicant: '業務部-周雅婷', station: 'D1-300', building: '一號月台',
@@ -2017,7 +2017,7 @@ group('運輸主管簽審（B/C/D 派車結果覆核；A 不經簽審）', () =>
     eq(rec.signLog.map(l => l.action).join('/'), '送簽審/主管同意/送簽審');
   });
 
-  test('A 巡迴物品轉運不經調度主管簽審：排班、改派班次、車次異動皆不送簽，排班即待出車', () => {
+  test('A 巡迴財物轉運不經調度主管簽審：排班、改派班次、車次異動皆不送簽，排班即待出車', () => {
     const H = fresh(), A = H.ModuleA;
     const app = aSubmit(H);
     eq(app.status, 'matched'); eq(app.sign, undefined, '自動排班不送簽');
@@ -2078,7 +2078,7 @@ group('運輸主管簽審（B/C/D 派車結果覆核；A 不經簽審）', () =>
   });
 });
 
-group('車輛使用實登（A/B/C/D 派車生效後登打實際車輛／駕駛／里程）', () => {
+group('車輛異動實登（A/B/C/D 派車生效後登打實際車輛／駕駛／里程）', () => {
   const U = { vehicleType: '物流貨車', vehicle: 'V-L01', driver1: 'DR1', driver2: '', startKm: '12000', endKm: '12035.5' };
 
   test('共用規則：未生效不可實登；必填、車種與車號相符、駕駛不可重複、結束里程 ≥ 起始', () => {
@@ -2308,20 +2308,20 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 2, hasCargo: '', selfDrive: null }, o);
   const box = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
 
-  test('卡片：一開始只有需求與判定結果；選物品出現物品寄送，兩據點選好才出現貨物清單', () => {
+  test('卡片：一開始只有需求與判定結果；選財物出現財物寄送，兩據點選好才出現貨物清單', () => {
     const G = fresh().Guide;
     eq(G.visibleCards(base()).join(), 'K1,K7');
     eq(G.visibleCards(base({ mode: 'goods' })).join(), 'K1,K2,K7');
     eq(G.visibleCards(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6' })).join(), 'K1,K2,K3,K7');
   });
 
-  test('卡片：有人搭車出現用車期間；起訖有效才出現行程（不論天數）；有物品再出現貨物清單', () => {
+  test('卡片：有人搭車出現用車期間；起訖有效才出現行程（不論天數）；有財物再出現貨物清單', () => {
     const G = fresh().Guide;
     eq(G.visibleCards(base({ mode: 'people' })).join(), 'K1,K4,K7');
     eq(G.visibleCards(base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-30' })).join(), 'K1,K4,K6,K7', '長天數也走行程');
     eq(G.visibleCards(base({ mode: 'people', startDate: '2099-03-05', endDate: '2099-03-01' })).join(), 'K1,K4,K7', '迄日早於起日');
     eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes', personalItems: 'no' })).join(), 'K1,K4,K6,K3,K7');
-    eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes', personalItems: 'yes' })).join(), 'K1,K4,K6,K7', '隨身物品不需貨物清單（G134）');
+    eq(G.visibleCards(base({ mode: 'people', startDate: FUT, endDate: FUT, hasCargo: 'yes', personalItems: 'yes' })).join(), 'K1,K4,K6,K7', '隨身財物不需貨物清單（G134）');
   });
 
   test('R1／R2：寄件與收件據點相同 → 收貨申請，不同 → 幹線託運', () => {
@@ -2331,22 +2331,22 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     ok(!G.route(base({ mode: 'goods', fromSite: 'D9' })).unit, '缺收件據點未判定');
   });
 
-  test('例行用車已移除：長天數不再另走例行用車，依地點／物品判定；迄日早於起日未判定', () => {
+  test('例行用車已移除：長天數不再另走例行用車，依地點／財物判定；迄日早於起日未判定', () => {
     const G = fresh().Guide;
     ok(!('E' in G.UNITS), '判定功能不含例行用車');
     const long = base({ mode: 'people', startDate: '2099-03-01', endDate: '2099-05-31', origin: '台北總部', dest: '台中辦公室', hasCargo: 'no' });
-    eq(G.route(long).unit, 'C', '92 天、共乘清單、無物品 → 出差用車');
+    eq(G.route(long).unit, 'C', '92 天、共乘清單、無財物 → 出差用車');
     eq(G.route(Object.assign(long, { dest: G.OTHER })).unit, 'D', '92 天、其他地點 → 一般用車');
     ok(!G.route(base({ mode: 'people', startDate: '2099-03-05', endDate: '2099-03-01' })).unit, '迄日早於起日未判定');
   });
 
-  test('R4／R5：地點在共乘清單且無物品 → 出差用車；其他地點或有物品 → 一般用車', () => {
+  test('R4／R5：地點在共乘清單且無財物 → 出差用車；其他地點或有財物 → 一般用車', () => {
     const G = fresh().Guide;
     const p = o => base(Object.assign({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '桃園機場T1' }, o));
     eq(G.route(p({ hasCargo: 'no' })).unit, 'C');
     eq(G.route(p({ hasCargo: 'yes', personalItems: 'no' })).unit, 'D');
-    eq(G.route(p({ dest: G.OTHER })).unit, 'D', '其他地點不必等隨行物品即判定');
-    ok(!G.route(p({ hasCargo: '' })).unit, '清單內地點需先選是否有物品');
+    eq(G.route(p({ dest: G.OTHER })).unit, 'D', '其他地點不必等隨行財物即判定');
+    ok(!G.route(p({ hasCargo: '' })).unit, '清單內地點需先選是否有財物');
   });
 
   test('帶入：出差用車／一般用車的帶入資料可直接通過該功能驗證', () => {
@@ -2367,7 +2367,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     eq(H.ModuleD.validate(m.data).length, 0, '多天一般用車驗證：' + H.ModuleD.validate(m.data).join('、'));
   });
 
-  test('帶入：只帶判定路徑用得到的欄位；物品含危險品導向收貨／幹線時提示', () => {
+  test('帶入：只帶判定路徑用得到的欄位；財物含危險品導向收貨／幹線時提示', () => {
     const G = fresh().Guide;
     const v = base({ mode: 'goods', fromSite: 'D9', toSite: 'D3', recvTime: '10:30', items: [Object.assign({ hazardous: true }, box)],
       origin: '台北總部', purpose: '不應帶入', pax: 5 });
@@ -2385,7 +2385,7 @@ group('申請引導（卡片出現規則／判定決策表 R1/R2/R4/R5／帶入�
     ok(G.missing(d).some(m => m.includes('自己開車')));
     const c = base({ mode: 'people', startDate: FUT, endDate: FUT, origin: '台北總部', dest: '新竹分公司', hasCargo: 'no', tripType: 'oneway' });
     ok(G.missing(c).some(m => m.includes('單程')), '新竹分公司非轉運點不可單程');
-    ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', hazardTransport: 'no' })).some(m => m.includes('貨物')), '物品至少 1 項');
+    ok(G.missing(base({ mode: 'goods', fromSite: 'D6', toSite: 'D6', hazardTransport: 'no' })).some(m => m.includes('貨物')), '財物至少 1 項');
   });
 
   test('引導紀錄：前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判', () => {
@@ -2441,7 +2441,7 @@ const box = (o) => Object.assign({ name: '件', l: 50, w: 50, h: 50, qty: 1, cat
 /* =================================================================
    模組 A 區域物流
    ================================================================= */
-group('疑點修正 · 巡迴物品轉運（G131）', () => {
+group('疑點修正 · 巡迴財物轉運（G131）', () => {
   test('A-S1 到站時間應包含前面站點的上下貨時間', () => {
     const H = fresh();
     H.ModuleA.now = () => new Date(2026, 8, 2, 6, 0); // 06:00，早於所有班次
@@ -2463,7 +2463,7 @@ group('疑點修正 · 巡迴物品轉運（G131）', () => {
 /* =================================================================
    模組 B 南北幹線（急件直達）
    ================================================================= */
-group('疑點修正 · 院區物品轉運急件直達（G131）', () => {
+group('疑點修正 · 院區財物轉運急件直達（G131）', () => {
   test('B-S1 被時間窗剔除的單，不應繼續佔用直達車容量', () => {
     const H = fresh();
     const veh = H.DB.vehicles.find(v => v.id === 'V-T01'); // 容量 34560L
@@ -2692,8 +2692,8 @@ group('差旅共乘申請欄位改版（G133）', () => {
     const c = C.createApp(form({ permitP: true })); C.approve(c);
     ok(C.findResourceCandidates(c, 540, 600, null).every(x => x.vehicle.permits.includes('P')), '候選皆有 P');
   });
-  test('取消申請：異動事由必填；已併入未送審派車單者移出；送審後不可取消', () => {
-    const H = fresh(), C = H.ModuleC;
+  test('取消申請：異動事由必填；已併入派車單者移出（G147 起送審後亦可，期限＝出發日前一天）', () => {
+    const H = fresh(), C = H.ModuleC; H.Flow._now = '2026-10-01T09:00:00';
     const a = C.createApp(form()); C.approve(a);
     ok(!C.cancelApp(a, ' ').ok, '事由必填');
     ok(C.cancelApp(a, '行程取消', a.applicant).ok);
@@ -2703,8 +2703,11 @@ group('差旅共乘申請欄位改版（G133）', () => {
     const order = C.dispatchOf(b);
     ok(C.cancelApp(b, '改搭高鐵').ok); ok(order.cancelled, '派車單空了即取消'); eq(b.dispatchId, null);
     const c = C.createApp(form()); C.approve(c); C.runBatch(D, 't', { days: 0 });
-    C.submitDispatch(C.dispatchOf(c), 't');
-    const r = C.cancelApp(c, '不去了'); ok(!r.ok && /送審/.test(r.error), r.error);
+    C.submitDispatch(C.dispatchOf(c), 't'); ok(H.Signoff.isPending(c));
+    ok(C.cancelApp(c, '不去了').ok, '派車單已送審仍可撤單（G147）'); ok(!H.Signoff.isPending(c), '撤回簽審'); eq(c.dispatchId, null);
+    H.Flow._now = `${D}T07:00:00`;
+    const e = C.createApp(form()); ok(!C.canCancel(e), '出發當天不可撤');
+    ok(/前一天/.test(C.cancelApp(e, '臨時取消').error));
   });
   test('修改送出：異動事由記入異動紀錄', () => {
     const C = fresh().ModuleC;
@@ -2714,37 +2717,37 @@ group('差旅共乘申請欄位改版（G133）', () => {
   });
 });
 
-group('申請引導：隨行物品屬於隨身物品（G134）', () => {
+group('申請引導：隨行財物屬於隨身財物（G134）', () => {
   const FUT = '2099-03-01';
   const p = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', mode: 'people', items: [], startDate: FUT, endDate: FUT,
     origin: '台北總部', dest: '高鐵台北站', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 2,
     hasCargo: '', personalItems: '', selfDrive: null }, o);
   const box = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
-  test('隨行物品沒有 → 差旅共乘', () => {
+  test('隨行財物沒有 → 差旅共乘', () => {
     const G = fresh().Guide;
     eq(G.route(p({ hasCargo: 'no' })).unit, 'C');
   });
-  test('隨行物品有、屬於隨身物品 是 → 差旅共乘，不需貨物清單，可直接帶入', () => {
+  test('隨行財物有、屬於隨身財物 是 → 差旅共乘，不需貨物清單，可直接帶入', () => {
     const H = fresh(), G = H.Guide;
     const v = p({ hasCargo: 'yes', personalItems: 'yes' });
-    const r = G.route(v); eq(r.unit, 'C'); eq(r.rule, 'R4'); ok(r.reason.includes('隨身物品'), r.reason);
+    const r = G.route(v); eq(r.unit, 'C'); eq(r.rule, 'R4'); ok(r.reason.includes('隨身財物'), r.reason);
     eq(G.missing(v).length, 0, G.missing(v).join('、'));
     ok(H.ModuleC.createApp(G.prefill(v).data).id, '可建立差旅共乘申請');
   });
-  test('隨行物品有、屬於隨身物品 否 → 一般用車，需貨物清單並帶入', () => {
+  test('隨行財物有、屬於隨身財物 否 → 一般用車，需貨物清單並帶入', () => {
     const H = fresh(), G = H.Guide;
     const v = p({ hasCargo: 'yes', personalItems: 'no', selfDrive: false });
     eq(G.route(v).unit, 'D'); ok(G.missing(v).some(m => m.includes('貨物')), '需貨物清單');
     v.items = [box]; eq(G.missing(v).length, 0, G.missing(v).join('、'));
     const d = G.prefill(v); eq(d.data.items.length, 1); eq(H.ModuleD.validate(d.data).length, 0);
   });
-  test('隨行物品有、未選屬於隨身物品 → 未判定；其他地點走一般用車時列為缺漏，隨身物品不帶貨物清單', () => {
+  test('隨行財物有、未選屬於隨身財物 → 未判定；其他地點走一般用車時列為缺漏，隨身財物不帶貨物清單', () => {
     const G = fresh().Guide;
-    const r = G.route(p({ hasCargo: 'yes' })); ok(!r.unit && r.hint.includes('隨身物品'), r.hint);
+    const r = G.route(p({ hasCargo: 'yes' })); ok(!r.unit && r.hint.includes('隨身財物'), r.hint);
     const o = p({ dest: G.OTHER, otherPlace: '新竹客戶', hasCargo: 'yes', selfDrive: true });
-    eq(G.route(o).unit, 'D'); ok(G.missing(o).includes('屬於隨身物品'));
+    eq(G.route(o).unit, 'D'); ok(G.missing(o).includes('屬於隨身財物'));
     o.personalItems = 'yes'; o.items = [box];
-    eq(G.missing(o).length, 0, '隨身物品不需貨物清單'); eq(G.prefill(o).data.items.length, 0, '不帶貨物清單');
+    eq(G.missing(o).length, 0, '隨身財物不需貨物清單'); eq(G.prefill(o).data.items.length, 0, '不帶貨物清單');
   });
 });
 
@@ -2753,24 +2756,24 @@ group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
   const g = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', mode: 'goods', fromSite: 'D6', toSite: 'D6',
     recvDate: FUT, recvTime: '', hazardTransport: '', items: [] }, o);
   const it = o => Object.assign({ name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 }, o);
-  test('同據點未選危險品運輸 → 未判定；不同據點不需選即院區物品轉運', () => {
+  test('同據點未選危險品運輸 → 未判定；不同據點不需選即院區財物轉運', () => {
     const G = fresh().Guide;
     const r = G.route(g()); ok(!r.unit && r.hint.includes('危險品運輸'), r.hint);
     eq(G.route(g({ toSite: 'D3' })).unit, 'B');
   });
-  test('危險品運輸 是 → 院區物品轉運（R6），帶入時提示危險品', () => {
+  test('危險品運輸 是 → 院區財物轉運（R6），帶入時提示危險品', () => {
     const G = fresh().Guide;
     const v = g({ hazardTransport: 'yes', items: [it()] });
     const r = G.route(v); eq(r.unit, 'B'); eq(r.rule, 'R6');
     eq(G.missing(v).length, 0, G.missing(v).join('、'));
     const pf = G.prefill(v); eq(pf.data.site, 'D6'); eq(pf.data.destSite, 'D6'); ok(pf.warnings.length === 1, '危險品提示');
   });
-  test('非危險品、合計皆小於收貨日巡迴車上限 → 巡迴物品轉運（R1）', () => {
+  test('非危險品、合計皆小於收貨日巡迴車上限 → 巡迴財物轉運（R1）', () => {
     const H = fresh(), G = H.Guide;
     const veh = G.patrolVehicles('D6', FUT); ok(veh.length > 0, '有巡迴車');
     const r = G.route(g({ hazardTransport: 'no', items: [it()] })); eq(r.unit, 'A'); eq(r.rule, 'R1');
   });
-  test('合計體積或合計重量超過上限 → 院區物品轉運（R7）', () => {
+  test('合計體積或合計重量超過上限 → 院區財物轉運（R7）', () => {
     const H = fresh(), G = H.Guide;
     const cap = G.patrolVehicles('D6', FUT).reduce((a, x) => (H.floorCap(x) > H.floorCap(a) ? x : a));
     // 單件放得進，但件數合計有效地板面積（100×100×1.1 每件）超過（G145 不堆疊）
@@ -2779,11 +2782,11 @@ group('申請引導：危險品運輸與巡迴車上限（G135）', () => {
     // 合計重量超過
     const wt = g({ hazardTransport: 'no', items: [it({ weight: 1000 }), it({ name: '箱2', weight: 1000 })] });
     eq(G.route(wt).unit, 'B', '4000kg 超過所有巡迴車重量上限');
-    // 剛好等於上限仍裝得下（G145 與巡迴物品轉運一致：≤ 上限）
+    // 剛好等於上限仍裝得下（G145 與巡迴財物轉運一致：≤ 上限）
     const eqW = g({ hazardTransport: 'no', items: [it({ qty: 1, weight: Math.max(...G.patrolVehicles('D6', FUT).map(x => x.weight)) })] });
     eq(G.route(eqW).unit, 'A', '等於上限仍可裝');
   });
-  test('單件體積或重量超過上限 → 院區物品轉運並指出物品', () => {
+  test('單件體積或重量超過上限 → 院區財物轉運並指出財物', () => {
     const G = fresh().Guide;
     const r = G.route(g({ hazardTransport: 'no', items: [it(), it({ name: '大型機台', l: 500, w: 200, h: 200, qty: 1, weight: 10 })] }));
     eq(r.unit, 'B'); ok(r.reason.includes('大型機台'), r.reason);
@@ -2819,7 +2822,7 @@ group('差旅共乘申請：報到地點與隨身貨物（G136）', () => {
     eq(C.formError(form()), null);
     ok(/報到地點/.test(C.formError(form({ reportPlace: ' ' }))));
     eq(C.formError(form({ personalCargo: [row(), row({ name: '樣品箱', pack: '' })] })), null, '外包裝可空白');
-    ok(/第 2 列.*物品名稱/.test(C.formError(form({ personalCargo: [row(), row({ name: '' })] }))));
+    ok(/第 2 列.*財物名稱/.test(C.formError(form({ personalCargo: [row(), row({ name: '' })] }))));
     ok(/數量/.test(C.formError(form({ personalCargo: [row({ qty: 0 })] }))));
     ok(/長、寬、高/.test(C.formError(form({ personalCargo: [row({ h: 0 })] }))));
     ok(/重量/.test(C.formError(form({ personalCargo: [row({ weight: '' })] }))));
@@ -2832,9 +2835,9 @@ group('差旅共乘申請：報到地點與隨身貨物（G136）', () => {
   });
 });
 
-group('巡迴物品轉運申請表單改版（G138）', () => {
+group('巡迴財物轉運申請表單改版（G138）', () => {
   const box = () => ({ name: '件', l: 50, w: 50, h: 50, qty: 1, category: 'BOX', weight: 10, plan: '計畫甲', workNo: 'W-01', pack: '紙箱' });
-  test('物品運輸單號 car＋民國年＋5 碼流水號；單狀態開單；申請日期民國年', () => {
+  test('財物運輸單號 car＋民國年＋5 碼流水號；單狀態開單；申請日期民國年', () => {
     const H = fresh(), A = H.ModuleA; A.now = () => new Date(2026, 9, 10, 7, 0);
     eq(A.nextNo(), 'car11500001'); eq(A.rocDate(), '115/10/10');
     const a = A.saveDraft({ applicant: 'A', branch: 'D1', station: 'D1-300', pickStation: 'D1-100', items: [box()], recvMode: 'asap', hazardTransport: 'yes', remark: '輕放' });
@@ -2871,13 +2874,13 @@ group('差旅共乘申請：是否送審（G139）', () => {
   });
 });
 
-group('院區物品轉運申請表單改版（G143）', () => {
+group('院區財物轉運申請表單改版（G143）', () => {
   const form = o => Object.assign({ applicant: '研發部-吳承恩', site: 'D6', destSite: 'D3', pickupLoc: 'A 棟', deliverLoc: '主倉',
     wantReceiveDate: '2026-10-20', wantReceiveTime: '10:00', loadMin: 20, unloadMin: 10,
     applyUnit: '研發部', applyExt: '4102', consignor: { name: '吳承恩', campus: '', ext: '4102' },
     recipient: { unit: '台南營業所', name: '鄭文彬', phone: '#12', agentName: '周雅琳', agentPhone: '0933', agentCampus: '台南', agentHall: '收發室' },
     items: [{ name: '紙箱', l: 50, w: 40, h: 40, qty: 2, category: 'BOX', weight: 10 }] }, o);
-  test('新單帶出物品運輸單狀態「開單」與民國申請日期；新欄位寫入、預設值', () => {
+  test('新單帶出財物運輸單狀態「開單」與民國申請日期；新欄位寫入、預設值', () => {
     const H = fresh(), B = H.ModuleB;
     const o = B.createOrder(form({ unloadReadyTime: '15:00', tripleFormNo: '3F-1', captain: '王車長' }));
     eq(o.transportStatus, '開單'); ok(/^\d{3}\/\d{2}\/\d{2}$/.test(o.applyDate), '民國日期 ' + o.applyDate);
@@ -2898,7 +2901,7 @@ group('院區物品轉運申請表單改版（G143）', () => {
     ok(/接收代理人院區/.test(B.formError(form({ recipient: Object.assign({}, form().recipient, { agentCampus: '' }) }))));
     ok(/接收代理人館別/.test(B.formError(form({ recipient: Object.assign({}, form().recipient, { agentHall: '' }) }))));
     ok(/拒絕併車事由/.test(B.formError(form({ agreeCarpool: false }))));
-    eq(B.formError(form({ agreeCarpool: false, carpoolRejectReason: '機密物品' })), null);
+    eq(B.formError(form({ agreeCarpool: false, carpoolRejectReason: '機密財物' })), null);
     ok(/異動事由/.test(B.formError(form(), { editing: true })));
     eq(B.formError(form({ changeReason: '改日期' }), { editing: true }), null);
   });
@@ -2915,7 +2918,7 @@ group('院區物品轉運申請表單改版（G143）', () => {
   });
 });
 
-group('院區物品轉運：危險品運輸限車與是非欄位（G144）', () => {
+group('院區財物轉運：危險品運輸限車與是非欄位（G144）', () => {
   const DD = '2026-12-31';
   const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false,
     volume: 1000, category: 'BOX', weight: 100, handleMin: 20, wantReceiveDate: DD }, o)); H.ModuleB.approve(x); return x; };
@@ -2963,7 +2966,7 @@ group('院區物品轉運：危險品運輸限車與是非欄位（G144）', () 
   });
 });
 
-group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', () => {
+group('裝載判定一致：財物不堆疊、能裝入的最大量（G145）', () => {
   const sets = {
     '超長單件 450×30×30': [{ name: '長管', l: 450, w: 30, h: 30, qty: 1, category: 'LONG', weight: 20 }],
     '1m³ 紙箱 13 箱': [{ name: '紙箱', l: 100, w: 100, h: 100, qty: 13, category: 'BOX', weight: 50 }],
@@ -2971,7 +2974,7 @@ group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', 
     '高櫃 230cm': [{ name: '高櫃', l: 60, w: 60, h: 230, qty: 1, category: 'BOX', weight: 80 }],
     '小箱 5 件': [{ name: '小箱', l: 40, w: 30, h: 30, qty: 5, category: 'BOX', weight: 5 }],
   };
-  test('院區物品轉運的派車判斷與共用 checkLoad 結果相同（每台幹線車）', () => {
+  test('院區財物轉運的派車判斷與共用 checkLoad 結果相同（每台幹線車）', () => {
     const H = fresh(), B = H.ModuleB;
     H.DB.vehicles.filter(v => v.pool === 'LOGI' && v.sizeClass).forEach(veh => Object.entries(sets).forEach(([k, items]) => {
       const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', handleMin: 10, items: items.map(x => Object.assign({}, x)) });
@@ -2979,7 +2982,7 @@ group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', 
       eq(bOk, H.checkLoad(items, veh, { floor: 0, weight: 0 }).ok, `${veh.id}｜${k}`);
     }));
   });
-  test('申請引導判給巡迴物品轉運 ⇔ 巡迴空車裝得下；裝不下改判院區物品轉運', () => {
+  test('申請引導判給巡迴財物轉運 ⇔ 巡迴空車裝得下；裝不下改判院區財物轉運', () => {
     const H = fresh(), G = H.Guide, D = '2099-03-01';
     Object.entries(sets).forEach(([k, items]) => {
       const v = { mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: D, hazardTransport: 'no', items };
@@ -2987,9 +2990,9 @@ group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', 
       eq(G.route(v).unit, anyFit ? 'A' : 'B', k);
     });
     const pipe = { mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: D, hazardTransport: 'no', items: sets['超長單件 450×30×30'] };
-    ok(G.route(pipe).reason.includes('長管'), '指出放不進的物品');
+    ok(G.route(pipe).reason.includes('長管'), '指出放不進的財物');
   });
-  test('巡迴物品轉運：放不進任何巡迴車的單判為「貨物太大」，院區物品轉運幹線車可承運', () => {
+  test('巡迴財物轉運：放不進任何巡迴車的單判為「貨物太大」，院區財物轉運幹線車可承運', () => {
     const H = fresh();
     const r = H.ModuleA.submit({ applicant: 'X', branch: 'D6', station: 'D6-300', pickStation: 'D6-100', recvMode: 'asap',
       serviceDate: H.ModuleA.todayStr(), items: sets['超長單件 450×30×30'].map(x => Object.assign({}, x)), loadMin: 5, unloadMin: 5 });
@@ -2999,7 +3002,7 @@ group('裝載判定一致：物品不堆疊、能裝入的最大量（G145）', 
   });
 });
 
-group('院區物品轉運派車單明細：送審、異動、新增／刪除申請單（G146）', () => {
+group('院區財物轉運派車單明細：送審、異動、新增／刪除申請單（G146）', () => {
   const DD = '2026-12-31';
   const mk = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, handleMin: 20,
     wantReceiveDate: DD, wantReceiveTime: '09:00', items: [{ name: '箱', l: 120, w: 100, h: 100, qty: 3, category: 'BOX', weight: 80 }] }, o)); H.ModuleB.approve(x); return x; };
@@ -3047,6 +3050,75 @@ group('院區物品轉運派車單明細：送審、異動、新增／刪除申�
     ok(B.addCandidates(d).includes(o), '同派車日待調度可加入');
     ok(B.manualMerge(o, d, 'x').ok); eq(o.dispatchId, d.id);
     ok(!B.addCandidates(d).includes(o));
+  });
+});
+
+group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位、押車人、三聯單號單號', () => {
+  const DD = '2026-12-31', NOW = '2026-12-01T09:00:00';
+  const bOrder = (H, o) => { const x = H.ModuleB.createOrder(Object.assign({ applicant: 'X', site: 'D9', destSite: 'D3', handleMin: 20,
+    wantReceiveDate: DD, wantReceiveTime: '09:00', items: [{ name: '箱', l: 100, w: 80, h: 80, qty: 1, category: 'BOX', weight: 30 }] }, o)); H.ModuleB.approve(x); return x; };
+  const dApp = (H, o) => H.ModuleD.createApp(Object.assign({ applicant: '業務部-周雅婷', startDate: DD, startTime: '09:00', endDate: DD, endTime: '12:00', pax: 1, selfDrive: false, items: [] }, o));
+  test('撤單期限：出發日前一天（含）以前可撤，出發當天起不可（四模組共用 Flow 規則）', () => {
+    const H = fresh(), F = H.Flow;
+    F._now = '2026-12-30T23:00:00'; ok(F.canCancel({ status: 'approved' }, DD), '前一天可撤');
+    F._now = '2026-12-31T00:10:00'; ok(!F.canCancel({ status: 'approved' }, DD), '出發當天不可');
+    F._now = NOW; ok(!F.canCancel({ status: 'noCar' }, DD)); ok(!F.canCancel({ status: 'approved', usage: {} }, DD), '已實登不可');
+  });
+  test('院區財物轉運：已送審且簽審通過的派車單內申請單仍可撤單，撤回簽審並移出派車單', () => {
+    const H = fresh(), B = H.ModuleB; H.Flow._now = NOW;
+    const o = bOrder(H, {}); B.runMatch(DD, '調度室');
+    const d = B.dispatchOf(o); ok(B.submitDispatch(d, 'x').ok); B.signApprove(o, '主管'); ok(H.Signoff.effective(o));
+    ok(!B.cancelOrder(o, ' ').ok, '撤單原因必填');
+    ok(B.cancelOrder(o, '專案取消', o.applicant).ok);
+    eq(o.status, 'cancelled'); eq(H.Flow.of(o), 'cancelled'); eq(o.dispatchId, null); ok(!H.Signoff.effective(o)); ok(d.cancelled, '派車單已無申請單即取消');
+  });
+  test('巡迴財物轉運：已排入班次者撤單後移出班次；一般用車：已派車者撤單釋放車輛', () => {
+    const H = fresh(), A = H.ModuleA, D = H.ModuleD; H.Flow._now = NOW;
+    const a = A.createApp({ applicant: 'X', branch: 'D6', station: 'D6-300', pickStation: 'D6-100', recvMode: 'exact', serviceDate: DD, deliverTime: '10:00',
+      items: [{ name: '箱', l: 40, w: 30, h: 30, qty: 1, category: 'BOX', weight: 5 }], loadMin: 5, unloadMin: 5 });
+    a.status = 'matched'; a.assignedShift = H.DB.regionalShifts.find(x => x.branch === 'D6').id;
+    ok(A.cancelApp(a, '不寄了').ok); eq(a.status, 'cancelled'); eq(a.assignedShift, null);
+    const g = dApp(H, {}); D.approve(g);
+    const r = D.resources(g), v = r.vehicles.find(x => !x.busy), dr = r.drivers.find(x => !x.busy);
+    ok(D.dispatch(g, { vehicle: v.v.id, drivers: [dr.d.id] }).ok); D.signApprove(g, '主管');
+    ok(D.cancelApp(g, '會議改線上').ok); eq(g.status, 'cancelled'); eq(g.segs.length, 0); eq(g.vehicle, null);
+    const g2 = dApp(H, {}); D.approve(g2);
+    ok(!D.resources(g2).vehicles.find(x => x.v.id === v.v.id).busy, '撤單後車輛釋放');
+  });
+  test('調度室退回使用者修改：待調度／未送審派車單可退，退回修編後修改送出回到待二級審；批次有不可退者全不執行', () => {
+    const H = fresh(), B = H.ModuleB; H.Flow._now = NOW;
+    const a = bOrder(H, {}), b = bOrder(H, { site: 'D6', destSite: 'D2' });
+    B.runMatch(DD, '調度室'); ok(a.dispatchId);
+    const c = bOrder(H, { wantReceiveDate: '2027-01-05' });
+    ok(B.canReturnEdit(a), '未送審派車單內可退'); ok(B.canReturnEdit(c), '待調度可退');
+    const r = H.Flow.returnEditBatch(B, [a, c], '請補館別', '調度室-林');
+    ok(r.ok); eq(r.count, 2); eq(a.status, 'rejected'); eq(a.returnedBy, 'dispatch'); eq(a.reviewNote, '請補館別'); eq(a.dispatchId, null);
+    eq(H.Flow.of(a), 'revise');
+    B.resubmit(a, Object.assign({}, a, { site: a.pickSite, destSite: a.dropSite })); eq(a.status, 'submitted', '重新送出需再經單位主管審核'); eq(a.returnedBy, null);
+    if (b.dispatchId) { B.submitDispatch(B.dispatchOf(b), 'x'); ok(!B.canReturnEdit(b), '已送審派車單內不可退');
+      const e = bOrder(H, {}); const r2 = H.Flow.returnEditBatch(B, [e, b], '原因', 'x'); ok(!r2.ok); eq(e.status, 'approved', '批次失敗全不執行'); }
+    ok(!H.Flow.returnEditBatch(B, [c], ' ', 'x').ok, '原因必填');
+  });
+  test('差旅共乘與一般用車：待調度可退回修改', () => {
+    const H = fresh(), D = H.ModuleD; H.Flow._now = NOW;
+    const g = dApp(H, {}); D.approve(g); ok(D.returnToEdit(g, '請補行程說明', '調度室').ok); eq(g.status, 'rejected'); eq(g.returnedBy, 'dispatch');
+    ok(!D.canReturnEdit(g), '已退回不可再退');
+  });
+  test('車輛異動實登：加油公升數、司機工時、司機加班時數選填，需為 0 以上且加班不超過工時', () => {
+    const H = fresh(), U = H.Usage;
+    const rec = { sign: { status: 'approved' } }, base = { vehicleType: '幹線貨車', vehicle: 'V-T02', driver1: 'DR1', startKm: 100, endKm: 150 };
+    ok(/加油/.test(U.save(rec, Object.assign({ fuelLiters: -1 }, base), 'x', { pool: 'LOGI' }).error));
+    ok(/加班/.test(U.save(rec, Object.assign({ workHours: 2, otHours: 3 }, base), 'x', { pool: 'LOGI' }).error));
+    const r = U.save(rec, Object.assign({ fuelLiters: '40.5', workHours: 9, otHours: 1 }, base), 'x', { pool: 'LOGI' });
+    ok(r.ok); eq(rec.usage.fuelLiters, 40.5); eq(rec.usage.workHours, 9); eq(rec.usage.otHours, 1);
+    ok(U.save(rec, base, 'x', { pool: 'LOGI' }).ok, '三欄皆可不填'); eq(rec.usage.fuelLiters, null);
+  });
+  test('押車人僅註記、三聯單號單號四模組皆保存', () => {
+    const H = fresh(); H.Flow._now = NOW;
+    const o = bOrder(H, { escort: '王押車', tripleNo: '3L-115-00101' }); eq(o.escort, '王押車'); eq(o.tripleNo, '3L-115-00101');
+    const a = H.ModuleA.createApp({ applicant: 'X', branch: 'D6', station: 'D6-300', recvMode: 'asap', serviceDate: DD, items: [], tripleNo: '3L-115-00102' }); eq(a.tripleNo, '3L-115-00102');
+    const g = dApp(H, { tripleNo: '3L-115-00103' }); eq(g.tripleNo, '3L-115-00103');
+    ok(H.DB.tripleNoOptions.length > 0, '有示意下拉選項');
   });
 });
 
