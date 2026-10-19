@@ -6,12 +6,13 @@
 
 ---
 
-## 業管會議修訂（G147，2026-10-19，四模組共用）
+## 業管會議修訂（G147～G149，2026-10-19，四模組共用）
 - **用語**：系統中「物品」一律改稱「財物」；「車輛使用實登」更名「車輛異動實登」。
 - **撤單** `Flow.canCancel(rec, departDate)`：系統日期 < 出發日期（＝出發日前一天（含）以前），且非已刪除／無車退回、未實登。各模組 `departDateOf`：A `serviceDate`、B 派車單 `date`（未派車取 `wantReceiveDate`）、C `departDate`、D `startDate`。撤單 `cancelApp`／B `cancelOrder`：原因必填；已派車者 `Signoff.release` 撤回簽審並移出（A 清班次並 `refreshArrivals`、B／C `_detach`、D 清 `segs`）；`Flow._cancelled` → `status='cancelled'`（已刪除），記 `cancelReason`／`changeLog`。
 - **調度室退回修改** `M.canReturnEdit`／`M.returnToEdit`（B／C：待調度或所在派車單未送審、未簽審、未出車；D：待調度）；`Flow.returnEditBatch(M, list, note, by)` 全部可退才執行；`Flow._returned` → `rejected`、`returnedBy='dispatch'`、`reviewNote`＝退回原因；`resubmit` 回 `submitted`（再經單位主管審）並清 `returnedBy`。
 - **車輛異動實登**：`Usage.EXTRA_FIELDS`＝加油公升數 `fuelLiters`、司機工時 `workHours`、司機加班時數 `otHours`（選填、≥0、加班 ≤ 工時），存於 `usage` 與實登歷程。
 - **欄位**：B `escort`（押車人，僅註記）；A／B／C／D `tripleNo`（三聯單單號，物籌處介接；`DB.tripleNoOptions` 為示意下拉選項，`<datalist id="tripleno-list">`）。
+- **申請引導財物寄送（G149）**：引導欄位 `fromSite`（收貨院區，原寄件據點）、`fromStation`（收貨站點）、`toSite`（送貨院區，原收件據點）、`toStation`（送貨站點）、`tripleNo`。站點選項 `Guide.stationsOf(site)`＝`DB.stations` 該院區站點；`Guide.needTripleNo(v)`＝兩院區不同 → `missing` 列三聯單單號為缺漏；判定為 A 時收貨站 `order` 須小於送貨站。`prefill`：A 帶 `pickStation`／`station`／`tripleNo`，B 只帶 `tripleNo`（B 沒有站點欄位）。
 - **三聯單單號整併（G148）**：B 原 `tripleFormNo`、C 原 `manifestNo`（有載運品必填）併入 `tripleNo`，`_fields` 讀舊鍵相容；C 仍只在 `hasCargo` 時保存、必填。
 
 ## 申請單狀態（G122，2026-10-03 四模組對齊，`flow.js`）
@@ -22,7 +23,7 @@
 |---|---|---|---|---|---|
 | 申請中 | 暫存未送出 | `draft` | `draft` | `draft` | `draft`（暫存／撤回修改） |
 | 待二級審 | 送出待單位主管審核 | —（無此關） | `submitted` | `submitted` | `submitted` |
-| 退回修編 | 單位主管退回 | — | `rejected` | `rejected` | `rejected` |
+| 退回修編 | 單位主管退回；或派車調度退回使用者修改（G147，`returnedBy='dispatch'`，重送需單位主管審） | — | `rejected` | `rejected` | `rejected` |
 | 待調度 | 主管同意（A：未排入） | `unscheduled` | `approved` | `approved`（媒合不成註明原因） | `approved` |
 | 無車退回 | 調度退回待調度單（結案） | `noCar` | `noCar` | `noCar` | `noVehicle` |
 | 調度中 | 併入派車單、未送審 | — | `loaded`＋派車單未送審 | `matched`＋派車單未送審 | —（一單一派車單，派車判斷即送審） |
@@ -30,7 +31,7 @@
 | 待出車 | 調度主管同意（A：排入班次） | `matched` | 簽審通過 | 簽審通過 | 簽審通過 |
 | 已出車 | 系統時間 ≥ 出車時間 | 收貨日期＋班次出發 | 派車日＋收貨時間 | 出發日期＋去程上車 | 用車起時 |
 | 已回登 | 車輛異動實登已登錄里程 | `usage` | `usage` | `usage`（車／司機回歸屬據點） | `usage` |
-| 已刪除 | 申請人取消申請（結案，G133；G140 由「已取消」改名） | — | — | `cancelled`（派車單送審前） | — |
+| 已刪除 | 申請人撤單（結案，G133；G140 由「已取消」改名；G147 起四模組、出發日前一天（含）以前，已派車／已簽審亦可） | `cancelled` | `cancelled` | `cancelled` | `cancelled` |
 
 - 調度主管退回：B／C 整張派車單回「調度中」（未送審）；D 回「待調度」。已出車後派車單不可再異動。
 - 已刪除（G122）：已派車、已交貨（交貨確認）、已駁回，以及 C 待人工協調／已上車／行程完成／逾期作廢，D 整單撤回／已歸還（整段提前歸還）／行程完成。
@@ -259,7 +260,8 @@ loaded ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 
 draft ──▶ submitted ──(approve)──▶ approved（待調度；媒合不成註明原因）──(批次媒合／手動指派，併入派車單)──▶ matched（調度中）
                └──(reject)──▶ rejected（退回修編）     └──(returnApp)──▶ noCar（無車退回）
                                                     └──(不同意併車＋批次無車)──▶ noCar（G133，系統自動）
-draft／submitted／rejected／approved／matched（派車單未送審）──(cancelApp，異動事由必填)──▶ cancelled（已刪除，G133／G140）
+draft／submitted／rejected／approved／matched（出發日前一天（含）以前，派車單已送審／簽審通過亦可，G147）──(cancelApp，撤單原因必填；撤回簽審並移出派車單)──▶ cancelled（已刪除，G133／G140／G147）
+approved／matched（派車單未送審）──(returnToEdit，調度室退回，可批次 G147)──▶ rejected（退回修編，重送回 submitted）
 matched ──(派車單送審)──▶ 調度主管審 ──(同意)──▶ 待出車 ──(出發時間到)──▶ 已出車 ──(實登)──▶ 已回登
 G122 已刪除：coordinate（待人工協調）、boarded／completed（已上車／行程完成）、void（逾期作廢）
 ```
