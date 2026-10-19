@@ -22,6 +22,12 @@ const Guide = {
     return Math.round((t(b) - t(a)) / 86400000) + 1;
   },
   siteName(id) { const s = DB.sites.find(x => x.id === id); return s ? s.name : id; },
+  // 收貨／送貨站點（G149）：院區內站點（與巡迴財物轉運同一份站點主檔），未選回空字串
+  stationsOf(site) { return DB.stations.filter(s => s.branch === site); },
+  station(id) { return id ? DB.stations.find(s => s.id === id) || null : null; },
+  stationName(id) { const s = this.station(id); return s ? s.name : ''; },
+  // 三聯單單號（G149）：收貨院區與送貨院區不同時必填
+  needTripleNo(v) { return !!v.fromSite && !!v.toSite && v.fromSite !== v.toSite; },
   placeName(x) { return x === this.OTHER ? '其他地點' : x; },
   inBizList(v) {
     return !!v.origin && !!v.dest && v.origin !== this.OTHER && v.dest !== this.OTHER
@@ -30,7 +36,7 @@ const Guide = {
   canOneway(v) { return DB.transferPoints.includes(v.dest); },   // 單程限目的地為交通轉運點（出差用車 G50）
   /* 隨行財物（G134）：有隨行財物時再問「屬於隨身財物」（是／否）。
      bulkCargo＝有財物且非隨身財物（需填貨物清單、走一般用車）；noCargoForShare＝沒有財物或只有隨身財物（可走差旅共乘）。 */
-  /* 收貨日巡迴車上限（G135）：寄件據點當天各班次（含車次覆寫）使用的巡迴車；
+  /* 收貨日巡迴車上限（G135）：收貨院區當天各班次（含車次覆寫）使用的巡迴車；
      貨物清單合計＝體積 Σ長×寬×高×件數（公升，不含浪費係數）、重量 Σ單件重×件數。 */
   // 貨物合計：有效地板面積（底面積×件數×類別浪費係數，cm²）與重量——與巡迴／院區財物轉運同一套不堆疊算法（G145）
   cargoTotals(items) { const e = effectiveLoad(items || []); return { floor: e.floor, weight: e.weight, volume: e.volume }; },
@@ -77,12 +83,12 @@ const Guide = {
   route(v) {
     if (!v.mode) return { unit: null, hint: '請先在「需求」卡片選擇運送內容。' };
     if (v.mode === 'goods') {
-      if (!v.fromSite || !v.toSite) return { unit: null, hint: '請選擇寄件據點與收件據點。' };
+      if (!v.fromSite || !v.toSite) return { unit: null, hint: '請選擇收貨院區與送貨院區。' };
       if (v.fromSite !== v.toSite) {
-        return { unit: 'B', rule: 'R2', reason: `寄件「${this.siteName(v.fromSite)}」與收件「${this.siteName(v.toSite)}」在不同據點，由院區財物轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。` };
+        return { unit: 'B', rule: 'R2', reason: `收貨院區「${this.siteName(v.fromSite)}」與送貨院區「${this.siteName(v.toSite)}」不同，由院區財物轉運車沿線收送，需經二級審（單位主管審核）後由調度派車。` };
       }
-      // 同據點（G135）：危險品運輸 → 院區財物轉運；貨物超過收貨日巡迴車上限 → 院區財物轉運；否則巡迴財物轉運
-      if (v.hazardTransport !== 'yes' && v.hazardTransport !== 'no') return { unit: null, hint: '寄件與收件在同一據點。請選擇是否為危險品運輸。' };
+      // 同院區（G135）：危險品運輸 → 院區財物轉運；貨物超過收貨日巡迴車上限 → 院區財物轉運；否則巡迴財物轉運
+      if (v.hazardTransport !== 'yes' && v.hazardTransport !== 'no') return { unit: null, hint: '收貨與送貨在同一院區。請選擇是否為危險品運輸。' };
       if (v.hazardTransport === 'yes') {
         return { unit: 'B', rule: 'R6', reason: `危險品運輸，不走院區內巡迴班次，改由院區財物轉運派車，需經二級審（單位主管審核）後由調度派車。` };
       }
@@ -90,9 +96,9 @@ const Guide = {
       const cap = f.vehicle ? `收貨日 ${v.recvDate || '—'} 巡迴車上限 地板 ${m2(floorCap(f.vehicle))}m²／${fmt(f.vehicle.weight)}kg、車廂高 ${f.vehicle.dims.h}cm` : '收貨日無巡迴車';
       if (!f.fits) {
         const why = f.overItem ? `「${f.overItem.name}」無法平放進巡迴車或單件超重（不堆疊、只能水平轉向），${cap}` : `貨物有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 超過${cap}`;
-        return { unit: 'B', rule: 'R7', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」，但${why}，改由院區財物轉運派車，需經二級審（單位主管審核）後由調度派車。` };
+        return { unit: 'B', rule: 'R7', reason: `收貨與送貨院區都是「${this.siteName(v.fromSite)}」，但${why}，改由院區財物轉運派車，需經二級審（單位主管審核）後由調度派車。` };
       }
-      return { unit: 'A', rule: 'R1', reason: `寄件與收件都在「${this.siteName(v.fromSite)}」、非危險品，貨物不堆疊有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 裝得進${cap}，由院區內固定班次巡迴收送，送出即自動排入最近班次。` };
+      return { unit: 'A', rule: 'R1', reason: `收貨與送貨院區都是「${this.siteName(v.fromSite)}」、非危險品，貨物不堆疊有效地板面積 ${m2(t.floor)}m²／${fmt(t.weight)}kg 裝得進${cap}，由院區內固定班次巡迴收送，送出即自動排入最近班次。` };
     }
     if (!v.startDate || !v.endDate) return { unit: null, hint: '請填寫用車起日與迄日。' };
     const n = this.days(v.startDate, v.endDate);
@@ -122,6 +128,11 @@ const Guide = {
       else if (v.recvDate < this.todayStr()) out.push('希望收貨日期（不可早於今天）');
       if (!v.items || !v.items.length) out.push('貨物清單（至少 1 項）');
       if (v.hazardTransport === 'no' && (v.items || []).some(it => it.hazardous)) out.push('危險品運輸（貨物清單含危險品，請選「是」）');
+      if (this.needTripleNo(v) && !(v.tripleNo || '').trim()) out.push('三聯單單號（收貨院區與送貨院區不同時必填）');
+    }
+    if (u === 'A') {   // 巡迴路線單向行進：收貨站須在送貨站之前（同巡迴財物轉運申請）
+      const ps = this.station(v.fromStation), ds = this.station(v.toStation);
+      if (ps && ds && ps.order >= ds.order) out.push('收貨站點（須在送貨站點之前）');
     }
     if (u === 'C' || u === 'D') {
       if (!v.departTime) out.push('出發時間');
@@ -153,16 +164,22 @@ const Guide = {
       case 'A': {
         const today = this.todayStr();
         const recvMode = (!v.recvTime && v.recvDate === today) ? 'asap' : 'exact';
-        data = { branch: v.fromSite, recvMode, serviceDate: v.recvDate, deliverTime: v.recvTime || '', items };
-        labels.push(`車屬院區 ${this.siteName(v.fromSite)}`,
+        data = { branch: v.fromSite, recvMode, serviceDate: v.recvDate, deliverTime: v.recvTime || '', items,
+          pickStation: v.fromStation || '', station: v.toStation || '', tripleNo: (v.tripleNo || '').trim() };
+        labels.push(`車屬院區 ${this.siteName(v.fromSite)}`);
+        if (v.fromStation) labels.push(`收貨站點 ${this.stationName(v.fromStation)}`);
+        if (v.toStation) labels.push(`送貨站點 ${this.stationName(v.toStation)}`);
+        if (data.tripleNo) labels.push(`三聯單單號 ${data.tripleNo}`);
+        labels.push(
           recvMode === 'asap' ? '收貨時間：越快越好（今天）' : `期望 ${v.recvDate} ${v.recvTime || '（時間請確認）'}`,
           `貨物 ${items.length} 項`);
         break;
       }
-      case 'B':
+      case 'B':   // 院區財物轉運申請沒有站點欄位（其收貨／送貨站點即院區），引導選的站點只留在引導紀錄
         data = { applicant: v.applicant, site: v.fromSite, destSite: v.toSite, wantReceiveDate: v.recvDate || '', wantReceiveTime: v.recvTime || '', items,
-          hazardTransport: v.hazardTransport === 'yes' || items.some(it => it.hazardous) ? 'yes' : 'no' };
-        labels.push(`收貨據點 ${this.siteName(v.fromSite)}`, `送貨據點 ${this.siteName(v.toSite)}`);
+          hazardTransport: v.hazardTransport === 'yes' || items.some(it => it.hazardous) ? 'yes' : 'no', tripleNo: (v.tripleNo || '').trim() };
+        labels.push(`收貨院區 ${this.siteName(v.fromSite)}`, `送貨院區 ${this.siteName(v.toSite)}`);
+        if (data.tripleNo) labels.push(`三聯單單號 ${data.tripleNo}`);
         if (v.recvDate) labels.push(`希望收貨日期 ${v.recvDate}`);
         if (v.recvTime) labels.push(`希望收貨時間 ${v.recvTime}`);
         labels.push(`貨物 ${items.length} 項`);
@@ -204,7 +221,8 @@ const Guide = {
   _log(rec, action, by, note) { rec.log.push({ at: new Date(), action, by: by || '—', note: note || '' }); },
   summary(v) {
     if (v.mode === 'goods') {
-      return `財物 ${this.siteName(v.fromSite)} → ${this.siteName(v.toSite)}｜貨物 ${(v.items || []).length} 項`;
+      const st = id => (id ? ` ${this.stationName(id)}` : '');
+      return `財物 ${this.siteName(v.fromSite)}${st(v.fromStation)} → ${this.siteName(v.toSite)}${st(v.toStation)}｜貨物 ${(v.items || []).length} 項`;
     }
     if (v.mode === 'people') {
       const n = this.days(v.startDate, v.endDate);

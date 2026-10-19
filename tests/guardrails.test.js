@@ -3123,6 +3123,43 @@ group('業管會議修訂（G147）：撤單、退回修改、異動實登欄位
   });
 });
 
+group('申請引導財物寄送：收貨／送貨院區、站點、三聯單單號（G149）', () => {
+  const FUT = '2099-03-01';
+  const it = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
+  const g = o => Object.assign({ applicant: '業務部-周雅婷', dept: '業務部', ext: '2201', mode: 'goods', fromSite: 'D6', fromStation: '', toSite: 'D6', toStation: '',
+    tripleNo: '', recvDate: FUT, recvTime: '', hazardTransport: 'no', items: [it] }, o);
+  test('站點選單只列該院區的站點', () => {
+    const G = fresh().Guide;
+    const st = G.stationsOf('D6'); ok(st.length > 0 && st.every(s => s.branch === 'D6'));
+    eq(G.stationName('D6-300'), '300'); eq(G.stationName(''), '');
+  });
+  test('院區不同 → 三聯單單號必填；院區相同 → 選填', () => {
+    const G = fresh().Guide;
+    const b = g({ toSite: 'D3' });
+    eq(G.route(b).unit, 'B'); ok(G.needTripleNo(b));
+    ok(G.missing(b).some(m => m.includes('三聯單單號')), '未填三聯單單號不可帶入');
+    b.tripleNo = '3L-115-00101'; eq(G.missing(b).length, 0, G.missing(b).join('、'));
+    const a = g(); ok(!G.needTripleNo(a)); eq(G.route(a).unit, 'A'); eq(G.missing(a).length, 0, G.missing(a).join('、'));
+    const h = g({ hazardTransport: 'yes' }); eq(G.route(h).unit, 'B'); ok(!G.missing(h).some(m => m.includes('三聯單')), '同院區走院區財物轉運仍選填');
+  });
+  test('巡迴財物轉運：收貨站須在送貨站之前；帶入站點與三聯單單號', () => {
+    const H = fresh(), G = H.Guide;
+    ok(G.missing(g({ fromStation: 'D6-500', toStation: 'D6-200' })).some(m => m.includes('收貨站點')), '順序相反');
+    const v = g({ fromStation: 'D6-200', toStation: 'D6-500', tripleNo: '3L-115-00102' });
+    eq(G.missing(v).length, 0, G.missing(v).join('、'));
+    const pf = G.prefill(v);
+    eq(pf.data.pickStation, 'D6-200'); eq(pf.data.station, 'D6-500'); eq(pf.data.tripleNo, '3L-115-00102');
+    ok(pf.labels.includes('收貨站點 200') && pf.labels.includes('送貨站點 500'), pf.labels.join('、'));
+    ok(G.summary(v).includes('台中據點 200 → 台中據點 500'), G.summary(v));
+  });
+  test('院區財物轉運帶入三聯單單號；站點不帶入', () => {
+    const G = fresh().Guide;
+    const pf = G.prefill(g({ toSite: 'D3', fromStation: 'D6-100', toStation: 'D3-200', tripleNo: '3L-115-00217' }));
+    eq(pf.unit, 'B'); eq(pf.data.tripleNo, '3L-115-00217'); ok(!('pickStation' in pf.data));
+    ok(pf.labels.includes('收貨院區 台中據點') && pf.labels.includes('送貨院區 台南據點'), pf.labels.join('、'));
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

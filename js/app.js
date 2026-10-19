@@ -5465,7 +5465,7 @@ function renderDispUsageDetail(k, p) {
 let guideState = { view: 'list', detailId: null, query: { applicant: '', unit: '', status: '' }, resultIds: null, v: null, recId: null, shown: [] };
 function guideDefaults() {
   return { applicant: `${DB.currentUser.unit}-${DB.currentUser.name}`, dept: DB.currentUser.unit, ext: DB.currentUser.ext,
-    mode: '', fromSite: '', toSite: '', recvDate: Guide.todayStr(), recvTime: '', hazardTransport: '', items: [],
+    mode: '', fromSite: '', fromStation: '', toSite: '', toStation: '', tripleNo: '', recvDate: Guide.todayStr(), recvTime: '', hazardTransport: '', items: [],
     startDate: '', endDate: '',
     origin: '', dest: '', otherPlace: '', tripType: 'round', departTime: '09:00', backTime: '17:00', pax: 1,
     hasCargo: '', personalItems: '', selfDrive: null };
@@ -5561,7 +5561,8 @@ function loadGuideDemo() {
   const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())}`; };
   const base = o => Object.assign(guideDefaults(), o);
   const box = { name: '文件箱', l: 40, w: 30, h: 30, qty: 2, category: 'BOX', weight: 5 };
-  Guide.hand(base({ applicant: '研發部-吳承恩', dept: '研發部', ext: '4102', mode: 'goods', fromSite: 'D6', toSite: 'D6', items: [box] }));
+  Guide.hand(base({ applicant: '研發部-吳承恩', dept: '研發部', ext: '4102', mode: 'goods', fromSite: 'D6', fromStation: 'D6-200', toSite: 'D6', toStation: 'D6-500',
+    hazardTransport: 'no', items: [box] }));
   const c = Guide.hand(base({ applicant: '財務部-鄭安琪', dept: '財務部', ext: '3310', mode: 'people', startDate: d(3), endDate: d(3),
     origin: '台北總部', dest: '高鐵台北站', departTime: '08:30', backTime: '18:00', pax: 2, hasCargo: 'no' }));
   const app = ModuleC.createApp(c.pf.data);
@@ -5580,7 +5581,9 @@ function renderGuideDetail(p, id) {
   const dash = x => (x === '' || x == null) ? '<span class="muted">—</span>' : gEsc(x);
   const filled = [fItem('申請人', `${gEsc(v.applicant)}${v.dept ? `（${gEsc(v.dept)}/${gEsc(v.ext)}）` : ''}`),
     fItem('運送內容', v.mode === 'goods' ? '只寄送財物（無人隨行）' : '有人要搭車')];
-  if (cards.includes('K2')) filled.push(fItem('寄件據點', Guide.siteName(v.fromSite)), fItem('收件據點', Guide.siteName(v.toSite)),
+  if (cards.includes('K2')) filled.push(fItem('收貨院區', Guide.siteName(v.fromSite)), fItem('收貨站點', dash(Guide.stationName(v.fromStation))),
+    fItem('送貨院區', Guide.siteName(v.toSite)), fItem('送貨站點', dash(Guide.stationName(v.toStation))),
+    fItem('三聯單單號', dash(v.tripleNo)),
     fItem('希望收貨', `${dash(v.recvDate)} ${v.recvTime || '（越快越好）'}`),
     fItem('危險品運輸', v.hazardTransport === 'yes' ? '是' : v.hazardTransport === 'no' ? '否' : dash('')));
   if (cards.includes('K4')) filled.push(fItem('用車期間', `${v.startDate} ～ ${v.endDate}（${Guide.days(v.startDate, v.endDate)} 天）`, { w2: true }));
@@ -5656,6 +5659,12 @@ function guideEdit(recId) {
   goto('guide');
 }
 
+// 申請引導：院區內的收貨／送貨站點下拉（G149，未選院區時提示先選院區）
+function guideStationOpts(site, sel) {
+  if (!site) return `<option value="">— 請先選擇院區 —</option>`;
+  return `<option value="">— 請選擇 —</option>` + Guide.stationsOf(site)
+    .map(s => `<option value="${s.id}"${s.id === sel ? ' selected' : ''}>${s.name}</option>`).join('');
+}
 /* ---------- 新增畫面（引導表單）---------- */
 function renderGuideNew(p) {
   if (!guideState.v) guideState.v = guideDefaults();
@@ -5682,9 +5691,12 @@ function renderGuideNew(p) {
       fInput('分機', `<input type="text" id="gf-ext" value="${gEsc(v.ext)}">`),
       fInput('運送內容', gPills('gf-mode', v.mode, [['goods', '📦 只寄送財物（無人隨行）'], ['people', '🚗 有人要搭車（可附帶財物）']]), { stack: true, full: true }),
     ].join('')))}
-    ${card('K2', '財物寄送', '寄件與收件據點相同、非危險品且貨物小於收貨日巡迴車上限＝巡迴財物轉運；危險品、超過巡迴車上限或不同據點＝院區財物轉運。', infoGrid('gg-K2', [
-      fInput('寄件據點', `<select id="gf-fromSite">${siteOpts(v.fromSite)}</select>`),
-      fInput('收件據點', `<select id="gf-toSite">${siteOpts(v.toSite)}</select>`),
+    ${card('K2', '財物寄送', '收貨與送貨院區相同、非危險品且貨物小於收貨日巡迴車上限＝巡迴財物轉運；危險品、超過巡迴車上限或不同院區＝院區財物轉運。收貨院區與送貨院區不同時，三聯單單號必填。', infoGrid('gg-K2', [
+      fInput('收貨院區', `<select id="gf-fromSite">${siteOpts(v.fromSite)}</select>`),
+      fInput('收貨站點', `<select id="gf-fromStation">${guideStationOpts(v.fromSite, v.fromStation)}</select>`),
+      fInput('送貨院區', `<select id="gf-toSite">${siteOpts(v.toSite)}</select>`),
+      fInput('送貨站點', `<select id="gf-toStation">${guideStationOpts(v.toSite, v.toStation)}</select>`),
+      fInput('三聯單單號 <span class="hint" id="gf-tripleNo-hint"></span>', tripleNoInput('gf-tripleNo', v.tripleNo)),
       fInput('希望收貨日期', `<input type="date" id="gf-recvDate" min="${Guide.todayStr()}" value="${gEsc(v.recvDate)}">`),
       fInput('希望收貨時間 <span class="hint">選填；不填＝越快越好</span>', `<input type="time" id="gf-recvTime" value="${gEsc(v.recvTime)}">`),
       fInput('危險品運輸', gPills('gf-hazardTransport', v.hazardTransport, [['yes', '是'], ['no', '否']]), { stack: true }),
@@ -5718,14 +5730,28 @@ function renderGuideNew(p) {
 
 function guideWire(p) {
   const v = guideState.v;
-  const text = ['applicant', 'dept', 'ext', 'recvDate', 'recvTime', 'startDate', 'endDate', 'otherPlace', 'departTime', 'backTime', 'pax'];
+  const text = ['applicant', 'dept', 'ext', 'tripleNo', 'recvDate', 'recvTime', 'startDate', 'endDate', 'otherPlace', 'departTime', 'backTime', 'pax'];
   text.forEach(k => {
     const inp = $('#gf-' + k, p);
-    const upd = () => { v[k] = k === 'pax' ? (inp.value === '' ? '' : +inp.value) : inp.value; guideRefresh(p); };
+    // 值沒變就不重繪：輸入後直接點「前往並帶入」時，失焦的 change 若重繪判定結果會吃掉這次點擊
+    const upd = () => {
+      const val = k === 'pax' ? (inp.value === '' ? '' : +inp.value) : inp.value;
+      if (val === v[k]) return;
+      v[k] = val; guideRefresh(p);
+    };
     inp.addEventListener('input', upd); inp.addEventListener('change', upd);
   });
-  ['fromSite', 'toSite', 'origin', 'dest'].forEach(k => {
+  ['fromStation', 'toStation', 'origin', 'dest'].forEach(k => {
     $('#gf-' + k, p).onchange = e => { v[k] = e.target.value; guideRefresh(p); };
+  });
+  // 切換院區：重填該院區的站點選單，原選站點不屬於新院區時清空（G149）
+  [['fromSite', 'fromStation'], ['toSite', 'toStation']].forEach(([k, sk]) => {
+    $('#gf-' + k, p).onchange = e => {
+      v[k] = e.target.value;
+      if (!Guide.stationsOf(v[k]).some(s => s.id === v[sk])) v[sk] = '';
+      $('#gf-' + sk, p).innerHTML = guideStationOpts(v[k], v[sk]);
+      guideRefresh(p);
+    };
   });
   const bools = { selfDrive: 1 };
   ['mode', 'hazardTransport', 'tripType', 'hasCargo', 'personalItems', 'selfDrive'].forEach(k => {
@@ -5763,6 +5789,7 @@ function guideRefresh(p, initial) {
   showItem('gf-tripType-wrap', share);
   showItem('gf-backTime', !(share && v.tripType === 'oneway'));
   showItem('gf-selfDrive-wrap', r.unit === 'D');
+  $('#gf-tripleNo-hint', p).innerHTML = Guide.needTripleNo(v) ? '<span style="color:var(--red);">＊必填</span>' : '院區不同時必填';
   $('#gf-backLabel', p).textContent = share ? '回程上車時間' : '結束時間';
   const n = Guide.days(v.startDate, v.endDate);
   $('#gf-days', p).innerHTML = n == null ? (v.startDate && v.endDate ? '<span style="color:var(--red);">迄日不可早於起日</span>' : '—')
@@ -5867,6 +5894,7 @@ function guideApply(unit, state, p) {
   };
   if (unit === 'A') {
     set('aa-branch', d.branch); $('#aa-branch', p).onchange();
+    set('aa-pickuploc', d.pickStation); set('aa-station', d.station); set('aa-tripno', d.tripleNo);   // 站點、三聯單單號（G149）
     pick('aa-recv', d.recvMode);
     if (d.recvMode === 'exact') { set('aa-date', d.serviceDate); set('aa-deliver', d.deliverTime); }
     aaItems = d.items.map(i => Object.assign({}, i)); renderAaItems();
@@ -5877,6 +5905,7 @@ function guideApply(unit, state, p) {
     set('ba-want', d.wantReceiveTime);
     if (d.wantReceiveDate) set('ba-wantdate', d.wantReceiveDate);
     if (d.hazardTransport) pick('ba-hz', d.hazardTransport);   // 危險品運輸（G143）
+    set('ba-tripno', d.tripleNo);                              // 三聯單單號（G149）
     baItems = d.items.map(i => Object.assign({}, i)); renderBaCargo();
   } else if (unit === 'C') {
     set('ca-applicant', d.applicant); set('ca-dept', d.dept); set('ca-phone', d.ext);
