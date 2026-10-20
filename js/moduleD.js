@@ -60,6 +60,8 @@ const ModuleD = {
     if (!(Number.isInteger(+data.pax) && +data.pax >= 1)) errs.push('人數至少 1 人（一般用車必有人隨行，純載貨請走運輸申請）');
     if (typeof data.selfDrive !== 'boolean') errs.push('請選擇是否自駕');
     if (data.campus && !DB.sites.some(site => site.id === data.campus)) errs.push('車屬院區請選擇清單中的院區');
+    // 是否同意併車固定為否（G159）：申請表單強制填寫不同意併車原因（舊資料／程式建立不強制）
+    if (opts.requireCarpoolReason && !String(data.carpoolRejectReason || '').trim()) errs.push('請填寫「不同意併車原因」');
     const prefs = data.vehiclePreferences || [];
     if ((opts.requireFirstPreference || prefs.some(Boolean)) && !prefs[0]) errs.push('請選擇車種順位 1');
     if (prefs.length > 3 || new Set(prefs.filter(Boolean)).size !== prefs.filter(Boolean).length) errs.push('車種順位最多 3 種，且不可重複');
@@ -88,8 +90,8 @@ const ModuleD = {
       category: data.category || 'general',                  // 用車類別（G81）
       transportType: data.transportType || '一般',
       exercisePlanName: this.showExercisePlan(data) ? String(data.exercisePlanName || '').trim() : '',
-      oneWay: !!data.oneWay,
-      allowMerge: !!data.allowMerge,
+      allowMerge: false,                                     // 是否同意併車：一般用車固定為否（G159；PR #2 原為是／否、「是否單程運輸」移除）
+      carpoolRejectReason: String(data.carpoolRejectReason || '').trim(),   // 不同意併車原因（申請表單必填 G159）
       continueMatching: !!(data.continueMatching == null ? data.waitDriver : data.continueMatching),
       willingSelfDrive: !!data.willingSelfDrive,
       qualifiedLicense: !!data.qualifiedLicense,
@@ -97,7 +99,8 @@ const ModuleD = {
       requestReview: data.requestReview !== false,
       crossCampus: !!data.crossCampus,
       hasCargo: !!data.hasCargo,
-      hazardousCargo: !!data.hazardousCargo,
+      // 是否為危險品：以申請單欄位為主（G159）；未給此欄位的舊資料／申請引導帶入，由貨物逐項標記推得
+      hazardousCargo: data.hazardousCargo != null ? !!data.hazardousCargo : (data.items || []).some(it => it.hazardous),
       pyrotechnicCargo: !!data.pyrotechnicCargo,
       needsHoisting: !!data.needsHoisting,
       selfDrivers: (data.selfDrivers || []).map(person => ({ name: String(person.name || '').trim(), ext: String(person.ext || '').trim(), phone: String(person.phone || '').trim() })),
@@ -281,16 +284,25 @@ const ModuleD = {
   /* ---- 管制區通行證（G85）：綁車輛、可多證；申請勾選者採「交集」——須同時持有全部證件 ---- */
   permitOk(v, permits) { return (permits || []).every(c => (v.permits || []).includes(c)); },
   permitName(code) { const p = DB.permitTypes.find(x => x.code === code); return p ? p.name : code; },
+  /* 危險品：以申請單「是否為危險品」為準（G159），僅提示調度、不限制車輛（G78） */
+  isHazard(app) { return !!app.hazardousCargo; },
+  /* 火工品／吊掛限車（G159）：申請單選是者只能派車輛主檔 pyrotechnic（可載火工品）／hoist（具吊掛設備）的車；與通行證同為硬篩選 */
+  cargoNeeds(app) { return [app.pyrotechnicCargo ? ['pyrotechnic', '可載火工品'] : null, app.needsHoisting ? ['hoist', '具吊掛設備'] : null].filter(Boolean); },
+  cargoOk(v, app) { return this.cargoNeeds(app).every(([k]) => !!v[k]); },
+  vehicleOk(v, app) { return this.permitOk(v, app.permits) && this.cargoOk(v, app); },
+  /* 車種順位（G159）：申請人填的車種順位 1～3，調度候選車依順位排序（順位 1 最前），未列入順位的車種排最後 */
+  prefRank(v, app) { const i = (app.vehiclePreferences || []).filter(Boolean).indexOf(v.type); return i < 0 ? 99 : i; },
 
   /* 候選資源（商務池）：缺通行證的車完全不列入（excluded 僅供說明）；座位不足列為不可用（車型由調度人工判斷 G77）
      rng 預設為整段用車時段；換車／換駕駛時傳入「生效時點～結束」。 */
   resources(app, rng) {
     rng = rng || this.span(app);
     const biz = DB.vehicles.filter(v => v.pool === 'BIZ');
-    const excluded = biz.filter(v => !this.permitOk(v, app.permits));
-    const vehicles = biz.filter(v => this.permitOk(v, app.permits)).map(v => ({
-      v, busy: v.seats < app.pax ? { type: 'seats', text: `座位 ${v.seats} < ${app.pax} 人` } : this.vehicleBusyIn(v.id, rng, app.id),
-    }));
+    const excluded = biz.filter(v => !this.vehicleOk(v, app));
+    const vehicles = biz.filter(v => this.vehicleOk(v, app)).map(v => ({
+      v, rank: this.prefRank(v, app),
+      busy: v.seats < app.pax ? { type: 'seats', text: `座位 ${v.seats} < ${app.pax} 人` } : this.vehicleBusyIn(v.id, rng, app.id),
+    })).sort((x, y) => x.rank - y.rank);   // 車種順位優先（G159）
     const drivers = DB.drivers.filter(d => d.pool === 'BIZ').map(d => ({ d, busy: this.driverBusyIn(d.id, rng, app.id) }));
     return { vehicles, drivers, excluded };
   },
@@ -337,6 +349,8 @@ const ModuleD = {
     const v = DB.vehicles.find(x => x.id === vId && x.pool === 'BIZ');
     if (!v) return `車輛 ${vId} 不在商務資源池`;
     if (!this.permitOk(v, app.permits)) return `車輛 ${vId} 未同時持有 ${app.permits.map(c => this.permitName(c)).join('＋')}（通行證交集篩選 G85）`;
+    const lack = this.cargoNeeds(app).filter(([k]) => !v[k]);
+    if (lack.length) return `車輛 ${vId} 不符載運需求：須${lack.map(([, t]) => t).join('、')}（G159）`;
     if (v.seats < app.pax) return `車輛 ${vId} 座位 ${v.seats} < ${app.pax} 人`;
     const b = this.vehicleBusyIn(vId, rng, app.id);
     if (b) return `車輛 ${vId} 不可用：${b.text}（先佔先贏 G72）`;

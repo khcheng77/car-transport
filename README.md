@@ -52,7 +52,7 @@ B 的派車容量取沿途峰值（每站先卸後裝）；申請引導以收貨
 
 ## 測試
 
-純 Node、零相依的回歸測試，固化 Guardrails 與歷次修正（目前 272 項）：
+純 Node、零相依的回歸測試，固化 Guardrails 與歷次修正（目前 276 項）：
 
 ```
 node tests/guardrails.test.js

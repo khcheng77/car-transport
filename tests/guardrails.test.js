@@ -2736,14 +2736,15 @@ group('申請引導：行程是否同意併車、隨行財物 grid（G150）', (
     const o = p({ dest: G.OTHER, otherPlace: '新竹客戶', agreeCarpool: 'no', selfDrive: true });
     ok(!G.askCarpool(o)); eq(G.route(o).unit, 'D'); eq(G.missing(o).length, 0, G.missing(o).join('、'));
   });
-  test('不同意併車：原因必填，帶入一般用車行程說明', () => {
+  test('不同意併車：原因必填，帶入一般用車「不同意併車原因」（G159）', () => {
     const H = fresh(), G = H.Guide;
     const v = p({ agreeCarpool: 'no', selfDrive: false });
     ok(G.missing(v).includes('不同意併車原因'));
     v.carpoolRejectReason = '攜帶機密文件';
     eq(G.missing(v).length, 0, G.missing(v).join('、'));
-    const d = G.prefill(v); ok(d.data.purpose.includes('不同意併車原因：攜帶機密文件'), d.data.purpose);
-    eq(H.ModuleD.validate(d.data).length, 0, H.ModuleD.validate(d.data).join('、'));
+    const d = G.prefill(v); eq(d.data.carpoolRejectReason, '攜帶機密文件'); eq(d.data.purpose, '');
+    eq(H.ModuleD.validate(d.data, { requireCarpoolReason: true }).length, 0, H.ModuleD.validate(d.data).join('、'));
+    eq(H.ModuleD.createApp(d.data).allowMerge, false, '一般用車固定不併車');
   });
   test('隨行財物有：grid 至少 1 項；同意併車帶入人員運輸隨身貨物，可建立申請單', () => {
     const H = fresh(), G = H.Guide;
@@ -3378,17 +3379,18 @@ group('一般用車運輸類別及自駕人', () => {
     input.selfDrivers.push({ name: '第九人' });
     ok(D.validate(input).some(e => e.includes('最多 8 筆')));
   });
-  test('七組需求及自駕人獨立儲存，修改後可清空且不共用輸入物件', () => {
+  test('五組需求及自駕人獨立儲存，修改後可清空且不共用輸入物件（G159：移除單程運輸、併車固定否）', () => {
     const D = fresh().ModuleD, input = Object.assign(data(), { transportType: '演訓', exercisePlanName: '測試計畫',
       oneWay: true, allowMerge: true, nightOT: true, holidayOT: true, continueMatching: true,
       willingSelfDrive: true, qualifiedLicense: true, selfDrivers: [{ name: ' 測試姓名 ', ext: ' 123 ', phone: ' 測試手機 ' }] });
     const app = D.createApp(input, { draft: true });
-    for (const key of ['oneWay', 'allowMerge', 'nightOT', 'holidayOT', 'continueMatching', 'willingSelfDrive', 'qualifiedLicense']) eq(app[key], true);
+    for (const key of ['nightOT', 'holidayOT', 'continueMatching', 'willingSelfDrive', 'qualifiedLicense']) eq(app[key], true);
+    eq(app.allowMerge, false, '是否同意併車固定否'); ok(!('oneWay' in app), '單程運輸已移除');
     eq(app.waitDriver, true); eq(app.selfDrivers[0].name, '測試姓名'); eq(app.selfDrivers[0].ext, '123'); eq(app.selfDrivers[0].phone, '測試手機');
     input.selfDrivers[0].name = '修改輸入'; eq(app.selfDrivers[0].name, '測試姓名');
     D.saveDraft(app, Object.assign(data(), { transportType: '一般', selfDrivers: [] }));
     eq(app.exercisePlanName, ''); eq(app.selfDrivers.length, 0);
-    for (const key of ['oneWay', 'allowMerge', 'nightOT', 'holidayOT', 'continueMatching', 'willingSelfDrive', 'qualifiedLicense']) eq(app[key], false);
+    for (const key of ['allowMerge', 'nightOT', 'holidayOT', 'continueMatching', 'willingSelfDrive', 'qualifiedLicense']) eq(app[key], false);
   });
 });
 
@@ -3452,6 +3454,45 @@ group('一般用車單號、載運需求及外包裝', () => {
     ctx.openCargoEditor({ name: '舊貨物', hazardous: true }, save, { dCargo: true, hazard: true });
     ok(!html.includes('name="ce-hz"'), '一般用車依新版表單顯示'); inputs['#ce-ok'].onclick();
     eq(saved.pack, '木箱'); eq(saved.hazardous, true, '編輯外包裝不清除舊危險品標記');
+  });
+});
+
+group('一般用車：併車固定否、車種順位排序、危險品以申請單為主、火工品／吊掛限車（G159）', () => {
+  const data = o => Object.assign({ applicant: '測試申請人', startDate: '2027-01-05', startTime: '09:00', endDate: '2027-01-05', endTime: '12:00', pax: 1, selfDrive: false, items: [] }, o);
+  test('不同意併車原因：申請表單必填，模型建立不強制', () => {
+    const D = fresh().ModuleD;
+    ok(D.validate(data(), { requireCarpoolReason: true }).some(e => e.includes('不同意併車原因')));
+    eq(D.validate(data({ carpoolRejectReason: '機密文件' }), { requireCarpoolReason: true }).length, 0);
+    const a = D.createApp(data({ carpoolRejectReason: ' 機密文件 ', allowMerge: true }));
+    eq(a.allowMerge, false); eq(a.carpoolRejectReason, '機密文件');
+  });
+  test('候選車依車種順位排序（順位 1 最前），未列入順位者排最後', () => {
+    const D = fresh().ModuleD;
+    const a = D.createApp(data({ vehiclePreferences: ['商務轎車', '商務廂車', ''] }));
+    const vs = D.resources(a).vehicles;
+    eq(vs[0].v.type, '商務轎車'); eq(vs[0].rank, 0); ok(vs.slice(1).every(x => x.rank === 1), '其餘為順位 2 車種');
+    const b = D.createApp(data({ vehiclePreferences: ['商務廂車'] }));
+    ok(D.resources(b).vehicles.every((x, i, arr) => i === 0 || arr[i - 1].rank <= x.rank), '依順位遞增');
+    eq(D.resources(b).vehicles.slice(-1)[0].v.type, '商務轎車', '未列入順位排最後');
+  });
+  test('危險品以申請單「是否為危險品」為主；未給時由貨物標記推得', () => {
+    const D = fresh().ModuleD, box = { name: '箱', l: 10, w: 10, h: 10, qty: 1, hazardous: true };
+    ok(!D.isHazard(D.createApp(data({ hazardousCargo: false, items: [box] }))), '申請單選否即不提示');
+    ok(D.isHazard(D.createApp(data({ hazardousCargo: true }))));
+    ok(D.isHazard(D.createApp(data({ items: [box] }))), '舊資料由貨物推得');
+  });
+  test('火工品、吊掛：只列車輛主檔可載火工品／具吊掛設備的車，指定不符車輛報錯', () => {
+    const H = fresh(), D = H.ModuleD;
+    const py = D.createApp(data({ pyrotechnicCargo: true })); D.approve(py, '');
+    eq(D.resources(py).vehicles.map(x => x.v.id).join(','), 'V-B03');
+    ok(D.resources(py).excluded.some(v => v.id === 'V-B01'));
+    ok(/可載火工品/.test(D.decide(py, { vehicle: 'V-B01', drivers: ['DR3'] }).error));
+    const ho = D.createApp(data({ needsHoisting: true }));
+    eq(D.resources(ho).vehicles.map(x => x.v.id).sort().join(','), 'V-B01,V-B03');
+    const both = D.createApp(data({ needsHoisting: true, pyrotechnicCargo: true, permits: ['P'] }));
+    eq(D.resources(both).vehicles.map(x => x.v.id).join(','), 'V-B03');
+    const none = D.createApp(data({ pyrotechnicCargo: true, pax: 10 }));
+    eq(D.resourceState(none), 'none', '唯一可載火工品的車座位不足 → 沒車（無車退回）');
   });
 });
 

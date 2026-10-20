@@ -483,7 +483,7 @@ function renderCargoGrid(sel, items, editable, onChange, opts) {
       ? `<tr><td colspan="${8 + (editable ? 1 : 0)}" class="muted" style="text-align:center;padding:16px;">${opts.emptyText || `尚無貨物項目${editable ? '，請按右上角「新增」加入' : ''}。`}</td></tr>`
       : items.map((it, i) => `<tr>
         ${editable ? `<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" data-cedit="${i}">編輯</button> <button class="btn btn-ghost btn-sm" data-cdel="${i}">刪除</button></td>` : ''}
-        <td>${it.hazardous ? '<span class="badge b-red">⚠</span> ' : ''}${gEsc(it.name)}</td><td>${it.l}</td><td>${it.w}</td><td>${it.h}</td><td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td><td>${g(it.pack)}</td></tr>`).join('');
+        <td>${gEsc(it.name)}</td><td>${it.l}</td><td>${it.w}</td><td>${it.h}</td><td>${catName(it.category)}</td><td>${it.qty || 1}</td><td>${it.weight || 0}</td><td>${g(it.pack)}</td></tr>`).join('');
     box.innerHTML = `<div class="table-wrap"><table class="dt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   } else {
   const head = `${editable ? '<th></th>' : ''}${ac ? '<th>計畫名稱</th><th>工令號碼</th>' : ''}<th>${ac ? '財物名稱' : '品名'}</th><th>長×寬×高(cm)</th><th>類別</th><th>數量</th><th>單件重(kg)</th>${hz ? '<th>危險品</th>' : ''}${ac ? '<th>財物外包裝</th>' : ''}`;
@@ -3573,12 +3573,15 @@ RENDER.master = function () {
     <div class="grid-2">
       <div class="card"><div class="card-title">車輛主檔（含資源池別）<span class="g-tag">C-2</span></div>
         <div class="card-desc">歸屬據點＝行政/資產固定隸屬（不因出差改變）；當前位置＝排班可用性判斷依據（G59）。</div>
-        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th><th>容量/座位</th><th>可載危險品</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>名稱</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th><th>車種</th><th>容量/座位</th><th>可載危險品</th><th>可載火工品</th><th>具吊掛設備</th></tr></thead><tbody>
         ${DB.vehicles.map(v => `<tr><td>${v.id}</td><td>${v.name}</td>
           <td>${v.pool === 'LOGI' ? '<span class="badge b-navy">物流</span>' : '<span class="badge b-green">商務（C/D 共用）</span>'}</td>
           <td>${v.homeSite}</td><td>${v.currentSite}${v.currentSite !== v.homeSite ? ' <span class="badge b-amber">外派中</span>' : ''}</td>
+          <td>${gEsc(v.type || '—')}</td>
           <td>${v.pool === 'BIZ' ? v.seats + ' 座' : `地板 ${m2(floorCap(v))}m²（${v.dims.l}×${v.dims.w}×高 ${v.dims.h}cm）／${v.weight}kg`}</td>
-          <td>${v.pool === 'LOGI' && v.sizeClass ? (v.hazmat ? '<span class="badge b-red">⚠ 可</span>' : '否') : '<span class="muted">—</span>'}</td></tr>`).join('')}
+          <td>${v.pool === 'LOGI' && v.sizeClass ? (v.hazmat ? '<span class="badge b-red">⚠ 可</span>' : '否') : '<span class="muted">—</span>'}</td>
+          <td>${v.pool === 'BIZ' ? (v.pyrotechnic ? '<span class="badge b-red">可</span>' : '否') : '<span class="muted">—</span>'}</td>
+          <td>${v.pool === 'BIZ' ? (v.hoist ? '<span class="badge b-navy">有</span>' : '否') : '<span class="muted">—</span>'}</td></tr>`).join('')}
         </tbody></table></div></div>
       <div class="card"><div class="card-title">駕駛主檔（獨立資源）<span class="g-tag">C-2</span></div>
         <div class="table-wrap"><table class="dt"><thead><tr><th>ID</th><th>姓名</th><th>資源池</th><th>歸屬據點</th><th>當前位置</th></tr></thead><tbody>
@@ -3893,13 +3896,15 @@ function dStatusCell(a) {
 function dCargoSummary(a) {
   if (!a.items || !a.items.length) return '<span class="muted">無</span>';
   const n = a.items.reduce((s, i) => s + (i.qty || 1), 0);
-  return `${a.items.length} 項／${n} 件${a.items.some(i => i.hazardous) ? ' <span class="badge b-red">⚠ 危險品</span>' : ''}`;
+  return `${a.items.length} 項／${n} 件${ModuleD.isHazard(a) ? ' <span class="badge b-red">⚠ 危險品</span>' : ''}`;
 }
 // 申請時勾選的派車需求／提示標記（通行證為硬篩選，其餘僅提示 G85–G87）
 function dNeedTags(a, empty) {
   const t = [];
   if (a.waitDriver) t.push('<span class="badge b-navy">願意等待駕駛媒合</span>');
   a.permits.forEach(c => t.push(`<span class="badge b-red">🛂 ${ModuleD.permitName(c)}</span>`));
+  ModuleD.cargoNeeds(a).forEach(([, txt]) => t.push(`<span class="badge b-red">🚚 須${txt}</span>`));   // 火工品／吊掛限車（G159）
+  if (ModuleD.isHazard(a)) t.push('<span class="badge b-red">⚠ 危險品</span>');
   if (a.enterTaipei) t.push('<span class="badge b-amber">進入台北市</span>');
   if (a.holidayOT) t.push('<span class="badge b-amber">假日加班</span>');
   if (a.nightOT) t.push('<span class="badge b-amber">夜間加班</span>');
@@ -3913,8 +3918,8 @@ function dDriversText(a) {
   if (!a.vehicle) return '<span class="muted">—</span>';
   return a.drivers.length ? `${dDrvList(a.drivers)}${a.drivers.length === 2 ? ' <span class="badge b-navy">雙駕駛</span>' : ''}` : '使用者自行駕駛';
 }
-const dHazardCallout = a => a.items.some(i => i.hazardous)
-  ? `<div class="callout" style="margin-bottom:14px;">⚠ 隨行貨物含<b>危險品</b>：此標記僅供調度判斷派車方式，系統不寫死任何自動限制，請依經驗與公司規定人工判斷（G78）。</div>` : '';
+const dHazardCallout = a => ModuleD.isHazard(a)   // 以申請單「是否為危險品」為準（G159）
+  ? `<div class="callout" style="margin-bottom:14px;">⚠ 申請單填<b>是否為危險品＝是</b>：此標記僅供調度判斷派車方式，系統不寫死任何自動限制，請依經驗與公司規定人工判斷（G78）。</div>` : '';
 // 指派區間歷史（G88）：每次換車／換駕駛新增一段，不覆蓋；長度為 0 的區間＝生效前即被更換
 function dSegTable(a) {
   if (!a.segs.length) return '<div class="muted">尚無指派區間。</div>';
@@ -3954,7 +3959,6 @@ const dChecked = (root, name) => $$(`input[name=${name}]:checked`, root).map(c =
 // 一般用車行程資料；排序依表格列順序儲存。
 const dTripEscape = value => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const dRequestOptions = [
-  ['oneWay', '是否單程運輸'], ['allowMerge', '是否同意併車'],
   ['nightOT', '是否需要夜間加班'], ['holidayOT', '是否需要假日加班'],
   ['continueMatching', '願意持續媒合駕駛'], ['willingSelfDrive', '無駕駛時是否願意自駕'],
   ['qualifiedLicense', '自駕人是否擁有合格駕駛證照'],
@@ -3967,6 +3971,8 @@ function dTripFields(a) {
   return [
     fItem('運輸類別', dTripEscape(a.transportType || '一般')),
     ...(ModuleD.showExercisePlan(a) ? [fItem('演訓計畫名稱', dTripEscape(a.exercisePlanName || '—'), { full: true })] : []),
+    fItem('是否同意併車', '否'),
+    fItem('不同意併車原因', dTripEscape(a.carpoolRejectReason || '—'), { full: true }),
     ...dRequestOptions.map(([key, label]) => fItem(label, (key === 'continueMatching' && a[key] == null ? a.waitDriver : a[key]) ? '是' : '否')),
     ...dCargoOptions.map(([key, label]) => fItem(label, a[key] ? '是' : '否')),
     fItem('三聯單單號', dTripEscape(a.tripleNo || '—')),   // G147／G148：PR #2「三聯單表單編號」併入三聯單單號
@@ -4272,6 +4278,8 @@ function renderDApplyNew(p) {
         fInput('事由', `<input type="text" id="da-purpose" value="${dTripEscape(src.purpose)}" placeholder="例：客戶拜訪">`, { full: true }),
         fInput('需K證', dPermitRadios('da-zuoying', src.needZuoyingPermit), { stack: true }),
         fInput('需P證', dPermitRadios('da-mnd', src.needMndPermit), { stack: true }),
+        fItem('是否同意併車', '否 <span class="hint">一般用車固定不併車（G159）</span>'),
+        fInput('不同意併車原因 <span style="color:#c0392b;">＊</span>', `<input type="text" id="da-carpool-reason" value="${dTripEscape(src.carpoolRejectReason)}" placeholder="請說明為什麼不能併車，例：攜帶機密文件、需單獨行程">`, { full: true }),
         ...dRequestOptions.map(([key, label]) => fInput(label, dPermitRadios('da-option-' + key, key === 'continueMatching' && src[key] == null ? src.waitDriver : src[key]), { stack: true })),
       ].join(''))}
       <div class="card-desc">以下需求僅為提示，不影響派車判斷：進入台北市時提醒調度留意 ${DB.taipeiTonHint} 噸以上車輛（G86）；加班需求供調度排班參考（G87）。</div>
@@ -4353,7 +4361,7 @@ function renderDApplyNew(p) {
     const data = {
       ...options,
       ...Object.fromEntries(dCargoOptions.map(([key]) => [key, $(`input[name=da-cargo-${key}]:checked`, p).value === 'yes'])),
-      escortOrderNo: $('#da-escort-order-no').value.trim(),
+      escortOrderNo: $('#da-escort-order-no').value.trim(), carpoolRejectReason: $('#da-carpool-reason').value.trim(),
       requestReview: $('input[name=da-request-review]:checked', p).value === 'yes',
       transportType: $('#da-transport-type').value, exercisePlanName: $('#da-exercise-plan').value.trim(),
       selfDrivers: readSelfDrivers(),
@@ -4371,7 +4379,7 @@ function renderDApplyNew(p) {
       waitDriver: options.continueMatching, permits: [], enterTaipei: $('input[name=da-tpe]:checked', p).value === 'yes',
       purpose: $('#da-purpose').value.trim(), tripleNo: $('#da-tripno').value.trim(), items: dDraftItems.map(i => Object.assign({}, i)),
     };
-    const errs = ModuleD.validate(data, { requireFirstPreference: true });
+    const errs = ModuleD.validate(data, { requireFirstPreference: true, requireCarpoolReason: true });
     if (errs.length) { toast(errs[0], 'err'); return null; }
     return data;
   };
@@ -4396,7 +4404,7 @@ function renderDApplyNew(p) {
     const ok = await confirmDialog({ title: '確認送出用車申請？',
       text: `類別 <b>${ModuleD.CATEGORY[data.category]}</b>｜用車 <b>${dPeriod(data)}</b>｜${data.pax} 人｜自駕：${data.selfDrive ? '是' : '否'}`
         + `${data.permits.length ? `｜通行證 ${data.permits.map(c => ModuleD.permitName(c)).join('＋')}` : ''}`
-        + `${data.items.some(i => i.hazardous) ? '｜<b style="color:var(--red);">含危險品</b>' : ''}<br>`
+        + `${data.hazardousCargo ? '｜<b style="color:var(--red);">含危險品</b>' : ''}<br>`
         + '送出後進入<b>待二級審</b>（單位主管審核），通過後由調度確認資源並派車，結果以 Email 通知。' });
     if (!ok) return;
     let app;
@@ -4677,13 +4685,14 @@ function dResourceTables(a, res) {
   const tonHot = v => a.enterTaipei && v.tons >= DB.taipeiTonHint;
   const otAt = new Date();
   return `
-    ${res.excluded.length ? `<div class="callout" style="margin-bottom:10px;">🛂 已依管制區通行證（${a.permits.map(c => ModuleD.permitName(c)).join('＋')}）<b>交集篩選</b>：未同時持有的 ${res.excluded.map(v => v.id).join('、')} 不列入可選（G85）。</div>` : ''}
+    ${res.excluded.length ? `<div class="callout" style="margin-bottom:10px;">🛂 已依${[a.permits.length ? `管制區通行證（${a.permits.map(c => ModuleD.permitName(c)).join('＋')}）交集篩選（G85）` : '', ModuleD.cargoNeeds(a).length ? `載運需求（須${ModuleD.cargoNeeds(a).map(([, t]) => t).join('、')}，G159）` : ''].filter(Boolean).join('及')}：不符的 ${res.excluded.map(v => v.id).join('、')} 不列入可選。</div>` : ''}
     <div class="grid-2" style="gap:16px;">
-      <div class="table-wrap"><table class="dt"><thead><tr><th>車輛</th><th>座位</th><th>噸位</th><th>通行證</th><th>狀態</th></tr></thead><tbody>
-        ${res.vehicles.length ? res.vehicles.map(({ v, busy }) => `<tr><td style="white-space:nowrap;"><b style="color:var(--navy);">${v.id}</b><br><span class="muted" style="font-size:12px;">${v.name}</span></td><td>${v.seats} 座</td>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>車輛</th><th>車種順位</th><th>座位</th><th>噸位</th><th>通行證</th><th>狀態</th></tr></thead><tbody>
+        ${res.vehicles.length ? res.vehicles.map(({ v, busy, rank }) => `<tr><td style="white-space:nowrap;"><b style="color:var(--navy);">${v.id}</b><br><span class="muted" style="font-size:12px;">${v.name}</span></td>
+          <td>${rank < 99 ? `<span class="badge b-navy">順位 ${rank + 1}</span>` : '<span class="muted">—</span>'}<br><span class="muted" style="font-size:12px;">${gEsc(v.type)}</span></td><td>${v.seats} 座</td>
           <td>${tonHot(v) ? `<span class="badge b-amber">${v.tons} 噸 ⚠</span>` : `${v.tons} 噸`}</td>
           <td>${(v.permits || []).length ? v.permits.join('、') : '<span class="muted">—</span>'}</td><td style="text-align:left;">${dBusyBadge(busy)}</td></tr>`).join('')
-          : '<tr><td colspan="5" class="muted" style="text-align:center;">沒有同時持有所需通行證的車輛 → 無車可派</td></tr>'}
+          : '<tr><td colspan="6" class="muted" style="text-align:center;">沒有符合通行證／載運需求的車輛 → 無車可派</td></tr>'}
       </tbody></table></div>
       <div class="table-wrap"><table class="dt"><thead><tr><th>駕駛</th><th>位置</th><th>剩餘可加班工時</th><th>狀態</th></tr></thead><tbody>
         ${res.drivers.map(({ d, busy }) => { const ot = ModuleD.queryOvertime(d.id);
@@ -4720,7 +4729,7 @@ function renderDReviewDetail(p, id) {
     const res = ModuleD.resources(a), state = ModuleD.resourceState(a);
     const freeV = res.vehicles.filter(x => !x.busy), freeD = res.drivers.filter(x => !x.busy);
     const vOpts = freeV.length
-      ? ['<option value="">請選擇車輛</option>'].concat(freeV.map(({ v }) => `<option value="${v.id}">${v.id}（${v.name}｜${v.seats} 座｜${v.tons} 噸）</option>`)).join('')
+      ? ['<option value="">請選擇車輛</option>'].concat(freeV.map(({ v, rank }, i) => `<option value="${v.id}"${i === 0 && rank < 99 ? ' selected' : ''}>${rank < 99 ? `【順位 ${rank + 1}】` : ''}${v.id}（${v.name}｜${v.seats} 座｜${v.tons} 噸）</option>`)).join('')   // 依車種順位排序，預選最高順位可用車（G159）
       : '<option value="">（此時段無可用車輛）</option>';
     body = `
     <div class="card">
@@ -4968,8 +4977,8 @@ function dDriverTrip(a) {
   return `${a.campus ? `<br>車屬院區 ${dTripEscape((DB.sites.find(site => site.id === a.campus) || {}).name || a.campus)}` : ''}${a.pickupLocation ? `<br>上車地點 ${dTripEscape(a.pickupLocation)}` : ''}${a.purpose ? `<br>事由 ${dTripEscape(a.purpose)}` : ''}${a.planCode ? `<br>計畫 ${dTripEscape(a.planCode)}` : ''}${contact ? `<br>車長 ${dTripEscape(contact)}` : ''}${(a.locations || []).length ? `<br>${a.locations.map((loc, i) => `${i + 1}. ${dTripEscape(loc.name)}`).join(' → ')}` : ''}`;
 }
 function dDriverCargo(a) {
-  if (!a.items.length) return '<span class="muted">無</span>';
-  return a.items.map(i => `${i.hazardous ? '<span class="badge b-red">⚠ 危險品</span> ' : ''}${i.name}×${i.qty || 1}`
+  if (!a.items.length) return ModuleD.isHazard(a) ? '<span class="badge b-red">⚠ 危險品</span>' : '<span class="muted">無</span>';
+  return (ModuleD.isHazard(a) ? '<span class="badge b-red">⚠ 危險品</span><br>' : '') + a.items.map(i => `${gEsc(i.name)}×${i.qty || 1}`
     + `<span class="hint">（${i.l}×${i.w}×${i.h}cm${i.weight ? '｜' + i.weight + 'kg' : ''}）</span>`).join('<br>');
 }
 function dDriverTrips() {

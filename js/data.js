@@ -169,9 +169,9 @@ const DB = {
       dims: { l: 480, w: 200, h: 210 }, volume: 480*200*210/1000, weight: 5000 },
     // 商務池（模組 C/D 共用）— 與物流池完全分開（資源池原則）
     //   permits：管制區通行證（綁車輛、可多證；一般用車交集篩選 G85）；tons：車重（台北市噸位提示 G86）
-    { id: 'V-B01', type: '商務廂車', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7, permits: ['K'], tons: 3.5 },
+    { id: 'V-B01', type: '商務廂車', name: '商務廂車 01', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 7, permits: ['K'], tons: 3.5, hoist: true },
     { id: 'V-B02', type: '商務轎車', name: '商務轎車 02', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 4, permits: [], tons: 2.0 },
-    { id: 'V-B03', type: '商務廂車', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9, permits: ['K', 'P'], tons: 7.2 },
+    { id: 'V-B03', type: '商務廂車', name: '商務廂車 03', pool: 'BIZ', homeSite: 'D6',  currentSite: 'D6',  seats: 9, permits: ['K', 'P'], tons: 7.2, pyrotechnic: true, hoist: true },   // pyrotechnic＝可載火工品、hoist＝具吊掛設備（G159，示意值待業務盤點）
     { id: 'V-B04', type: '商務廂車', name: '商務廂車 04', pool: 'BIZ', homeSite: 'D10', currentSite: 'D10', seats: 5, permits: ['P'], tons: 3.0 },
   ],
 
