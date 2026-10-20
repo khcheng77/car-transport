@@ -3221,6 +3221,28 @@ group('申請引導財物寄送：收貨／送貨院區、站點、三聯單單�
   });
 });
 
+group('院區財物轉運：來回運輸拆成去程＋回程兩張申請單（G154）', () => {
+  const base = () => ({ applicant: 'X', site: 'D6', destSite: 'D3', pickupLoc: '一館', deliverLoc: '二館', tripleNo: '3L-1', applyUnit: '研發部', applyExt: '1234',
+    hazardTransport: 'yes', oneway: 'no', wantReceiveDate: '2099-03-01', loadMin: 20, unloadMin: 10,
+    consignor: { name: '甲', ext: '0911', campus: 'D6', bu: 'B1', group: 'G1', unit: 'U1' },
+    recipient: { name: '乙', phone: '0922', campus: 'D3', bu: 'B2', group: 'G2', unit: 'U2',
+      agentName: '丙', agentPhone: '0933', agentCampus: 'D3', agentHall: '三館', agentBu: 'B3', agentGroup: 'G3' },
+    items: [{ name: '箱', l: 50, w: 40, h: 30, qty: 2, category: 'BOX', weight: 10 }] });
+  test('兩張皆為申請中、互相配對；回程站點與委運人／接收人對調、代理人清空，其餘同去程', () => {
+    const H = fresh(), B = H.ModuleB;
+    const [o, r] = B.createRoundTrip(base());
+    eq(o.status, 'draft'); eq(r.status, 'draft');
+    eq(o.tripLeg, 'out'); eq(r.tripLeg, 'back'); eq(o.pairId, r.id); eq(r.pairId, o.id);
+    eq(r.pickSite, 'D3'); eq(r.dropSite, 'D6'); eq(r.pickupLoc, '二館'); eq(r.deliverLoc, '一館');
+    eq(r.consignor.name, '乙'); eq(r.consignor.ext, '0922'); eq(r.consignor.campus, 'D3'); eq(r.consignor.bu, 'B2');
+    eq(r.recipient.name, '甲'); eq(r.recipient.phone, '0911'); eq(r.recipient.campus, 'D6'); eq(r.recipient.group, 'G1');
+    ['agentName', 'agentPhone', 'agentCampus', 'agentHall'].forEach(k => eq(r.recipient[k], '', k));
+    eq(r.hazardTransport, 'yes'); eq(r.tripleNo, '3L-1'); eq(r.wantReceiveDate, '2099-03-01'); eq(r.weight, o.weight);
+    ok(r.items[0] !== o.items[0], '貨物項目為各自複本');
+    ok(/接收代理人/.test(B.formError(B.returnData(base()))), '回程送審前須補齊接收代理人');
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

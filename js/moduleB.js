@@ -88,6 +88,28 @@ const ModuleB = {
     this.orders.push(o);
     return o;
   },
+  /* 來回運輸（G154）：新增頁「是否單程運輸＝否」送出產生兩張申請單（皆為申請中）——
+     去程＝表單原值；回程預設同去程，但收貨／送貨站點、委運人／接收人（院區、館別、姓名、手機）對調，接收代理人清空 */
+  returnData(data) {
+    const c = data.consignor || {}, r = data.recipient || {};
+    return Object.assign({}, data, {
+      site: data.destSite, destSite: data.site,
+      pickupLoc: data.deliverLoc, deliverLoc: data.pickupLoc,
+      consignor: { name: r.name, ext: r.phone, campus: r.campus, bu: r.bu, group: r.group, unit: r.unit },
+      recipient: { unit: c.unit, name: c.name, phone: c.ext, campus: c.campus, bu: c.bu, group: c.group,
+        agentName: '', agentPhone: '', agentCampus: '', agentHall: '', agentBu: '', agentGroup: '' },
+      items: (data.items || []).map(x => ({ ...x })),
+    });
+  },
+  createRoundTrip(data) {
+    const err = this.routeError(data) || this.routeError(this.returnData(data));
+    if (err) throw new Error(err);
+    const out = this.createOrder(data, { draft: true });
+    const back = this.createOrder(this.returnData(data), { draft: true });
+    Object.assign(out, { tripLeg: 'out', pairId: back.id });
+    Object.assign(back, { tripLeg: 'back', pairId: out.id });
+    return [out, back];
+  },
   // 退回修編 → 申請人修改後重新送出：沿用原單號，回到待單位主管審核
   resubmit(o, data) {
     if (!['rejected', 'draft'].includes(o.status)) throw new Error('僅「申請中」或「退回修編」的申請可修改後送出');

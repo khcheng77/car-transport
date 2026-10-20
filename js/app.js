@@ -656,6 +656,8 @@ function setPerson(prefix, pn) {
     if (!g.members.some(m => m.name === pn.name)) return false; bu = b.id; group = g.id; return true; }));
   const el = id => $('#' + prefix + '-' + id), S = (id, v) => { if (el(id) && v != null && v !== '') el(id).value = v; };
   if (bu && group) { S('bu', bu); el('group').innerHTML = _groupOpts(bu, group); el('member').innerHTML = _memberOpts(bu, group, pn.name); }
+  // 原單此人為空白（如來回運輸回程單的接收代理人 G154）：姓名留「請選擇」，不預設第一位組員
+  if (!pn.name) el('member').insertAdjacentHTML('afterbegin', '<option value="" selected>請選擇</option>');
   el('member').onchange();   // 依姓名同步單位與預帶分機
   S('ext', pn.ext); S('campus', pn.campus); S('hall', pn.hall);
 }
@@ -1655,7 +1657,7 @@ function renderBGrid() {
       <th></th><th>單號</th><th>申請人</th><th>收貨→送貨據點</th><th>型態</th><th>貨量</th><th>車號</th><th>來收時間</th><th>狀態</th></tr></thead><tbody>
       ${rows.map(o => `<tr>
         <td><button class="btn btn-ghost btn-sm" data-detail="${o.id}">細節</button></td>
-        <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td>
+        <td><b style="color:var(--navy);">${o.id}</b>${o.pairId ? `<span class="hint" style="margin-left:4px;">${o.tripLeg === 'back' ? '回程' : '去程'}</span>` : ''}</td><td>${o.applicant}</td>
         <td>${ModuleB.siteById(o.pickSite).name} → ${ModuleB.siteById(o.dropSite).name}</td>
         <td>${o.direct ? '<span class="badge b-amber">直達</span>' : '<span class="badge b-navy">非直達</span>'}</td>
         <td>${o.volume}L</td>
@@ -1705,7 +1707,8 @@ function bOrderCards(o, pfx, head, extra) {
         fItem('是否同意併車', o.agreeCarpool === false || o.direct ? '<span class="badge b-amber">否</span><span class="hint" style="margin-left:6px;">直達（單一目的地 G38）</span>' : '是<span class="hint" style="margin-left:6px;">非直達（沿線收送）</span>'),
         o.agreeCarpool === false || o.direct ? fItem('拒絕併車事由', d(o.carpoolRejectReason)) : '',
       ].join(''))}
-      ${infoGridRow(pfx + '-route2', [fItem('願意持續媒合駕駛', yn(o.keepMatchDriver)), fItem('是否單程運輸', yn(o.oneway))].join(''))}
+      ${infoGridRow(pfx + '-route2', [fItem('願意持續媒合駕駛', yn(o.keepMatchDriver)), fItem('是否單程運輸', yn(o.oneway)),
+        o.pairId ? fItem('來回配對 <span class="hint">G154</span>', `${o.tripLeg === 'back' ? '回程單' : '去程單'}｜${o.tripLeg === 'back' ? '去程' : '回程'}單號 <b style="color:var(--navy);">${o.pairId}</b>`) : ''].join(''))}
     </div>
     <div class="card">
       <div class="card-title">時間與作業</div>
@@ -1867,6 +1870,7 @@ function renderBApplyNew(p) {
       <div class="card-title">是否送審</div>
       ${infoGrid('ba-sendg', fInput('是否送審', bYesNo('ba-send', 'no')))}
       <div class="muted" style="font-size:12px;">選<b>否</b>：儲存為「申請中」，之後可再修改；選<b>是</b>：儲存並送出，狀態改為「待二級審」（單位主管審核）。</div>
+      ${editing ? '' : `<div class="callout warn" id="ba-roundtrip-note" style="margin-top:8px;display:none;">「是否單程運輸」為<b>否</b>（來回）：是否送審只能選否；送出後產生<b>去程、回程兩張申請單</b>（皆為申請中）。回程單預設與去程相同，但<b>收貨／送貨站點</b>與<b>委運人／接收人</b>的院區、館別、姓名、手機對調，<b>接收代理人</b>留空，請至回程單補齊後再送審。（G154）</div>`}
     </div>
     <div style="text-align:center;margin-top:22px;">
       <button class="btn btn-primary" id="ba-submit">▶ 送出</button>
@@ -1877,9 +1881,20 @@ function renderBApplyNew(p) {
   const bYn = ['ba-hz', 'ba-carpool', 'ba-send', 'ba-keepdrv', 'ba-oneway', 'ba-nightot', 'ba-holidayot'];   // 是／否 radio（G144／G153）
   // 拒絕併車事由只在「是否同意併車＝否」（直達）時出現
   const syncCarpool = () => { const r = $('#page-b_apply input[name=ba-carpool]:checked'); $('#ba-cond-rej').style.display = r && r.value === 'no' ? '' : 'none'; initMasonry(p); };
+  // 新增頁「是否單程運輸＝否」（來回）：是否送審強制為否，送出產生去程＋回程兩張申請單（G154）；修改既有單不拆單
+  const roundTrip = () => !editing && $('#page-b_apply input[name=ba-oneway]:checked').value === 'no';
+  const syncOneway = () => {
+    if (editing) return;
+    const lock = roundTrip(), yes = $('#page-b_apply input[name=ba-send][value=yes]');
+    yes.disabled = lock; yes.closest('.radio-pill').style.opacity = lock ? '.45' : '';
+    if (lock && yes.checked) { const no = $('#page-b_apply input[name=ba-send][value=no]'); no.checked = true; no.onchange(); }
+    $('#ba-roundtrip-note').style.display = lock ? '' : 'none';
+    initMasonry(p);
+  };
   bYn.forEach(n => $$(`#page-b_apply input[name=${n}]`).forEach(r => r.onchange = () => {
     $$(`#${n}-wrap .radio-pill`).forEach(l => l.classList.toggle('sel', $('input', l).checked));
     if (n === 'ba-carpool') syncCarpool();
+    if (n === 'ba-oneway') syncOneway();
   }));
   // 委運人／接收人／接收代理人：姓名三段下拉連動、預帶分機（同巡迴財物轉運 G152）
   wirePerson('bcon', p); wirePerson('brec', p); wirePerson('bag', p);
@@ -1897,7 +1912,7 @@ function renderBApplyNew(p) {
   $('#ba-site').onchange(); $('#ba-dest').onchange(); // 依預設據點重填館別選單
   $('#bcon-campus').value = $('#ba-site').value; $('#brec-campus').value = $('#ba-dest').value;
   renderBaCargo(); // 一開始顯示空白清單
-  syncCarpool();
+  syncCarpool(); syncOneway();
   guideApply('B', bApply, p); // 申請引導帶入（若有）
   if (editing) { // 修改：帶入原單內容
     const e = editing, set = (id, v) => { $('#' + id).value = v == null ? '' : v; };
@@ -1960,6 +1975,15 @@ function renderBApplyNew(p) {
   $('#ba-submit').onclick = async () => {
     const data = formData(); if (!data) return;
     const send = $('#page-b_apply input[name=ba-send]:checked').value === 'yes';
+    if (roundTrip()) {   // 來回：產生去程＋回程兩張申請中（G154）
+      if (!await confirmDialog({ title: '確認送出來回運輸申請？', text: '「是否單程運輸」為否：將產生去程、回程兩張申請單（皆為申請中）。回程單的站點、委運人／接收人已對調，接收代理人留空，請補齊後再送審。' })) return;
+      let pair;
+      try { pair = ModuleB.createRoundTrip(data); } catch (e) { toast(e.message, 'err'); return; }
+      guideDrafted(bApply, pair[0].id);
+      baItems = []; toast(`已產生去程 ${pair[0].id}、回程 ${pair[1].id}（申請中）`, 'ok');
+      bApply.resultIds = null; bApply.editId = null; bApply.view = 'detail'; bApply.detailId = pair[0].id;
+      return RENDER.b_apply();
+    }
     const ok = await confirmDialog(send
       ? { title: '確認送出院區財物轉運申請單？', text: '「是否送審」為是：儲存後狀態改為「待二級審」（單位主管審核），通過後由調度派車。' }
       : { title: '確認儲存？', text: '「是否送審」為否：將儲存為「申請中」，尚未送審；之後可於明細頁修改並送審。' });
