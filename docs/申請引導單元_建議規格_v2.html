@@ -186,7 +186,7 @@
     <div class="eyebrow">車輛派遣系統整合案 · 共用軟體單元 · 建議規格</div>
     <h1>申請引導單元</h1>
     <div class="meta">
-      <span>版本 <b>v2.21</b></span>
+      <span>版本 <b>v2.22</b></span>
       <span>日期 <b>2026-10-01</b></span>
       <span>狀態 <b>已實作於原型，待業務單位確認</b></span>
       <span>所屬專案 <b>khcheng77/car-transport</b></span>
@@ -431,13 +431,13 @@
           <tr><td class="nw">K4 用車期間</td><td>起日、迄日</td><td>日期</td><td>是</td><td>迄日不得早於起日；顯示天數</td></tr>
           <tr><td class="nw" rowspan="10">K6 行程</td><td>出發地</td><td>下拉（共乘出發地＋「其他地點」）</td><td>是</td><td>如：台北總部、台中辦公室</td></tr>
           <tr><td>目的地</td><td>下拉（共乘目的地＋「其他地點／多點」）</td><td>是</td><td>如：桃園機場T1、高鐵台北站</td></tr>
-          <tr><td>其他地點說明</td><td>文字</td><td>選「其他」時必填</td><td>選「其他」時才出現；帶入一般用車的「行程說明」</td></tr>
+          <tr><td>其他地點說明</td><td>文字</td><td>選「其他」時必填</td><td>選「其他」時才出現；帶入一般用車的「上車地點」或「行程地點」（取代該端的「其他地點」，v2.22）</td></tr>
           <tr><td>來回／單程</td><td>單選膠囊</td><td>C 時必填</td><td>兩地都在清單且未選不同意併車時出現；單程限目的地為交通轉運點</td></tr>
           <tr><td>出發時間、回程上車／結束時間</td><td>時間</td><td>是</td><td>搭配 K4 起訖日期；單程時不需回程時間</td></tr>
           <tr><td>人數</td><td>數字</td><td>是</td><td>至少 1 人</td></tr>
           <tr><td>隨行財物</td><td>單選膠囊（沒有／有）</td><td>是</td><td>「有」→出現「隨行財物」grid（至少 1 項）；不影響判定。v2.19 移除原「屬於隨身財物」（v2.11）</td></tr>
           <tr><td>是否同意併車 <span class="badge b-new">v2.19</span></td><td>單選膠囊（是／否）</td><td>兩地都在清單時是</td><td>是→C（人員運輸申請新增頁）；否→D（一般用車申請新增頁），並出現「不同意併車原因」。選「其他地點」時不出現（一律 D）</td></tr>
-          <tr><td>不同意併車原因 <span class="badge b-new">v2.19</span></td><td>文字</td><td>同意併車＝否時是</td><td>帶入一般用車「行程說明」（一般用車沒有併車欄位），格式「…；不同意併車原因：○○」</td></tr>
+          <tr><td>不同意併車原因 <span class="badge b-new">v2.19</span></td><td>文字</td><td>同意併車＝否時是</td><td>帶入一般用車「事由」，格式「不同意併車原因：○○」，並帶「是否同意併車＝否」（v2.22；原帶入行程說明）</td></tr>
           <tr><td>隨行財物 grid <span class="badge b-new">v2.19</span></td><td>grid＋編輯視窗</td><td>隨行財物＝有時至少 1 項</td><td>欄位：功能鍵（編輯／刪除）、財物名稱、長（cm）、寬（cm）、高（cm）、財物外型（浪費係數）、重量（kg）、數量、財物外包裝；右上「＋ 新增」。視窗：財物名稱（文字，必填）、長寬高（數字，&gt;0）、財物外型（下拉＝浪費係數類別，如「標準紙箱（係數 1.1）」）、重量（數字，單件、&gt;0）、數量（正整數）、財物外包裝（文字）。D 時另出現「沒有駕駛時可否自己開車」（必填）</td></tr>
         </tbody>
       </table>
@@ -462,12 +462,12 @@
           <tr><td>用車起日／迄日</td><td>—</td><td>—</td><td><code>reportAt</code> 日期、<code>endAt</code> 日期</td><td><code>startDate</code> <code>endDate</code></td></tr>
           <tr><td>出發時間</td><td>—</td><td>—</td><td><code>reportAt</code> 時間（車輛報到日期時間）</td><td><code>startTime</code></td></tr>
           <tr><td>回程／結束時間</td><td>—</td><td>—</td><td><code>endAt</code> 時間（用車結束日期時間；單程不帶）</td><td><code>endTime</code>（用車結束）</td></tr>
-          <tr><td>出發地／目的地／其他地點說明</td><td>—</td><td>—</td><td><code>route</code>（車輛起迄地點：起點＝出發地、終點＝目的地）</td><td>寫入 <code>purpose</code></td></tr>
+          <tr><td>出發地／目的地／其他地點說明</td><td>—</td><td>—</td><td><code>route</code>（車輛起迄地點：起點＝出發地、終點＝目的地）</td><td>出發地→<code>pickupLocation</code>（上車地點）、目的地→<code>locations[0]</code>（行程地點第 1 筆）；選「其他地點」者帶其他地點說明（v2.22，原寫入 <code>purpose</code>）</td></tr>
           <tr><td>來回／單程</td><td>—</td><td>—</td><td><code>isOneway</code>（是否單程運輸）</td><td>—</td></tr>
           <tr><td>人數</td><td>—</td><td>—</td><td><code>passengers</code>（乘客數）</td><td><code>pax</code></td></tr>
           <tr><td>沒有駕駛時可否自己開車</td><td>—</td><td>—</td><td>—</td><td><code>selfDrive</code></td></tr>
           <tr><td>隨行財物 grid（v2.19）</td><td>—</td><td>—</td><td><code>personalCargo</code>（隨身貨物：財物名稱、數量、長寬高、重量、財物外包裝；該 grid 無類別欄，財物外型不帶）</td><td><code>items</code>（隨行貨物，含類別＝財物外型、外包裝；危險品預設否）</td></tr>
-          <tr><td>不同意併車原因（v2.19）</td><td>—</td><td>—</td><td>—（同意併車才導向 C）</td><td>併入 <code>purpose</code></td></tr>
+          <tr><td>不同意併車原因（v2.19）</td><td>—</td><td>—</td><td>—（同意併車才導向 C）</td><td><code>purpose</code>（事由）＋<code>allowMerge=false</code>（v2.22）</td></tr>
         </tbody>
       </table>
     </div>
@@ -587,7 +587,7 @@
           <p style="margin:0 0 4px;"><b>將使用：</b><span class="badge b-unit">一般用車申請作業 · 一般用車申請</span> <code>R5</code></p>
           <p class="muted" style="margin:0 0 6px;">用車期間 2 天；地點不在共乘清單（台北總部 → 其他地點），由調度人工確認資源後派車，可自駕。</p>
           <dl class="kv">
-            <dt>將帶入</dt><dd>申請人、用車 10/08 09:00～10/09 17:00、3 人、自駕：可以、行程說明、隨行貨物 1 項</dd>
+            <dt>將帶入</dt><dd>申請人、用車 10/08 09:00～10/09 17:00、3 人、自駕：可以、上車地點、行程地點、隨行貨物 1 項</dd>
           </dl>
           <div class="btns"><span class="btn primary">前往「一般用車申請」並帶入 →</span><span class="muted" style="font-size:12.5px;">或我想自己選：巡迴財物轉運申請｜院區財物轉運申請｜人員運輸申請｜一般用車申請</span></div>
         </div>
@@ -639,7 +639,7 @@
       <li><strong>只帶入可見卡片：</strong>先填 K6 再把運送內容改為「只有財物」，K6 的資料不得被帶入 A／B。</li>
       <li><strong>引導紀錄：</strong>前往並帶入建立紀錄；回到引導修改後重新帶入更新同一筆並記錄改判；目標功能送出後回填單號；已送出的紀錄不可再修改，重新帶入另建新紀錄。</li>
       <li><strong>只用一次、可返回、不送單：</strong>跳轉後從清單按「＋ 新增」不再出現帶入資料；未在目標功能送出時，系統不新增任何申請單。</li>
-      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 255 項）。</li>
+      <li><strong>符合 UI 規範：</strong>三畫面切換正常；卡片、欄位、單選膠囊與既有單元一致；開啟時無錯誤訊息；<code>node tests/guardrails.test.js</code> 全數通過（目前原型 272 項）。</li>
     </ul>
   </section>
 
@@ -714,6 +714,7 @@
       <table>
         <thead><tr><th>版本</th><th>內容</th></tr></thead>
         <tbody>
+          <tr><td class="nw">v2.22</td><td>2026-10-20 一般用車申請表單改版（G158，合併 PR #2）：判為一般用車時，出發地改帶入「上車地點」、目的地帶入「行程地點」第 1 筆（選「其他地點」者帶其他地點說明），不再組成「行程說明」；不同意併車原因改帶入「事由」並帶「是否同意併車＝否」；帶入項目顯示「上車地點」「行程地點」（不同意併車另列「事由（不同意併車原因）」）。判定規則不變。</td></tr>
           <tr><td class="nw">v2.21</td><td>2026-10-20 巡迴財物轉運申請調整（G155）：申請表單「車屬院區」更名「收貨院區」，新增「送貨院區」（限同收貨院區）；判定為巡迴財物轉運時帶入收貨院區與送貨院區（帶入項目顯示「收貨院區」「送貨院區」），取代原「車屬院區」一項。巡迴表單「危險品運輸」固定為否、不可選，危險品仍由 R6 判給院區財物轉運，判定規則不變。</td></tr>
           <tr><td class="nw">v2.20</td><td>2026-10-19 用語修訂（G151）：「差旅共乘作業」更名「人員運輸作業」、「差旅共乘申請」更名「人員運輸申請」，本文件其餘「差旅共乘」一併改稱「人員運輸」（判定結果、帶入對照、決策表等）；「司機」一律改稱「駕駛」（例：「沒有駕駛時可否自己開車」）。判定、卡片與帶入規則不變；各模組車輛異動實登新增的費用欄位不由引導收集。測試數更新為 252 項。</td></tr>
           <tr><td class="nw">v2.19</td><td>2026-10-19 行程卡片（G150）：移除「屬於隨身財物」；新增「是否同意併車」（是／否，兩地都在共乘清單時出現）——是＝人員運輸（R4）、否＝一般用車（R5），選否出現「不同意併車原因」（必填，帶入一般用車行程說明）；隨行財物＝有時出現「隨行財物」grid（功能鍵、財物名稱、長寬高、財物外型（浪費係數）、重量、數量、財物外包裝；新增／編輯開視窗），同意併車帶入人員運輸隨身貨物、不同意帶入一般用車隨行貨物；有人搭車不再出現 K3 貨物清單。需求原文「物品」依 G147 改稱「財物」。第 6、7、8、9、12、13、14、15、16 節同步；測試數更新為 250 項。</td></tr>
