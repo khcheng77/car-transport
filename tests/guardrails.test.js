@@ -3050,21 +3050,13 @@ group('院區財物轉運派車單明細：送審、異動、新增／刪除申�
     approx(B.peakLoad([a, b, r], v).floor, 300 * 200 * 1.1, 1, '接力與回程皆不疊加');
     ok(B.peakLoad([a, b, r], v).floor <= H.floorCap(v));
   });
-  test('派車單行車紀錄（G153）：里程、加油公升數、駕駛工時、駕駛加班時數皆選填；不填里程仍可送出（僅異動）', () => {
+  test('派車單明細不再有行車紀錄（G157 移除 G153 行車紀錄欄位）', () => {
     const H = fresh(), B = H.ModuleB;
     fleet(H); B.runMatch(DD, '調度室');
-    const d = B.liveDispatches()[0], base = { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2 };
-    const blank = { startKm: '', endKm: '', fuelLiters: '', workHours: '', otHours: '' };
-    ok(B.updateDispatch(d, Object.assign({ tripLog: blank }, base), 'x').ok, '全部不填可送出');
-    ok(/同時填寫/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { startKm: '100' }) }, base), 'x').error));
-    ok(/結束里程/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { startKm: '100', endKm: '90' }) }, base), 'x').error));
-    ok(/加班/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { workHours: '2', otHours: '3' }) }, base), 'x').error));
-    ok(/加油公升數/.test(B.updateDispatch(d, Object.assign({ tripLog: Object.assign({}, blank, { fuelLiters: 'abc' }) }, base), 'x').error));
-    const r = B.updateDispatch(d, Object.assign({ tripLog: { startKm: '100', endKm: '260', fuelLiters: '35', workHours: '9', otHours: '1' } }, base), 'x');
-    ok(r.ok && r.changed.includes('tripLog'));
-    eq(JSON.stringify(d.tripLog), JSON.stringify({ startKm: 100, endKm: 260, fuelLiters: 35, workHours: 9, otHours: 1 }));
-    ok(d.log.some(l => l.action === '行車紀錄'), '記錄異動');
-    ok(B.dispatchOrders(d).every(o => !o.usage), '派車單行車紀錄不等於完成實登');
+    const d = B.liveDispatches()[0];
+    eq(typeof B.TRIP_FIELDS, 'undefined'); eq(typeof B.tripLogOf, 'undefined');
+    const r = B.updateDispatch(d, { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1, driver2: d.driver2, tripLog: { startKm: '1', endKm: '2' } }, 'x');
+    ok(r.ok && !r.changed.includes('tripLog') && !('tripLog' in d), '傳入行車紀錄被忽略');
   });
   test('派車單明細可修改派遣人與派遣時間（必填），並記錄異動', () => {
     const H = fresh(), B = H.ModuleB;
@@ -3253,6 +3245,37 @@ group('巡迴財物轉運：收貨院區／送貨院區、危險品運輸固定�
       items: [{ name: '小箱', l: 40, w: 30, h: 30, qty: 1, category: 'BOX', weight: 5 }] });
     eq(pf.unit, 'A'); eq(pf.data.branch, 'D6'); eq(pf.data.destBranch, 'D6');
     ok(pf.labels.includes('收貨院區 台中據點') && pf.labels.includes('送貨院區 台中據點'), pf.labels.join('、'));
+  });
+});
+
+group('院區財物轉運：運輸主管簽審以派車單為單位（G156）', () => {
+  const setup = () => {
+    const H = fresh(), B = H.ModuleB;
+    const mk = () => { const o = B.createOrder({ applicant: 'X', site: 'D9', destSite: 'D3', direct: false, volume: 1000, category: 'BOX', weight: 100, handleMin: 30 }); B.approve(o); return o; };
+    mk(); mk(); B.dispatch('V-T02', 'greedy');
+    const d = B.liveDispatches().find(x => B.dispatchOrders(x).length >= 2);
+    B.submitDispatch(d, '調度室');
+    return { H, B, d };
+  };
+  test('一張派車單（含多張申請單）在歷史簽審紀錄只列一筆；同意作用於整張', () => {
+    const { H, B, d } = setup();
+    eq(B.signDispatches().filter(x => x.id === d.id).length, 1);
+    ok(B.signDispatches().length < B.signRecords().length, '派車單筆數少於申請單筆數');
+    eq(B.dispatchSignState(d), 'pending');
+    ok(B.signApproveDispatch(d, '運輸主管', '').ok);
+    eq(B.dispatchSignState(d), 'approved');
+    ok(B.dispatchOrders(d).every(o => H.Signoff.isApproved(o)), '單內申請單全部同意');
+    ok(!B.signApproveDispatch(d, '運輸主管', '').ok, '已同意不可再同意');
+  });
+  test('退回作用於整張派車單：回調度中、狀態為已退回；重新送審後再列為待簽審（同一筆）', () => {
+    const { H, B, d } = setup();
+    ok(/必填/.test(B.signRejectDispatch(d, '運輸主管', '').error));
+    ok(B.signRejectDispatch(d, '運輸主管', '車輛不符').ok);
+    eq(B.dispatchSignState(d), 'rejected'); eq(d.submitted, false);
+    ok(B.dispatchOrders(d).every(o => !H.Signoff.isPending(o)));
+    B.submitDispatch(d, '調度室');
+    eq(B.dispatchSignState(d), 'pending'); eq(B.dispatchSignRound(d), 2);
+    eq(B.signDispatches().filter(x => x.id === d.id).length, 1);
   });
 });
 

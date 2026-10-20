@@ -2269,12 +2269,6 @@ function bOrderCardHtml(d) {
         fInput('駕駛人1', `<select id="${k}-d1"${dis}>${bDrvOpts(d.driver1, '請選擇')}</select>`),
         fInput('駕駛人2', `<select id="${k}-d2"${dis}>${bDrvOpts(d.driver2, '（無）')}</select>`),
       ].join(''))}
-      <div class="card-title" style="font-size:14px;margin-top:6px;">行車紀錄 <span class="hint">選填；里程不填仍可送出（僅異動），填寫時起訖都要填；簽審生效後帶入車輛異動實登</span></div>
-      ${infoGridRow(k + '-trip', ModuleB.TRIP_FIELDS.map(([f, label]) => {
-        const v = d.tripLog && d.tripLog[f] != null ? d.tripLog[f] : '';
-        const unit = /Km$/.test(f) ? '（km）' : f === 'fuelLiters' ? '（公升）' : '（小時）';
-        return fInput(label + unit, `<input type="text" inputmode="decimal" id="${k}-${f}" value="${v}" placeholder="選填"${dis}>`);
-      }).join(''))}
       <div style="margin-top:6px;">${started ? '<span class="hint">已有申請單出車，派車單不可再異動。</span>'
         : d.submitted ? '<span class="hint">派車單已送審，不可再異動（運輸主管退回後才可再修改）。</span>'
         : '<span class="hint">送審前可異動派遣人、派遣時間、車種類型、車號、駕駛人，以及新增／刪除申請單；改車號不重算路線時間，請自行確認。</span>'}</div>
@@ -2319,8 +2313,7 @@ function openBOrderModal(d, by, rerender, keep) {
   if (keep) { $(`#${k}-type`).value = keep.vehicleType; $(`#${k}-by`).value = keep.dispatcher; $(`#${k}-at`).value = keep.dispatchedAtRaw; }
   bFillVehicles(`#${k}-type`, `#${k}-veh`, keep ? keep.vehicle : d.vehicle, ld);
   $(`#${k}-type`).onchange = () => bFillVehicles(`#${k}-type`, `#${k}-veh`, '', ld);
-  if (keep) { $(`#${k}-d1`).value = keep.driver1; $(`#${k}-d2`).value = keep.driver2;
-    if (keep.tripLog) ModuleB.TRIP_FIELDS.forEach(([f]) => { $(`#${k}-${f}`).value = keep.tripLog[f]; }); }
+  if (keep) { $(`#${k}-d1`).value = keep.driver1; $(`#${k}-d2`).value = keep.driver2; }
   const subR = v => $(`input[name="${k}-sub"][value="${v}"]`, body);
   if (subR('no')) {
     if (keep && keep.submitted) subR('yes').checked = true;
@@ -2332,7 +2325,6 @@ function openBOrderModal(d, by, rerender, keep) {
   $('#bro-close').onclick = closeModal;
   const formVal = () => ({ vehicleType: $(`#${k}-type`).value, vehicle: $(`#${k}-veh`).value, driver1: $(`#${k}-d1`).value, driver2: $(`#${k}-d2`).value,
     dispatcher: $(`#${k}-by`).value.trim(), dispatchedAtRaw: $(`#${k}-at`).value, dispatchedAt: $(`#${k}-at`).value,
-    tripLog: Object.fromEntries(ModuleB.TRIP_FIELDS.map(([f]) => [f, $(`#${k}-${f}`).value.trim()])),
     submitted: !!(subR('yes') && subR('yes').checked) });
   const done = msg => { toast(msg, 'ok'); closeModal(); rerender(); };
   const save = $(`#modal-body [data-brsave]`);
@@ -2342,8 +2334,6 @@ function openBOrderModal(d, by, rerender, keep) {
     if (!f.dispatchedAt) { toast('請填寫「派遣時間」', 'err'); return; }
     const pre = ModuleB.dispatchResourceError(d, f);
     if (pre) { toast(pre, 'err'); return; }
-    const tl = ModuleB.tripLogOf(f.tripLog);
-    if (tl.error) { toast(tl.error, 'err'); return; }
     const text = f.submitted ? '「是否送審」為是：派車單將<b>送出運輸主管簽審</b>，簽審通過後才生效；<b>送審後即不可再異動</b>。' : '「是否送審」為否：儲存派車單異動，維持調度中（未送審）。';
     if (!(await confirmDialog({ title: `確認送出派車單 ${d.id}？`, text }))) return;
     const r = ModuleB.updateDispatch(d, f, by());
@@ -4931,7 +4921,7 @@ const A_DISPATCH_VIEW = {
   };
 const SIGN_UNITS = {
   b_sign: {
-    mod: 'B', title: '院區財物轉運作業 · 運輸主管簽審', M: () => ModuleB, applyPage: 'b_apply', applyState: () => bApply,
+    mod: 'B', title: '院區財物轉運作業 · 運輸主管簽審', M: () => ModuleB, byDispatch: true,   // 歷史簽審紀錄以派車單為單位（G156） applyPage: 'b_apply', applyState: () => bApply,
     dispatchPage: 'b_review', dispatchName: '派車調度',
     what: r => `${siteNm(r.pickSite)} → ${siteNm(r.dropSite)}${r.direct ? '｜直達' : ''}`,
     infoItems: r => [
@@ -5015,6 +5005,7 @@ const SIGN_STATUS_OPTS = [['', '全部'], ['pending', '待運輸主管簽審'], 
 
 function signRows(k) {
   const cfg = SIGN_UNITS[k], q = signUi[k].query, kw = (q.kw || '').trim();
+  if (cfg.byDispatch) return signDispRows(k);
   const rank = r => Signoff.isPending(r) ? 0 : 1;
   const lastAt = r => { const l = (r.signLog || []).filter(x => x.action === '送簽審').pop(); return l ? +new Date(l.at) : 0; };
   return cfg.M().signRecords()
@@ -5023,7 +5014,8 @@ function signRows(k) {
 }
 function renderSignList(k, p) {
   const cfg = SIGN_UNITS[k], q = signUi[k].query;
-  const pend = cfg.M().signRecords().filter(r => Signoff.isPending(r)).length;
+  const pend = cfg.byDispatch ? cfg.M().signDispatches().filter(d => cfg.M().dispatchSignState(d) === 'pending').length
+    : cfg.M().signRecords().filter(r => Signoff.isPending(r)).length;
   const stOpts = SIGN_STATUS_OPTS.map(([v, t]) => `<option value="${v}" ${q.status === v ? 'selected' : ''}>${t}</option>`).join('');
   p.innerHTML = `
     <div class="section-h">運輸主管簽審（運輸主管）</div>
@@ -5034,7 +5026,7 @@ function renderSignList(k, p) {
         <button class="btn btn-primary btn-sm" id="${k}-q-search">🔍 查詢</button>
       </div>
       ${infoGrid(`${k}-q`, [
-        fInput('單號／申請人（模糊）', `<input type="text" id="${k}-q-kw" value="${gEsc(q.kw)}" placeholder="輸入單號或姓名/部門關鍵字">`),
+        fInput(cfg.byDispatch ? '派車單號／申請單號／申請人（模糊）' : '單號／申請人（模糊）', `<input type="text" id="${k}-q-kw" value="${gEsc(q.kw)}" placeholder="輸入單號或姓名/部門關鍵字">`),
         fInput('簽審狀態', `<select id="${k}-q-status">${stOpts}</select>`),
       ].join(''))}
     </div>
@@ -5052,6 +5044,7 @@ function renderSignList(k, p) {
   };
   // 批次審核：grid 目前顯示的列中，尚未簽審（待簽審）者一律轉為同意
   $(`#${k}-batch`).onclick = async () => {
+    if (cfg.byDispatch) return signDispBatch(k);
     const todo = signRows(k).filter(r => Signoff.isPending(r));
     if (!todo.length) { toast('目前清單中沒有待簽審的單', 'err'); return; }
     const ok = await confirmDialog({ title: '確認批次審核？',
@@ -5068,6 +5061,7 @@ function renderSignList(k, p) {
 function renderSignGrid(k) {
   const cfg = SIGN_UNITS[k], box = $(`#${k}-grid`);
   if (!box) return;
+  if (cfg.byDispatch) return renderSignDispGrid(k, box);
   const rows = signRows(k);
   $(`#${k}-count`).textContent = `${rows.length} 筆`;
   box.innerHTML = rows.length === 0
@@ -5091,6 +5085,7 @@ function renderSignGrid(k) {
   });
 }
 function renderSignDetail(k, p, id) {
+  if (SIGN_UNITS[k].byDispatch) return renderSignDispDetail(k, p, id);
   const cfg = SIGN_UNITS[k], r = cfg.M().signRecords().find(x => x.id === id);
   if (!r) { signUi[k].view = 'list'; return RENDER[k](); }
   const pending = Signoff.isPending(r), s = r.sign;
@@ -5163,6 +5158,150 @@ function renderSignDetail(k, p, id) {
       const res = agree ? cfg.M().signApprove(r, by, note) : cfg.M().signReject(r, by, note);
       if (!res.ok) { toast(res.error, 'err'); return; }
       toast(`${r.id} ${agree ? '已同意，派車結果生效' : '已退回調度重新處理'}`, agree ? 'ok' : 'err');
+      RENDER[k]();
+    };
+  }
+  initMasonry(p);
+}
+
+/* ---------- 運輸主管簽審：以派車單為單位（院區財物轉運 G156）----------
+   歷史簽審紀錄一列＝一張曾送審的派車單（例：TD001 內含 LB001、LB002 → 只顯示 TD001 一筆）；
+   明細頁顯示派車單與單內申請單，同意／不同意作用於整張派車單。 */
+function signDispStateBadge(M, d) {
+  const st = M.dispatchSignState(d);
+  if (!st) return d.cancelled ? '<span class="badge b-gray">派車單已取消</span>' : '<span class="muted">—</span>';
+  const [t, c] = Signoff.STATUS[st];
+  return `<span class="badge ${c}">${t}</span>`;
+}
+function signDispRows(k) {
+  const M = SIGN_UNITS[k].M(), q = signUi[k].query, kw = (q.kw || '').trim();
+  const rank = d => M.dispatchSignState(d) === 'pending' ? 0 : 1;
+  const at = d => { const l = M.dispatchSubmitLog(d); return l ? +new Date(l.at) : 0; };
+  return M.signDispatches()
+    .filter(d => (!kw || d.id.includes(kw) || M.dispatchOrders(d).some(o => o.id.includes(kw) || (o.applicant || '').includes(kw)))
+      && (!q.status || M.dispatchSignState(d) === q.status))
+    .sort((x, y) => rank(x) - rank(y) || at(y) - at(x));
+}
+async function signDispBatch(k) {
+  const cfg = SIGN_UNITS[k], M = cfg.M();
+  const todo = signDispRows(k).filter(d => M.dispatchSignState(d) === 'pending');
+  if (!todo.length) { toast('目前清單中沒有待簽審的派車單', 'err'); return; }
+  const ok = await confirmDialog({ title: '確認批次審核？',
+    text: `將目前清單中 <b>${todo.length}</b> 張待簽審的派車單全部<b>同意</b>（${todo.map(d => d.id).join('、')}），同意後立即生效。${cfg.effect}` });
+  if (!ok) return;
+  let n = 0;
+  todo.forEach(d => { if (M.signApproveDispatch(d, `${Signoff.SUPERVISOR}-值班主管`, '批次審核').ok) n++; });
+  toast(`已批次同意 ${n} 張派車單，派車結果生效`, 'ok');
+  RENDER[k]();
+}
+function renderSignDispGrid(k, box) {
+  const cfg = SIGN_UNITS[k], M = cfg.M(), rows = signDispRows(k);
+  $(`#${k}-count`).textContent = `${rows.length} 筆`;
+  const decOf = d => (d.log || []).filter(l => ['主管同意', '調度主管退回'].includes(l.action)).pop();
+  box.innerHTML = rows.length === 0
+    ? `<div class="empty"><div class="big">🖋</div>查無簽審紀錄。調度在「${cfg.dispatchName}」將派車單送審後，會出現在這裡等待簽審。</div>` : `
+    <div class="table-wrap"><table class="dt"><thead><tr>
+      <th></th><th>派車單號</th><th>派車日期</th><th>車輛／駕駛</th><th>申請單</th><th>送簽</th><th>簽審狀態</th><th>簽審人／時間</th></tr></thead><tbody>
+      ${rows.map(d => { const sub = M.dispatchSubmitLog(d) || {}, st = M.dispatchSignState(d), dec = decOf(d), round = M.dispatchSignRound(d);
+        const apps = M.dispatchOrders(d);
+        return `<tr>
+        <td><button class="btn btn-ghost btn-sm" data-sgdetail="${d.id}">明細</button></td>
+        <td><b style="color:var(--navy);">${d.id}</b></td><td>${d.date || '—'}</td>
+        <td>${d.vehicle || '—'}<br><span class="muted">${[d.driver1, d.driver2].filter(Boolean).map(drvNm).join('＋') || '—'}</span></td>
+        <td style="text-align:left;">${apps.length ? apps.map(o => `${o.id} <span class="muted">${o.applicant}</span>`).join('<br>') : '<span class="muted">（已無申請單）</span>'}</td>
+        <td class="muted">${sub.at ? fmtTime(sub.at) : '—'}<br>${sub.by || ''}${round > 1 ? `｜第 ${round} 輪` : ''}</td>
+        <td>${signDispStateBadge(M, d)}</td>
+        <td class="muted">${dec && st !== 'pending' ? `${dec.by}<br>${fmtTime(dec.at)}` : '—'}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;">一列為一張派車單；點擊左側「明細」查看派車單與單內申請單，待簽審者於明細頁進行主管同意（作用於整張派車單）。</div>`;
+  $$(`#${k}-grid [data-sgdetail]`).forEach(b => b.onclick = () => {
+    signUi[k].detailId = b.dataset.sgdetail; signUi[k].view = 'detail'; RENDER[k]();
+  });
+}
+function renderSignDispDetail(k, p, id) {
+  const cfg = SIGN_UNITS[k], M = cfg.M(), d = M.signDispatches().find(x => x.id === id);
+  if (!d) { signUi[k].view = 'list'; return RENDER[k](); }
+  const st = M.dispatchSignState(d), pending = st === 'pending', apps = M.dispatchOrders(d);
+  const sub = M.dispatchSubmitLog(d) || {}, round = M.dispatchSignRound(d);
+  const dec = (d.log || []).filter(l => ['主管同意', '調度主管退回'].includes(l.action)).pop();
+  const veh = DB.vehicles.find(v => v.id === d.vehicle);
+  const outcomeNote = pending
+    ? `<div class="callout" style="margin-bottom:14px;">此派車單<b>尚待簽審</b>，簽審通過前不生效（${cfg.effect.replace(/。$/, '')}）。</div>`
+    : st === 'rejected' ? `<div class="callout" style="margin-bottom:14px;">主管已退回：${dec ? gEsc(dec.note) : ''}。${cfg.rejectEffect}</div>`
+    : st === 'approved' ? `<div class="callout info" style="margin-bottom:14px;">主管已同意，派車結果已生效。</div>` : '';
+  p.innerHTML = `
+    <div class="section-h">運輸主管簽審明細 · 派車單 ${d.id}</div>
+    ${outcomeNote}
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;"><span>派車單</span>${signDispStateBadge(M, d)}</div>
+      ${infoGridRow(`${k}-dd-r1`, [fItem('派車單號', `<b style="color:var(--navy);">${d.id}</b>`), fItem('派車日期', d.date || '—'),
+        fItem('車種類型／車號', `${gEsc(d.vehicleType || (veh && veh.type) || '—')}／${d.vehicle || '—'}${veh ? `<span class="hint">（${gEsc(veh.name)}）</span>` : ''}`)].join(''))}
+      ${infoGridRow(`${k}-dd-r2`, [fItem('駕駛人1', drvNm(d.driver1)), fItem('駕駛人2', d.driver2 ? drvNm(d.driver2) : '—'),
+        fItem('派遣人／派遣時間', `${gEsc(d.dispatcher || '—')}${d.dispatchedAt ? `<span class="hint">（${fmtTime(d.dispatchedAt)}）</span>` : ''}`)].join(''))}
+      ${infoGridRow(`${k}-dd-r3`, [fItem('送簽人', sub.by || '—'), fItem('送簽時間', sub.at ? fmtTime(sub.at) : '—'), fItem('送簽輪次', round ? `第 ${round} 輪` : '—')].join(''))}
+    </div>
+    <div class="card">
+      <div class="card-title">申請單（${apps.length} 張）</div>
+      ${apps.length ? `<div class="table-wrap"><table class="dt"><thead><tr>
+        <th></th><th>單號</th><th>申請人</th><th>申請內容</th><th>貨量／重量</th><th>收貨時間</th><th>送達時間</th><th>申請狀態</th></tr></thead><tbody>
+        ${apps.map(o => `<tr><td><button class="btn btn-ghost btn-sm" data-sgapp="${o.id}">明細</button></td>
+          <td><b style="color:var(--navy);">${o.id}</b></td><td>${o.applicant}</td><td style="text-align:left;">${cfg.what(o)}</td>
+          <td>${o.volume}L／${o.weight}kg</td><td>${o.pickupTime || '—'}</td><td>${o.dispatchDropTime || '—'}</td><td>${Flow.badge(o)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="empty">此派車單已無申請單。</div>'}
+    </div>
+    ${pending ? `
+    <div class="card">
+      <div class="card-title">主管同意</div>
+      ${infoGrid(`${k}-sv`, [
+        fInput('是否同意', `
+          <div class="radio-group">
+            <label class="radio-pill sel" id="${k}-yes-pill"><input type="radio" name="${k}-agree" value="yes" checked>同意（整張派車單生效）</label>
+            <label class="radio-pill" id="${k}-no-pill"><input type="radio" name="${k}-agree" value="no">不同意（整張派車單退回調度重新處理）</label>
+          </div>`, { stack: true, full: true }),
+        fInput('簽審意見 <span class="hint" id="' + k + '-req" style="display:none;color:#c0392b;">（不同意時必填）</span>', `<input type="text" id="${k}-note" placeholder="請輸入簽審意見">`, { full: true }),
+        fInput('簽審人', `<input type="text" id="${k}-by" value="${Signoff.SUPERVISOR}-值班主管">`),
+      ].join(''))}
+      <div style="text-align:center;margin-top:18px;">
+        <button class="btn btn-primary" id="${k}-submit">▶ 送出</button>
+        <button class="btn btn-ghost" id="${k}-cancel">取消</button>
+      </div>
+    </div>` : ''}
+    <div class="card"><div class="card-title">簽審歷程</div>
+      <div class="table-wrap"><table class="dt"><thead><tr><th>時間</th><th>動作</th><th>操作人</th><th>說明</th></tr></thead><tbody>
+      ${(d.log || []).filter(l => ['送審', '主管同意', '調度主管退回', '取消'].includes(l.action))
+        .map(l => `<tr><td>${fmtTime(l.at)}</td><td>${l.action === '調度主管退回' ? '主管退回' : l.action}</td><td>${l.by}</td><td>${gEsc(l.note) || '—'}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div style="text-align:center;"><button class="btn btn-ghost" id="${k}-godispatch">🚚 前往${cfg.dispatchName}</button></div>
+    ${backBar(k + '-back')}`;
+  const back = () => { signUi[k].view = 'list'; RENDER[k](); };
+  $(`#${k}-back`).onclick = back;
+  $(`#${k}-godispatch`).onclick = () => goto(cfg.dispatchPage);
+  // 申請單明細：視窗顯示申請內容、派車結果與貨物清單；可再前往申請明細頁
+  $$(`#page-${k} [data-sgapp]`).forEach(b => b.onclick = () => {
+    const o = apps.find(x => x.id === b.dataset.sgapp);
+    openModal(`申請內容 · ${o.id}`, `${infoGrid(`${k}-dd-app`, cfg.infoItems(o).concat(cfg.resultItems(o)).join(''))}
+      <div class="card-title" style="margin-top:10px;">貨物清單</div><div id="${k}-dd-items"></div>
+      <div style="text-align:center;margin-top:12px;"><button class="btn btn-ghost btn-sm" id="${k}-dd-goapply">📄 前往申請明細頁</button></div>`, { wide: true });
+    renderCargoGrid(`#${k}-dd-items`, cfg.items(o), false, null, { hazard: cfg.hazard, emptyText: '無貨物。' });
+    $(`#${k}-dd-goapply`).onclick = () => { closeModal(); const s = cfg.applyState(); s.view = 'detail'; s.detailId = o.id; goto(cfg.applyPage); };
+  });
+  if (pending) {
+    $$(`#page-${k} input[name=${k}-agree]`).forEach(x => x.onchange = () => {
+      const no = $(`#page-${k} input[name=${k}-agree][value=no]`).checked;
+      $(`#${k}-yes-pill`).classList.toggle('sel', !no); $(`#${k}-no-pill`).classList.toggle('sel', no);
+      $(`#${k}-req`).style.display = no ? 'inline' : 'none';
+    });
+    $(`#${k}-cancel`).onclick = back;
+    $(`#${k}-submit`).onclick = async () => {
+      const agree = $(`#page-${k} input[name=${k}-agree]:checked`).value === 'yes';
+      const note = $(`#${k}-note`).value.trim(), by = $(`#${k}-by`).value.trim() || Signoff.SUPERVISOR;
+      if (!agree && !note) { toast('不同意時「簽審意見」為必填', 'err'); $(`#${k}-note`).focus(); return; }
+      const ok = await confirmDialog({ title: agree ? '確認同意？' : '確認退回？',
+        text: agree ? `同意後派車單 ${d.id}（${apps.map(o => o.id).join('、')}）立即生效。${cfg.effect}` : cfg.rejectEffect });
+      if (!ok) return;
+      const res = agree ? M.signApproveDispatch(d, by, note) : M.signRejectDispatch(d, by, note);
+      if (!res.ok) { toast(res.error, 'err'); return; }
+      toast(`派車單 ${d.id} ${agree ? '已同意，派車結果生效' : '已退回調度重新處理'}`, agree ? 'ok' : 'err');
       RENDER[k]();
     };
   }
@@ -5520,10 +5659,8 @@ function renderDispUsageDetail(k, p) {
   const c = DISP_USAGE[k], M = c.M(), st = usageUi[k], d = M.usageDispatches().find(x => x.id === st.dispId);
   if (!d) { st.view = 'list'; return RENDER[k](); }
   const os = c.apps(d), u = d.usage, pool = M.USAGE_POOL, f = `${k}-du`, self = !!(c.allowSelf && c.allowSelf(d));
-  // 未實登：預設帶入派車單（院區財物轉運另帶入派車調度填的行程紀錄 G153）
-  const tl = d.tripLog || {}, tv = x => x == null ? '' : x;
-  const dv = u ? Object.assign({}, u) : { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1 || (self ? Usage.SELF : ''), driver2: d.driver2 || '',
-    startKm: tv(tl.startKm), endKm: tv(tl.endKm), fuelLiters: tl.fuelLiters, workHours: tl.workHours, otHours: tl.otHours };
+  // 未實登：預設帶入派車單的車輛與駕駛（G157 起派車單不再填行車紀錄）
+  const dv = u ? Object.assign({}, u) : { vehicleType: d.vehicleType, vehicle: d.vehicle, driver1: d.driver1 || (self ? Usage.SELF : ''), driver2: d.driver2 || '' };
   const opt = (v, t, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${t}</option>`;
   const drvOpts = (cur, blank, withSelf) => opt('', blank, cur) + (withSelf ? opt(Usage.SELF, `使用者自駕（${os[0] ? os[0].applicant : ''}）`, cur) : '')
     + Usage.driversOf(pool).map(x => opt(x.id, `${x.name}（${x.id}）`, cur)).join('');

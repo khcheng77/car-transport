@@ -311,6 +311,32 @@ const ModuleB = {
     return r;
   },
 
+  /* ---- 運輸主管簽審以派車單為單位（G156）：歷史簽審紀錄一列＝一張曾送審的派車單；
+     同意／退回作用於整張派車單（同意＝單內待簽審託運單全部同意；退回＝整張回調度中，同 signReject）---- */
+  signDispatches() { return this.dispatches.filter(d => (d.log || []).some(l => l.action === '送審')); },
+  dispatchSignState(d) {
+    const list = this.dispatchOrders(d);
+    if (list.some(o => Signoff.isPending(o))) return 'pending';
+    const last = (d.log || []).filter(l => ['送審', '主管同意', '調度主管退回'].includes(l.action)).pop();
+    if (last && last.action === '調度主管退回') return 'rejected';
+    if (list.length && list.every(o => Signoff.isApproved(o))) return 'approved';
+    return last && last.action === '主管同意' ? 'approved' : null;
+  },
+  dispatchSubmitLog(d) { return (d.log || []).filter(l => l.action === '送審').pop() || null; },
+  dispatchSignRound(d) { return (d.log || []).filter(l => l.action === '送審').length; },
+  signApproveDispatch(d, by, note) {
+    const todo = this.dispatchOrders(d).filter(o => Signoff.isPending(o));
+    if (!todo.length) return { ok: false, error: '此派車單目前沒有待簽審的派車結果' };
+    todo.forEach(o => Signoff.decide(o, true, by, note));
+    this._dlog(d, '主管同意', by, note || '');
+    return { ok: true };
+  },
+  signRejectDispatch(d, by, note) {
+    const o = this.dispatchOrders(d).find(x => Signoff.isPending(x));
+    if (!o) return { ok: false, error: '此派車單目前沒有待簽審的派車結果' };
+    return this.signReject(o, by, note);
+  },
+
   /* ---- 2.9 據點相互路程表查表（分大車／小車，同車型內對稱）---- */
   travelMin(fromId, toId, sizeClass) {
     if (fromId === toId) return 0;
@@ -958,28 +984,6 @@ const ModuleB = {
   /* 調度異動派車單：f = { vehicleType, vehicle, driver1, driver2, submitted }（G118／G129）
      送審前可異動車種類型／車號／駕駛人1／駕駛人2，是否送審 否 → 是＝送運輸主管簽審；
      送審後即不可再異動（G129 取代原「撤回送審／送審後異動重新送簽」），運輸主管退回後派車單回未送審才可再改；已出車者不可異動 */
-  /* 派車單行車紀錄（G153）：{ startKm, endKm, fuelLiters, workHours, otHours }，皆選填、0 以上；
-     里程須起訖同時填寫且結束 ≥ 起始；加班時數不可大於工時。只記錄在派車單，簽審生效後帶入車輛異動實登作為預設值（實登仍於實登單元完成）。 */
-  TRIP_FIELDS: [['startKm', '起始里程'], ['endKm', '結束里程'], ['fuelLiters', '加油公升數'], ['workHours', '駕駛工時'], ['otHours', '駕駛加班時數']],
-  tripLogOf(raw) {
-    const log = {};
-    for (const [k, label] of this.TRIP_FIELDS) {
-      const v = raw[k];
-      if (v === '' || v == null) { log[k] = null; continue; }
-      const n = Number(v);
-      if (!Number.isFinite(n) || n < 0) return { error: `「${label}」須為 0 以上的數字` };
-      log[k] = n;
-    }
-    if ((log.startKm == null) !== (log.endKm == null)) return { error: '「起始里程」與「結束里程」須同時填寫（皆不填＝僅異動）' };
-    if (log.startKm != null && log.endKm < log.startKm) return { error: '「結束里程」不可小於「起始里程」' };
-    if (log.otHours != null && log.workHours != null && log.otHours > log.workHours) return { error: '「駕駛加班時數」不可大於「駕駛工時」' };
-    return { log };
-  },
-  tripLogText(t) {
-    if (!t) return '—';
-    const out = this.TRIP_FIELDS.filter(([k]) => t[k] != null).map(([k, label]) => `${label} ${t[k]}`);
-    return out.length ? out.join('｜') : '清空';
-  },
   updateDispatch(d, f, by) {
     if (d.cancelled) return { ok: false, error: '派車單已取消' };
     if (this.started(d)) return { ok: false, error: '派車單已出車，不可再異動' };
@@ -997,11 +1001,8 @@ const ModuleB = {
     }
     const err = this.dispatchResourceError(d, next);
     if (err) return { ok: false, error: err };
-    // 行車紀錄（G153）：起訖里程、加油公升數、駕駛工時、駕駛加班時數，皆選填；未填里程仍可送出（僅異動）
-    if (f.tripLog) { const t = this.tripLogOf(f.tripLog); if (t.error) return { ok: false, error: t.error }; next.tripLog = t.log; }
-    const same = k => k === 'dispatchedAt' ? +new Date(d[k]) === +next[k]
-      : k === 'tripLog' ? JSON.stringify(d.tripLog || null) === JSON.stringify(next.tripLog) : (d[k] || '') === (next[k] || '');
-    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2', 'dispatcher', 'dispatchedAt', 'tripLog'].filter(k => k in next && !same(k));
+    const same = k => k === 'dispatchedAt' ? +new Date(d[k]) === +next[k] : (d[k] || '') === (next[k] || '');
+    const changed = ['vehicleType', 'vehicle', 'driver1', 'driver2', 'dispatcher', 'dispatchedAt'].filter(k => k in next && !same(k));
     const wasSub = d.submitted;
     if (!changed.length && wasSub === next.submitted) return { ok: true, changed: [] };
     const before = `${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋') || '—'}`, beforeBy = d.dispatcher;
@@ -1010,7 +1011,6 @@ const ModuleB = {
     const list = this.dispatchOrders(d);
     if (changed.some(k => !['dispatcher', 'dispatchedAt'].includes(k))) this._dlog(d, '異動', by, `${before} → ${d.vehicle}／${[d.driver1, d.driver2].filter(Boolean).join('＋')}`);
     if (changed.some(k => ['dispatcher', 'dispatchedAt'].includes(k))) this._dlog(d, '異動派遣資訊', by, `派遣人 ${beforeBy} → ${d.dispatcher}`);
-    if (changed.includes('tripLog')) this._dlog(d, '行車紀錄', by, this.tripLogText(d.tripLog));
     if (!wasSub && next.submitted) { list.forEach(o => Signoff.mark(o, this.signSummary(o), by || '調度室')); this._dlog(d, '送審', by, '送出運輸主管簽審'); }   // 送審後即鎖定（G129）
     return { ok: true, changed };
   },
