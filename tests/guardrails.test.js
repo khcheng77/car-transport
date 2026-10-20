@@ -3243,6 +3243,19 @@ group('院區財物轉運：來回運輸拆成去程＋回程兩張申請單（G
   });
 });
 
+group('巡迴財物轉運：收貨院區／送貨院區、危險品運輸固定否（G155）', () => {
+  test('送貨院區未給時同收貨院區；申請引導帶入收貨院區與送貨院區', () => {
+    const H = fresh(), A = H.ModuleA, G = H.Guide, br = H.DB.branches[0].id;
+    const st = H.DB.stations.filter(s => s.branch === br || !s.branch).slice(0, 2);
+    const app = A.createApp({ applicant: 'X', branch: br, station: st[1] && st[1].id, items: [] });
+    eq(app.destBranch, br); eq(app.hazardTransport, 'no');
+    const pf = G.prefill({ mode: 'goods', fromSite: 'D6', toSite: 'D6', recvDate: G.todayStr(), hazardTransport: 'no',
+      items: [{ name: '小箱', l: 40, w: 30, h: 30, qty: 1, category: 'BOX', weight: 5 }] });
+    eq(pf.unit, 'A'); eq(pf.data.branch, 'D6'); eq(pf.data.destBranch, 'D6');
+    ok(pf.labels.includes('收貨院區 台中據點') && pf.labels.includes('送貨院區 台中據點'), pf.labels.join('、'));
+  });
+});
+
 /* ---- 總結 ---- */
 process.stdout.write('\n' + '─'.repeat(48) + '\n');
 process.stdout.write((failed === 0 ? '\x1b[32m' : '\x1b[31m')

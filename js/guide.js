@@ -161,9 +161,9 @@ const Guide = {
       case 'A': {
         const today = this.todayStr();
         const recvMode = (!v.recvTime && v.recvDate === today) ? 'asap' : 'exact';
-        data = { branch: v.fromSite, recvMode, serviceDate: v.recvDate, deliverTime: v.recvTime || '', items,
+        data = { branch: v.fromSite, destBranch: v.toSite, recvMode, serviceDate: v.recvDate, deliverTime: v.recvTime || '', items,
           pickStation: v.fromStation || '', station: v.toStation || '', tripleNo: (v.tripleNo || '').trim() };
-        labels.push(`車屬院區 ${this.siteName(v.fromSite)}`);
+        labels.push(`收貨院區 ${this.siteName(v.fromSite)}`, `送貨院區 ${this.siteName(v.toSite)}`);
         if (v.fromStation) labels.push(`收貨站點 ${this.stationName(v.fromStation)}`);
         if (v.toStation) labels.push(`送貨站點 ${this.stationName(v.toStation)}`);
         if (data.tripleNo) labels.push(`三聯單單號 ${data.tripleNo}`);

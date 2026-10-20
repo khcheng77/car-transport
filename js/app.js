@@ -580,7 +580,7 @@ const branchStationOpts = (branchId, sel) => DB.stations.filter(s => s.branch ==
 /* ============================================================
    人員選取器（委運人／接收人／代理人）— A-specific
    姓名＝事業部→組別→組員 三段連動下拉；單位（事業部·組別）與分機自動由人事資料帶入；
-   院區、館別為手動選填（院區沿用車屬院區清單、館別為 DB.halls）。
+   院區、館別為手動選填（院區沿用收貨院區清單、館別為 DB.halls）。
    人員物件：{ bu, group, name, ext, unit, campus, hall }
    ============================================================ */
 const _buOpts = sel => DB.orgUnits.map(b => `<option value="${b.id}"${b.id === sel ? ' selected' : ''}>${b.name}</option>`).join('');
@@ -706,7 +706,7 @@ function renderAApplyList(p) {
       </div>
       ${infoGrid('aq-fields', [
         fInput('申請人（模糊）', `<input type="text" id="aq-applicant" value="${q.applicant || ''}" placeholder="輸入姓名/部門關鍵字">`),
-        fInput('車屬院區', `<select id="aq-branch">${brOpts}</select>`),
+        fInput('收貨院區', `<select id="aq-branch">${brOpts}</select>`),
         fInput('目的地站點', `<select id="aq-station">${stOpts}</select>`),
         fInput('財物運輸單狀態', `<select id="aq-status">${statusOpts}</select>`),
         fInput('收貨模式', `<select id="aq-mode">${modeOpts}</select>`),
@@ -856,8 +856,11 @@ function renderAApplyDetail(p, id) {
       ].join(''))}
       ${infoGridRow('ad-b3', fItem('危險品運輸', a.hazardTransport === 'yes' ? '<span class="badge b-red">是</span>' : '否'))}
       ${infoGridRow('ad-b4', [
-        fItem('車屬院區', brName(a.branch)),
+        fItem('收貨院區', brName(a.branch)),
         fItem('收貨站點', a.pickupLoc || '<span class="muted">—</span>'),
+      ].join(''))}
+      ${infoGridRow('ad-b4b', [
+        fItem('送貨院區', brName(a.destBranch || a.branch)),
         fItem('送貨站點', aDestText(a)),
       ].join(''))}
       ${infoGridRow('ad-b5', fItem('三聯單單號', a.tripleNo ? gEsc(a.tripleNo) : '<span class="muted">—</span>'))}
@@ -953,10 +956,13 @@ function renderAApplyNew(p) {
         fItem('申請日期', ModuleA.rocDate()),
         fItem('申請人分機', DB.currentUser.ext),
       ].join(''))}
-      ${infoGridRow('aa-r3', fInput('危險品運輸', `<div class="radio-group yn"><label class="radio-pill" id="aa-hz-pill"><input type="checkbox" id="aa-hz">是</label></div>`))}
+      ${infoGridRow('aa-r3', fItem('危險品運輸', '否 <span class="hint">危險品請改用院區財物轉運（G155）</span>'))}
       ${infoGridRow('aa-r4', [
-        fInput('車屬院區', `<select id="aa-branch">${brOpts}</select>`),
+        fInput('收貨院區', `<select id="aa-branch">${brOpts}</select>`),
         fInput('收貨站點', `<select id="aa-pickuploc">${stOpts}</select>`),
+      ].join(''))}
+      ${infoGridRow('aa-r4b', [
+        fInput('送貨院區 <span class="hint">巡迴限同院區</span>', `<select id="aa-destbranch">${brOpts}</select>`),
         fInput('送貨站點', `<select id="aa-station">${stOpts}</select>`),
       ].join(''))}
       ${infoGridRow('aa-r5', fInput('三聯單單號 <span class="hint">物籌處介接</span>', tripleNoInput('aa-tripno')))}
@@ -1003,14 +1009,13 @@ function renderAApplyNew(p) {
     </div>
     ${backBar('an-back')}`;
   $('#an-back').onclick = () => { aApply.view = 'list'; RENDER.a_apply(); };
-  // 切換院區：重填收/送貨站點選單（限該院區）
+  // 切換收貨院區：重填收貨站點，送貨院區預設跟著帶入（巡迴限同院區，G155）；切換送貨院區：重填送貨站點
+  $('#aa-destbranch').onchange = () => { $('#aa-station').innerHTML = branchStationOpts($('#aa-destbranch').value); initMasonry(p); };
   $('#aa-branch').onchange = () => {
-    const opts = branchStationOpts($('#aa-branch').value);
-    $('#aa-pickuploc').innerHTML = opts; $('#aa-station').innerHTML = opts;
-    initMasonry(p);
+    $('#aa-pickuploc').innerHTML = branchStationOpts($('#aa-branch').value);
+    $('#aa-destbranch').value = $('#aa-branch').value; $('#aa-destbranch').onchange();
   };
-  // 危險品運輸只有「是」一個勾選項（未勾＝否，G152）；是否送出為是／否單選膠囊
-  $('#aa-hz').onchange = () => $('#aa-hz-pill').classList.toggle('sel', $('#aa-hz').checked);
+  // 危險品運輸固定為否（G155：顯示文字、不可選）；是否送出為是／否單選膠囊
   $$('#page-a_apply input[name=aa-send]').forEach(r => r.onchange = () =>
     $$('#aa-send-wrap .radio-pill').forEach(l => l.classList.toggle('sel', $('input', l).checked)));
   $$('#page-a_apply input[name=aa-recv]').forEach(r => r.onchange = () => {
@@ -1066,6 +1071,9 @@ function renderAApplyNew(p) {
 function aaFormData() {
   if (aaItems.length === 0) { toast('請至少新增一項貨物', 'err'); return null; }
   const mode = $('#page-a_apply input[name=aa-recv]:checked').value;
+  if ($('#aa-destbranch').value !== $('#aa-branch').value) {   // 巡迴限同院區（G155）
+    toast('送貨院區須與收貨院區相同；跨院區請改用院區財物轉運', 'err'); return null;
+  }
   // 送出即自動媒合（G10–G12/G16/G19）
   const pickSt = DB.stations.find(s => s.id === $('#aa-pickuploc').value);
   const dropSt = DB.stations.find(s => s.id === $('#aa-station').value);
@@ -1084,8 +1092,8 @@ function aaFormData() {
   }
   return {
     applicant: DB.currentUser.name, applyUnit, applyExt: DB.currentUser.ext, tripleNo: $('#aa-tripno').value.trim(),
-    hazardTransport: $('#aa-hz').checked ? 'yes' : 'no', remark: $('#aa-remark').value.trim(),
-    branch: $('#aa-branch').value, station: $('#aa-station').value,
+    hazardTransport: 'no', remark: $('#aa-remark').value.trim(),   // 危險品運輸固定否（G155）
+    branch: $('#aa-branch').value, destBranch: $('#aa-destbranch').value, station: $('#aa-station').value,
     building: '',
     pickStation: $('#aa-pickuploc').value,
     pickupLoc: pickSt ? pickSt.name : '',

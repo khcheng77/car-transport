@@ -40,7 +40,8 @@ const ModuleA = {
       applicant: data.applicant,
       applyUnit: data.applyUnit || '',  // 申請單位／委運單位（預帶登入使用者，G138 可修改、必填）
       applyExt: data.applyExt || '',    // 申請人分機（登入使用者）
-      branch: data.branch || (DB.branches[0] && DB.branches[0].id), // 車屬院區（收送貨同一院區；獨立路線）
+      branch: data.branch || (DB.branches[0] && DB.branches[0].id), // 收貨院區（G155 原「車屬院區」；收送貨同一院區、獨立路線）
+      destBranch: data.destBranch || data.branch || (DB.branches[0] && DB.branches[0].id), // 送貨院區（G155；巡迴限同收貨院區）
       station: data.station,            // 送貨站（迄）
       building: data.building || '',   // 送貨建物（G138 表單移除，相容舊資料）
       pickStation: data.pickStation || null, // 收貨站（起）站 id；未帶＝自路線起點載運（相容）
