@@ -196,13 +196,15 @@ const Guide = {
       }
       case 'D': {
         const reject = this.askCarpool(v) && v.agreeCarpool === 'no' ? (v.carpoolRejectReason || '').trim() : '';
-        const place = `${this.placeName(v.origin)} → ${this.placeName(v.dest)}${(v.otherPlace || '').trim() ? '：' + v.otherPlace.trim() : ''}`
-          + (reject ? `；不同意併車原因：${reject}` : '');   // 一般用車沒有併車欄位，原因寫入行程說明
+        const place = value => value === this.OTHER ? (v.otherPlace || '').trim() : this.placeName(value);
         const carry = this.carryItems(v).map(it => Object.assign({ hazardous: false }, it));
+        // 一般用車（PR #2）：出發地→上車地點、目的地→行程地點第 1 筆；不同意併車原因寫入「事由」，並帶「是否同意併車＝否」
         data = Object.assign({}, who, { startDate: v.startDate, startTime: v.departTime, endDate: v.endDate, endTime: v.backTime,
-          pax: +v.pax, selfDrive: v.selfDrive, purpose: place, items: carry });
+          pax: +v.pax, selfDrive: v.selfDrive, pickupLocation: place(v.origin), locations: [{ name: place(v.dest), order: 1 }],
+          purpose: reject ? `不同意併車原因：${reject}` : '', items: carry }, reject ? { allowMerge: false } : {});
         labels.push('申請人', `用車 ${v.startDate} ${v.departTime} ～ ${v.endDate} ${v.backTime}`, `${v.pax} 人`,
-          `自駕：${v.selfDrive ? '可以' : '不行'}`, reject ? '行程說明（含不同意併車原因）' : '行程說明');
+          `自駕：${v.selfDrive ? '可以' : '不行'}`, '上車地點', '行程地點');
+        if (reject) labels.push('事由（不同意併車原因）');
         if (carry.length) labels.push(`隨行貨物 ${carry.length} 項`);
         break;
       }
